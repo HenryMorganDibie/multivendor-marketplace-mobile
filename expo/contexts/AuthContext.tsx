@@ -2,6 +2,9 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useSegments } from 'expo-router';
+import { createUserWithEmailAndPassword, deleteUser } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth as firebaseAuth, db as firestore, callable } from '@/lib/firebase';
 import { VendorPlan } from './VendorPlanContext';
 
 type UserRole = 'customer' | 'vendor';
@@ -604,12 +607,77 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
       console.log('[AUTH] Creating new account with role:', data.role);
 
-      let generatedUsername: string | undefined;
+      // ── Real backend account creation (Phase 1) ────────────────────────
+      // Firebase Auth plus completeRegistration are the source of truth for
+      // the account, the vendor record and the username. The local record
+      // built further down still drives screens that haven't been migrated
+      // off local state yet, but it no longer invents an account that only
+      // exists on this device.
+      let backendUsername: string | undefined;
+      let backendVendorId: string | undefined;
+      try {
+        const credential = await createUserWithEmailAndPassword(
+          firebaseAuth,
+          data.identifier.trim(),
+          data.password,
+        );
+        await credential.user.getIdToken(true);
+
+        // users/{uid} is created by the onUserCreate auth trigger, which runs
+        // asynchronously — completeRegistration rejects until it exists, so
+        // wait for it rather than racing it.
+        for (let attempt = 0; attempt < 20; attempt++) {
+          const userDoc = await getDoc(doc(firestore, 'users', credential.user.uid));
+          if (userDoc.exists()) break;
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        const complete = callable<Record<string, unknown>, { success: true; role: string; vendorId?: string; username?: string }>(
+          'completeRegistration',
+        );
+        const completed = await complete({
+          role: data.role,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          phoneNumber: data.phone,
+          country: data.location?.countryName ?? data.country,
+          countryCode: data.location?.countryCode,
+          referralCode: data.referralCode,
+        });
+
+        backendVendorId = completed.data.vendorId;
+        backendUsername = completed.data.username;
+
+        // Pick up the role/vendorId custom claims the function just set,
+        // otherwise the very next callable still sees an unroled user.
+        await credential.user.getIdToken(true);
+        console.log('[AUTH] Backend account created:', { vendorId: backendVendorId, username: backendUsername });
+      } catch (backendError: unknown) {
+        const message = backendError instanceof Error ? backendError.message : String(backendError);
+        console.error('[AUTH] Backend registration failed:', message);
+
+        // Don't leave a half-made account behind: an auth user with no vendor
+        // record can never log in successfully and blocks the email forever.
+        try {
+          if (firebaseAuth.currentUser) await deleteUser(firebaseAuth.currentUser);
+        } catch (cleanupError) {
+          console.error('[AUTH] Could not clean up partial account:', cleanupError);
+        }
+
+        if (/email-already-in-use/.test(message)) {
+          return { success: false, error: 'An account already exists with this email. Please log in.' };
+        }
+        return { success: false, error: 'Could not create your account. Please try again.' };
+      }
+
+      let generatedUsername: string | undefined = backendUsername;
       if (data.role === 'vendor') {
         if (data.plan === 'basic' || !data.username) {
-          generatedUsername = `vendor_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-          console.log('[AUTH] Generated system username for Basic plan:', generatedUsername);
-          
+          // Prefer the username the backend actually reserved. The local
+          // fallback only applies if the backend didn't return one.
+          generatedUsername = backendUsername ?? `vendor_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+          console.log('[AUTH] Vendor username:', generatedUsername);
+
           if (data.plan === 'basic') {
             const AsyncStorageModule = await import('@react-native-async-storage/async-storage');
             const VENDOR_PLAN_STORAGE_KEY = '@the platform_vendor_plan';

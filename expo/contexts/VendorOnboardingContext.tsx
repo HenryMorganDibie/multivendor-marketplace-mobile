@@ -70,8 +70,18 @@ export const [VendorOnboardingProvider, useVendorOnboarding] = createContextHook
       const res = await getStatus({});
       setStatus(res.data);
     } catch (err) {
-      console.error('[VendorOnboarding] Failed to load status:', err);
-      setError(err instanceof Error ? err.message : "Couldn't load your setup progress.");
+      const message = err instanceof Error ? err.message : '';
+      // Right after signup the user is authenticated a moment before the
+      // vendor role lands on their token, so this legitimately rejects once.
+      // Treating it as a real failure would leave a permanent error on the
+      // dashboard of a vendor whose account is actually fine — the token
+      // listener below re-runs this as soon as the claim arrives.
+      if (/Vendors only|permission-denied/i.test(message)) {
+        setStatus(null);
+      } else {
+        console.error('[VendorOnboarding] Failed to load status:', err);
+        setError("Couldn't load your setup progress.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -79,9 +89,11 @@ export const [VendorOnboardingProvider, useVendorOnboarding] = createContextHook
 
   useEffect(() => {
     void refresh();
-    // Re-read whenever the signed-in user changes, so switching accounts on
-    // one device never shows the previous vendor's progress.
-    const unsub = auth.onAuthStateChanged(() => {
+    // onIdTokenChanged, not onAuthStateChanged: the vendor role arrives as a
+    // custom claim via a token refresh after completeRegistration, which
+    // onAuthStateChanged does not fire for. Listening to the token means the
+    // checklist appears as soon as the role is real, with no manual reload.
+    const unsub = auth.onIdTokenChanged(() => {
       void refresh();
     });
     return () => unsub();

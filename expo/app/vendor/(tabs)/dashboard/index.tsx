@@ -367,7 +367,10 @@ function getVerificationBannerConfig(status: VerificationStatus, submittedAt?: s
         containerStyle: { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' },
         iconWrapStyle: { backgroundColor: 'rgba(194,65,12,0.1)' },
         icon: <AlertCircle size={18} color="#C2410C" strokeWidth={2} />,
-        title: 'Complete verification to go live',
+        // "Go live" was misleading: an unverified vendor can already publish
+        // and share their storefront link. Verification only controls whether
+        // they appear in Home, Search and Explore.
+        title: 'Complete verification to appear in discovery',
         body: 'Complete verification to appear in Home, Explore, and Search. You can still share your storefront link.',
         ctaLabel: 'Verify now',
         ctaIcon: <Lock size={13} color="#FFFFFF" strokeWidth={2.5} />,
