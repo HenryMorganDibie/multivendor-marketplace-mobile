@@ -9,16 +9,13 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Modal,
-  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ChevronDown, Search, Check, MapPin, Store, UserCircle, TicketCheck } from 'lucide-react-native';
+import { MapPin, UserCircle, TicketCheck } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import LocationCascadeFields from '@/components/LocationCascadeFields';
 import type { LocationValue } from '@/components/LocationCascadeFields';
-import { DAY_ONE_CATEGORIES } from '@/constants/categories';
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -27,11 +24,6 @@ function isEmail(value: string): boolean {
 function isPhone(value: string): boolean {
   return /^[+]?[\d\s()-]{7,}$/.test(value.trim());
 }
-
-const CATEGORIES = DAY_ONE_CATEGORIES.map((name) => ({
-  id: name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
-  name,
-}));
 
 type FieldErrors = Record<string, string | undefined>;
 
@@ -123,10 +115,6 @@ export default function VendorSignupScreen() {
   const [phone, setPhone] = useState<string>('');
   const [password, setPassword] = useState<string>('');
 
-  const [businessName, setBusinessName] = useState<string>('');
-  const [businessDescription, setBusinessDescription] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<{ id: string; name: string } | null>(null);
-
   const [location, setLocation] = useState<LocationValue | null>(null);
   const [referralCode, setReferralCode] = useState<string>('');
   const [referralValidation, setReferralValidation] = useState<ReferralValidationState>({
@@ -134,30 +122,20 @@ export default function VendorSignupScreen() {
     validationStatus: 'idle',
   });
 
-  const [showCategoryModal, setShowCategoryModal] = useState<boolean>(false);
-  const [categorySearch, setCategorySearch] = useState<string>('');
-
   const [focusedField, setFocusedField] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errors, setErrors] = useState<FieldErrors>({});
 
-  const filteredCategories = categorySearch.trim()
-    ? CATEGORIES.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase()))
-    : CATEGORIES;
-
-  const locationComplete =
-    !!location && !!location.countryCode && !!location.stateCode && !!location.areaId;
-
+  // Phase 1: the only fields required to create an account. Everything else
+  // (business name, category, description, state/area) is collected later
+  // through the dashboard onboarding checklist.
   const isFormComplete =
     firstName.trim().length >= 2 &&
     lastName.trim().length >= 1 &&
     isEmail(email) &&
     isPhone(phone) &&
     password.length >= 8 &&
-    businessName.trim().length >= 2 &&
-    !!selectedCategory &&
-    businessDescription.trim().length >= 1 &&
-    locationComplete;
+    !!location?.countryCode;
 
   const clearError = (key: string) => {
     if (errors[key]) setErrors(p => ({ ...p, [key]: undefined }));
@@ -234,12 +212,12 @@ export default function VendorSignupScreen() {
     if (!isEmail(email)) newErrors.email = 'Enter a valid email';
     if (!isPhone(phone)) newErrors.phone = 'Enter a valid phone number';
     if (password.length < 8) newErrors.password = 'Password must be at least 8 characters';
-    if (businessName.trim().length < 2) newErrors.businessName = 'Enter your business name';
-    if (!selectedCategory) newErrors.category = 'Select a business category';
-    if (businessDescription.trim().length < 1) newErrors.businessDescription = 'Add a short business description';
+    // Phase 1 progressive onboarding: business name, category, description and
+    // the state/area cascade are deliberately NOT required here. They're
+    // collected from the dashboard checklist afterwards, and publication is
+    // gated on them instead. Country stays, because it drives currency, plan
+    // pricing and availability from the moment the account exists.
     if (!location?.countryCode) newErrors.country = 'Select your country';
-    else if (!location?.stateCode) newErrors.state = 'Select your state / province';
-    else if (!location?.areaId) newErrors.area = 'Select your area';
 
     const normalizedReferralCode = normalizeReferralCode(referralCode);
     if (normalizedReferralCode && !isReferralCodeFormatValid(normalizedReferralCode)) {
@@ -277,10 +255,6 @@ export default function VendorSignupScreen() {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         phone: phone.trim(),
-        businessName: businessName.trim(),
-        businessDescription: businessDescription.trim(),
-        categoryId: selectedCategory?.id,
-        categoryName: selectedCategory?.name,
         location: location!,
         referralCode: normalizedReferralCode || undefined,
         acquisitionSource: validatedReferral?.valid
@@ -288,8 +262,8 @@ export default function VendorSignupScreen() {
           : 'organic',
         signupChannel: 'mobile_vendor_app',
         country: location!.countryName,
-        state: location!.stateName,
-        area: location!.areaName,
+        state: location?.stateName,
+        area: location?.areaName,
         createdAt: new Date().toISOString(),
         referralRepId: validatedReferral?.repId,
         referralRepName: validatedReferral?.repName,
@@ -427,75 +401,22 @@ export default function VendorSignupScreen() {
             </View>
 
             <View style={styles.sectionHeaderRow}>
-              <Store size={16} color="#FF8C42" strokeWidth={2} />
-              <Text style={styles.sectionHeaderText}>Business Information</Text>
-            </View>
-
-            <View style={styles.inputSection}>
-              <Text style={styles.label}>Business Name</Text>
-              <TextInput
-                style={[styles.input, focusedField === 'businessName' && styles.inputFocused, errors.businessName ? styles.inputError : null]}
-                value={businessName}
-                onChangeText={(t) => { setBusinessName(t); clearError('businessName'); }}
-                onFocus={() => setFocusedField('businessName')}
-                onBlur={() => setFocusedField('')}
-                placeholder="e.g. Amina's Kitchen"
-                placeholderTextColor="#9CA3AF"
-                editable={!isLoading}
-                testID="vendor-business-name"
-              />
-              {errors.businessName ? <Text style={styles.errorText}>{errors.businessName}</Text> : null}
-            </View>
-
-            <View style={styles.inputSection}>
-              <Text style={styles.label}>Business Category</Text>
-              <TouchableOpacity
-                style={[styles.selectorButton, errors.category ? styles.inputError : null]}
-                onPress={() => setShowCategoryModal(true)}
-                activeOpacity={0.7}
-                disabled={isLoading}
-                testID="vendor-category"
-              >
-                <Text style={[styles.selectorText, !selectedCategory && styles.selectorPlaceholder]}>
-                  {selectedCategory?.name || 'Select business category'}
-                </Text>
-                <ChevronDown size={20} color="#9CA3AF" strokeWidth={2} />
-              </TouchableOpacity>
-              {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
-            </View>
-
-            <View style={styles.inputSection}>
-              <Text style={styles.label}>Business Description</Text>
-              <TextInput
-                style={[styles.textArea, focusedField === 'businessDescription' && styles.inputFocused, errors.businessDescription ? styles.inputError : null]}
-                value={businessDescription}
-                onChangeText={(t) => { setBusinessDescription(t); clearError('businessDescription'); }}
-                onFocus={() => setFocusedField('businessDescription')}
-                onBlur={() => setFocusedField('')}
-                placeholder="Tell customers what you offer and your specialties"
-                placeholderTextColor="#9CA3AF"
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-                maxLength={300}
-                editable={!isLoading}
-                testID="vendor-business-description"
-              />
-              {errors.businessDescription ? <Text style={styles.errorText}>{errors.businessDescription}</Text> : null}
-            </View>
-
-            <View style={styles.sectionHeaderRow}>
               <MapPin size={16} color="#FF8C42" strokeWidth={2} />
               <Text style={styles.sectionHeaderText}>Location</Text>
             </View>
 
+            {/* Country only at signup. It can't be deferred like the rest of
+                the business details, because currency, plan pricing and
+                country availability are all resolved from it the moment the
+                account is created. State and area move to onboarding. */}
             <LocationCascadeFields
               value={location}
               onChange={setLocation}
-              errors={{ country: errors.country, state: errors.state, area: errors.area }}
+              errors={{ country: errors.country }}
               onClearError={(key) => clearError(key)}
               disabled={isLoading}
               testIDPrefix="vendor"
+              countryOnly
             />
 
             <View style={styles.sectionHeaderRow}>
@@ -569,51 +490,6 @@ export default function VendorSignupScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      <Modal visible={showCategoryModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Business Category</Text>
-              <TouchableOpacity onPress={() => { setShowCategoryModal(false); setCategorySearch(''); }} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Text style={styles.modalClose}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.searchContainer}>
-              <Search size={18} color="#9CA3AF" strokeWidth={2} />
-              <TextInput
-                style={styles.searchInput}
-                value={categorySearch}
-                onChangeText={setCategorySearch}
-                placeholder="Search"
-                placeholderTextColor="#9CA3AF"
-                autoCorrect={false}
-              />
-            </View>
-            <FlatList
-              data={filteredCategories}
-              keyExtractor={(item) => item.id}
-              keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.modalItem, selectedCategory?.id === item.id && styles.modalItemSelected]}
-                  onPress={() => {
-                    setSelectedCategory({ id: item.id, name: item.name });
-                    setShowCategoryModal(false);
-                    setCategorySearch('');
-                    clearError('category');
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.modalItemText, selectedCategory?.id === item.id && styles.modalItemTextSelected]}>{item.name}</Text>
-                  {selectedCategory?.id === item.id && <Check size={18} color="#FF8C42" strokeWidth={2.5} />}
-                </TouchableOpacity>
-              )}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.modalList}
-            />
-          </View>
-        </View>
-      </Modal>
     </KeyboardAvoidingView>
   );
 }

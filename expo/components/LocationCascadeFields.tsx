@@ -41,6 +41,10 @@ interface LocationCascadeFieldsProps {
   onClearError?: (key: keyof LocationCascadeErrors) => void;
   disabled?: boolean;
   testIDPrefix?: string;
+  /** Renders the country selector only, hiding the state and area steps.
+   * Used by vendor signup, where country is needed immediately (currency,
+   * pricing, availability) but the finer location is deferred to onboarding. */
+  countryOnly?: boolean;
 }
 
 /**
@@ -74,6 +78,7 @@ export default function LocationCascadeFields({
   onClearError,
   disabled = false,
   testIDPrefix = 'location',
+  countryOnly = false,
 }: LocationCascadeFieldsProps) {
   const selectedCountry = useMemo<CountryInfo | null>(
     () => (value?.countryCode ? COUNTRIES.find(c => c.code === value.countryCode) ?? null : null),
@@ -213,44 +218,48 @@ export default function LocationCascadeFields({
         {errors?.country ? <Text style={styles.errorText}>{errors.country}</Text> : null}
       </View>
 
-      <View style={styles.fieldSection}>
-        <Text style={styles.label}>{stateLabel}</Text>
-        <TouchableOpacity
-          style={[styles.selectorButton, !selectedCountry && styles.selectorDisabled, errors?.state ? styles.inputError : null]}
-          onPress={() => { if (selectedCountry) setShowStateModal(true); }}
-          activeOpacity={selectedCountry ? 0.7 : 1}
-          disabled={disabled || !selectedCountry}
-          testID={`${testIDPrefix}-state`}
-        >
-          <Text style={[styles.selectorText, !selectedState && styles.selectorPlaceholder]}>
-            {selectedState?.name || (selectedCountry ? `Select your ${stateLabel.toLowerCase()}` : 'Select a country first')}
-          </Text>
-          <ChevronDown size={20} color={selectedCountry ? '#9CA3AF' : '#C5C5C5'} strokeWidth={2} />
-        </TouchableOpacity>
-        {errors?.state ? <Text style={styles.errorText}>{errors.state}</Text> : null}
-      </View>
+      {!countryOnly && (
+        <View style={styles.fieldSection}>
+          <Text style={styles.label}>{stateLabel}</Text>
+          <TouchableOpacity
+            style={[styles.selectorButton, !selectedCountry && styles.selectorDisabled, errors?.state ? styles.inputError : null]}
+            onPress={() => { if (selectedCountry) setShowStateModal(true); }}
+            activeOpacity={selectedCountry ? 0.7 : 1}
+            disabled={disabled || !selectedCountry}
+            testID={`${testIDPrefix}-state`}
+          >
+            <Text style={[styles.selectorText, !selectedState && styles.selectorPlaceholder]}>
+              {selectedState?.name || (selectedCountry ? `Select your ${stateLabel.toLowerCase()}` : 'Select a country first')}
+            </Text>
+            <ChevronDown size={20} color={selectedCountry ? '#9CA3AF' : '#C5C5C5'} strokeWidth={2} />
+          </TouchableOpacity>
+          {errors?.state ? <Text style={styles.errorText}>{errors.state}</Text> : null}
+        </View>
+      )}
 
-      <View style={styles.fieldSection}>
-        <Text style={styles.label}>Area / City</Text>
-        <TouchableOpacity
-          style={[styles.selectorButton, !selectedState && styles.selectorDisabled, errors?.area ? styles.inputError : null]}
-          onPress={() => { if (selectedState && hasAreas) setShowAreaModal(true); }}
-          activeOpacity={selectedState && hasAreas ? 0.7 : 1}
-          disabled={disabled || !selectedState || !hasAreas}
-          testID={`${testIDPrefix}-area`}
-        >
-          <Text style={[styles.selectorText, !selectedArea && styles.selectorPlaceholder]}>
-            {selectedArea?.name
-              || (!selectedState
-                ? 'Select a state first'
-                : hasAreas
-                  ? 'Select your area'
-                  : 'Covered by state')}
-          </Text>
-          <ChevronDown size={20} color={selectedState && hasAreas ? '#9CA3AF' : '#C5C5C5'} strokeWidth={2} />
-        </TouchableOpacity>
-        {errors?.area ? <Text style={styles.errorText}>{errors.area}</Text> : null}
-      </View>
+      {!countryOnly && (
+        <View style={styles.fieldSection}>
+          <Text style={styles.label}>Area / City</Text>
+          <TouchableOpacity
+            style={[styles.selectorButton, !selectedState && styles.selectorDisabled, errors?.area ? styles.inputError : null]}
+            onPress={() => { if (selectedState && hasAreas) setShowAreaModal(true); }}
+            activeOpacity={selectedState && hasAreas ? 0.7 : 1}
+            disabled={disabled || !selectedState || !hasAreas}
+            testID={`${testIDPrefix}-area`}
+          >
+            <Text style={[styles.selectorText, !selectedArea && styles.selectorPlaceholder]}>
+              {selectedArea?.name
+                || (!selectedState
+                  ? 'Select a state first'
+                  : hasAreas
+                    ? 'Select your area'
+                    : 'Covered by state')}
+            </Text>
+            <ChevronDown size={20} color={selectedState && hasAreas ? '#9CA3AF' : '#C5C5C5'} strokeWidth={2} />
+          </TouchableOpacity>
+          {errors?.area ? <Text style={styles.errorText}>{errors.area}</Text> : null}
+        </View>
+      )}
 
       {renderModal(showCountryModal, 'Select Country', countrySearch, setCountrySearch, () => { setShowCountryModal(false); setCountrySearch(''); }, (
         <FlatList

@@ -55,7 +55,6 @@ function RootLayoutNav() {
       <Stack.Screen name="register" />
       <Stack.Screen name="register/customer" />
       <Stack.Screen name="register/vendor" />
-      <Stack.Screen name="vendor-register" />
       <Stack.Screen name="verify-otp" />
       <Stack.Screen name="forgot-password" />
       <Stack.Screen name="complete-profile" />

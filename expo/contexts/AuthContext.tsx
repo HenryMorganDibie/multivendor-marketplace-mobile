@@ -236,7 +236,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       router.replace(path as any);
     };
 
-    const publicRoutes = ['login', 'create-account', 'register', 'vendor-register', 'verify-otp', 'onboarding', 'complete-profile', 'vendor-setup-complete'];
+    const publicRoutes = ['login', 'create-account', 'register', 'verify-otp', 'onboarding', 'complete-profile', 'vendor-setup-complete'];
     const isPublicRoute = publicRoutes.includes(firstSegment);
 
     if (!authState.isAuthenticated) {
