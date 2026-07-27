@@ -1,0 +1,194 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack, useRouter } from 'expo-router';
+import { ChevronLeft } from 'lucide-react-native';
+import { Colors } from '@/constants/colors';
+import { useVendorAwayMessage } from '@/contexts/VendorAwayMessageContext';
+import LaektivaModal from '@/components/LaektivaModal';
+
+const MAX_LENGTH = 300;
+
+export default function AwayMessageEditorScreen() {
+  const router = useRouter();
+  const { settings, updateSettings } = useVendorAwayMessage();
+
+  const [text, setText] = useState(settings.message);
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
+
+  const hasChanges = text !== settings.message;
+
+  const handleSave = () => {
+    void updateSettings({ message: text });
+    console.log('[AwayMessageEditor] Message saved:', text);
+    router.back();
+  };
+
+  const handleBack = () => {
+    if (hasChanges) {
+      setShowDiscardModal(true);
+    } else {
+      router.back();
+    }
+  };
+
+  const handleDiscard = () => {
+    setShowDiscardModal(false);
+    router.back();
+  };
+
+  return (
+    <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          title: 'Message',
+          headerTitleAlign: 'center',
+          headerStyle: { backgroundColor: Colors.background },
+          headerTintColor: Colors.charcoal,
+          headerShadowVisible: false,
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={handleBack}
+              style={styles.headerBack}
+              testID="editor-back"
+            >
+              <ChevronLeft size={28} color={Colors.charcoal} />
+            </TouchableOpacity>
+          ),
+          headerRight: () =>
+            hasChanges ? (
+              <TouchableOpacity
+                onPress={handleSave}
+                style={styles.headerSave}
+                activeOpacity={0.7}
+                testID="editor-save"
+              >
+                <Text style={styles.headerSaveText}>Save</Text>
+              </TouchableOpacity>
+            ) : null,
+        }}
+      />
+      <SafeAreaView edges={['bottom']} style={styles.safeArea}>
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoid}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.editorCard}>
+              <TextInput
+                style={styles.textInput}
+                value={text}
+                onChangeText={setText}
+                placeholder="Hi! I'm currently unavailable. I'll get back to you as soon as possible."
+                placeholderTextColor={Colors.textMuted}
+                multiline
+                maxLength={MAX_LENGTH}
+                textAlignVertical="top"
+                autoFocus
+                testID="away-message-input"
+              />
+            </View>
+            <Text style={styles.counterText}>
+              {text.length} / {MAX_LENGTH}
+            </Text>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+
+      <LaektivaModal
+        visible={showDiscardModal}
+        title="Discard changes?"
+        message="If you leave now, your unsaved message will be lost."
+        primaryButton={{
+          label: 'Discard',
+          onPress: handleDiscard,
+        }}
+        secondaryButton={{
+          label: 'Keep editing',
+          onPress: () => setShowDiscardModal(false),
+        }}
+        destructive
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  keyboardAvoid: {
+    flex: 1,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 40,
+  },
+  headerBack: {
+    padding: 4,
+    marginLeft: -4,
+  },
+  headerSave: {
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    marginRight: -4,
+  },
+  headerSaveText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.primary,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    letterSpacing: 0.8,
+    marginTop: 24,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  editorCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    overflow: 'hidden',
+    paddingTop: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  textInput: {
+    fontSize: 16,
+    color: Colors.text,
+    lineHeight: 24,
+    minHeight: 180,
+    textAlignVertical: 'top',
+  },
+  counterText: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    textAlign: 'right' as const,
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+});
