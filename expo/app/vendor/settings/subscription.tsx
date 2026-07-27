@@ -31,7 +31,7 @@ import {
   type PaymentStatus,
   type VendorSubscription,
 } from '@/constants/planCatalog';
-import { openVendorPortal } from '@/utils/openVendorPortal';
+import { openVendorPortalHandoff } from '@/utils/openVendorPortal';
 
 const MAX_CONTENT_WIDTH = 680;
 
@@ -151,7 +151,7 @@ export default function SubscriptionPlanScreen() {
               </Text>
               <TouchableOpacity
                 style={styles.paymentAlertButton}
-                onPress={() => openVendorPortal(subscription.portalUrl)}
+                onPress={() => openVendorPortalHandoff('/subscription')}
                 activeOpacity={0.8}
               >
                 <Text style={styles.paymentAlertButtonText}>Fix payment on the web</Text>
@@ -197,7 +197,7 @@ export default function SubscriptionPlanScreen() {
             </Text>
             <TouchableOpacity
               style={styles.portalPrimaryButton}
-              onPress={() => openVendorPortal(subscription.portalUrl)}
+              onPress={() => openVendorPortalHandoff('/subscription')}
               activeOpacity={0.85}
             >
               <ExternalLink size={16} color={Colors.primaryText} />
@@ -306,7 +306,7 @@ export default function SubscriptionPlanScreen() {
           label: isSubmitting ? 'Opening…' : 'Continue to Vendor Portal',
           onPress: async () => {
             await handleScheduleCancellation();
-            void openVendorPortal(subscription.portalUrl);
+            void openVendorPortalHandoff('/subscription');
           },
         }}
         destructive

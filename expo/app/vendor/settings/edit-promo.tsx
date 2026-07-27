@@ -8,115 +8,100 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useRouter, useLocalSearchParams } from 'expo-router';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import LaektivaModal from '@/components/LaektivaModal';
 import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
+import { usePromo, type PromotionType, type VendorPromotionDraft } from '@/contexts/PromoContext';
 
-interface PromoCode {
-  id: string;
-  code: string;
-  discountType: 'percentage' | 'flat';
-  discountValue: number;
-  expiryDate: string;
-  isActive: boolean;
-}
-
-const PROMO_CODES_STORAGE_KEY = '@the platform_vendor_promo_codes';
+const TYPE_OPTIONS: { value: PromotionType; label: string }[] = [
+  { value: 'percentage', label: 'Percentage off' },
+  { value: 'flat', label: 'Flat amount off' },
+  { value: 'free_delivery', label: 'Free delivery' },
+  { value: 'free_item', label: 'Free item' },
+  { value: 'bogo', label: 'Buy one, get one' },
+];
 
 export default function EditPromoScreen() {
   const routerNav = useRouter();
   const { promoId } = useLocalSearchParams<{ promoId: string }>();
-  const [promo, setPromo] = useState<PromoCode | null>(null);
-  const [code, setCode] = useState('');
-  const [discountType, setDiscountType] = useState<'percentage' | 'flat'>('percentage');
+  const { getPromotion, updatePromotion } = usePromo();
+  const promo = promoId ? getPromotion(promoId) : null;
+
+  const [type, setType] = useState<PromotionType>('percentage');
   const [discountValue, setDiscountValue] = useState('');
-  const [expiryDate, setExpiryDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [minimumOrder, setMinimumOrder] = useState('');
+  const [maxDiscount, setMaxDiscount] = useState('');
+  const [freeItemName, setFreeItemName] = useState('');
+  const [bogoItemName, setBogoItemName] = useState('');
+  const [startDate, setStartDate] = useState(new Date());
+  const [endDate, setEndDate] = useState(new Date());
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!promo || loaded) return;
+    setType(promo.type);
+    setDiscountValue(promo.discountValue ? String(promo.discountValue) : '');
+    setMinimumOrder(promo.minimumOrder ? String(promo.minimumOrder) : '');
+    setMaxDiscount(promo.maxDiscount ? String(promo.maxDiscount) : '');
+    setFreeItemName(promo.freeItemName ?? '');
+    setBogoItemName(promo.bogoItemName ?? '');
+    setStartDate(new Date(promo.startDate));
+    setEndDate(new Date(promo.endDate));
+    setLoaded(true);
+  }, [promo, loaded]);
 
   const unsavedChanges = useUnsavedChanges(
-    { code, discountType, discountValue, expiryDate: expiryDate.toISOString() },
+    { type, discountValue, minimumOrder, maxDiscount, freeItemName, bogoItemName, startDate: startDate.toISOString(), endDate: endDate.toISOString() },
     false
   );
 
-  useEffect(() => {
-    const loadPromo = async () => {
-      if (!promoId) return;
-      const stored = await AsyncStorage.getItem(PROMO_CODES_STORAGE_KEY);
-      const existing: PromoCode[] = stored ? JSON.parse(stored) : [];
-      const found = existing.find((p) => p.id === promoId) ?? null;
-      setPromo(found);
-      if (found) {
-        setCode(found.code);
-        setDiscountType(found.discountType);
-        setDiscountValue(found.discountValue.toString());
-        setExpiryDate(new Date(found.expiryDate));
-      }
-    };
-    void loadPromo();
-  }, [promoId]);
+  const needsDiscountValue = type === 'percentage' || type === 'flat';
+  const needsFreeItemName = type === 'free_item';
+  const needsBogoItemName = type === 'bogo';
+
+  const numericDiscount = parseFloat(discountValue);
+  const numericMinOrder = parseFloat(minimumOrder) || 0;
+
+  const isValid =
+    (!needsDiscountValue || (discountValue && numericDiscount > 0 && (type !== 'percentage' || numericDiscount <= 100))) &&
+    (!needsFreeItemName || freeItemName.trim().length > 0) &&
+    (!needsBogoItemName || bogoItemName.trim().length > 0) &&
+    endDate.getTime() > startDate.getTime();
 
   const handleSave = async () => {
-    if (isSaving || !promo) return;
-
-    const trimmedCode = code.trim().toUpperCase();
-    const numericValue = parseFloat(discountValue);
-
-    if (!trimmedCode || trimmedCode.length < 4 || trimmedCode.length > 10) {
-      console.log('Invalid code length');
-      return;
-    }
-
-    if (!numericValue || numericValue <= 0) {
-      console.log('Invalid discount value');
-      return;
-    }
-
-    if (discountType === 'percentage' && numericValue > 100) {
-      console.log('Percentage cannot exceed 100');
-      return;
-    }
-
+    if (isSaving || !promo || !isValid) return;
     setIsSaving(true);
-
     try {
-      const updatedPromo: PromoCode = {
-        ...promo,
-        code: trimmedCode,
-        discountType,
-        discountValue: numericValue,
-        expiryDate: expiryDate.toISOString(),
+      const draft: VendorPromotionDraft = {
+        type,
+        discountValue: needsDiscountValue ? numericDiscount : 0,
+        minimumOrder: numericMinOrder,
+        maxDiscount: type === 'percentage' && maxDiscount ? parseFloat(maxDiscount) : undefined,
+        freeItemName: needsFreeItemName ? freeItemName.trim() : undefined,
+        bogoItemName: needsBogoItemName ? bogoItemName.trim() : undefined,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
       };
-
-      const stored = await AsyncStorage.getItem(PROMO_CODES_STORAGE_KEY);
-      const existing: PromoCode[] = stored ? JSON.parse(stored) : [];
-      await AsyncStorage.setItem(
-        PROMO_CODES_STORAGE_KEY,
-        JSON.stringify(existing.map((p) => (p.id === updatedPromo.id ? updatedPromo : p))),
-      );
+      await updatePromotion(promo.id, draft);
       unsavedChanges.resetChanges();
       router.back();
     } catch (error) {
       console.error('Failed to save promo:', error);
+      Alert.alert('Couldn\'t save', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
       setIsSaving(false);
     }
   };
 
-  const isValid =
-    code.trim().length >= 4 &&
-    code.trim().length <= 10 &&
-    discountValue &&
-    parseFloat(discountValue) > 0 &&
-    (discountType === 'flat' || parseFloat(discountValue) <= 100);
-
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
+  const formatDate = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   if (!promo) {
     return null;
@@ -127,7 +112,7 @@ export default function EditPromoScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView edges={['top']} style={styles.headerSafe}>
         <EditScreenHeader
-          title="Edit Promo Code"
+          title="Edit Promotion"
           onBack={() => {
             if (!unsavedChanges.handleExitAttempt()) return;
             routerNav.back();
@@ -138,76 +123,114 @@ export default function EditPromoScreen() {
       <SafeAreaView edges={['bottom']} style={styles.safeArea}>
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.section}>
-            <Text style={styles.label}>Promo Code</Text>
-            <TextInput
-              style={styles.input}
-              value={code}
-              onChangeText={setCode}
-              placeholder="4–10 characters, no spaces"
-              placeholderTextColor={Colors.textSecondary}
-              autoCapitalize="characters"
-              maxLength={10}
-            />
-            <Text style={styles.helperText}>4–10 characters, no spaces</Text>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.label}>Discount Type</Text>
+            <Text style={styles.label}>Promotion Type</Text>
             <View style={styles.radioGroup}>
-              <TouchableOpacity
-                style={styles.radioOption}
-                onPress={() => setDiscountType('percentage')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.radioButton}>
-                  {discountType === 'percentage' && <View style={styles.radioButtonSelected} />}
-                </View>
-                <Text style={styles.radioLabel}>Percentage</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.radioOption}
-                onPress={() => setDiscountType('flat')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.radioButton}>
-                  {discountType === 'flat' && <View style={styles.radioButtonSelected} />}
-                </View>
-                <Text style={styles.radioLabel}>Flat Amount</Text>
-              </TouchableOpacity>
+              {TYPE_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={styles.radioOption}
+                  onPress={() => setType(opt.value)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.radioButton}>
+                    {type === opt.value && <View style={styles.radioButtonSelected} />}
+                  </View>
+                  <Text style={styles.radioLabel}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.label}>Discount Value</Text>
-            <View style={styles.inputWithPrefix}>
-              {discountType === 'flat' && <Text style={styles.prefix}>$</Text>}
+          {needsDiscountValue && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Discount Value</Text>
+              <View style={styles.inputWithPrefix}>
+                {type === 'flat' && <Text style={styles.prefix}>₦</Text>}
+                <TextInput
+                  style={[styles.input, type === 'flat' && styles.inputWithPrefixInput]}
+                  value={discountValue}
+                  onChangeText={setDiscountValue}
+                  placeholder={type === 'percentage' ? 'Enter percentage' : 'Enter amount'}
+                  placeholderTextColor={Colors.textSecondary}
+                  keyboardType="decimal-pad"
+                />
+                {type === 'percentage' && <Text style={styles.suffix}>%</Text>}
+              </View>
+            </View>
+          )}
+
+          {type === 'percentage' && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Maximum Discount (optional)</Text>
               <TextInput
-                style={[styles.input, discountType === 'flat' && styles.inputWithPrefixInput]}
-                value={discountValue}
-                onChangeText={setDiscountValue}
-                placeholder={discountType === 'percentage' ? 'Enter percentage' : 'Enter amount'}
+                style={styles.input}
+                value={maxDiscount}
+                onChangeText={setMaxDiscount}
+                placeholder="No cap"
                 placeholderTextColor={Colors.textSecondary}
                 keyboardType="decimal-pad"
               />
-              {discountType === 'percentage' && <Text style={styles.suffix}>%</Text>}
+            </View>
+          )}
+
+          {needsFreeItemName && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Free Item Name</Text>
+              <TextInput
+                style={styles.input}
+                value={freeItemName}
+                onChangeText={setFreeItemName}
+                placeholder="e.g. Small Fries"
+                placeholderTextColor={Colors.textSecondary}
+              />
+            </View>
+          )}
+
+          {needsBogoItemName && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Item Name</Text>
+              <TextInput
+                style={styles.input}
+                value={bogoItemName}
+                onChangeText={setBogoItemName}
+                placeholder="e.g. Jollof Rice"
+                placeholderTextColor={Colors.textSecondary}
+              />
+            </View>
+          )}
+
+          <View style={styles.section}>
+            <Text style={styles.label}>Minimum Order (optional)</Text>
+            <View style={styles.inputWithPrefix}>
+              <Text style={styles.prefix}>₦</Text>
+              <TextInput
+                style={[styles.input, styles.inputWithPrefixInput]}
+                value={minimumOrder}
+                onChangeText={setMinimumOrder}
+                placeholder="No minimum"
+                placeholderTextColor={Colors.textSecondary}
+                keyboardType="decimal-pad"
+              />
             </View>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.label}>Expiry Date</Text>
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowDatePicker(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.dateButtonText}>{formatDate(expiryDate)}</Text>
+            <Text style={styles.label}>Start Date</Text>
+            <TouchableOpacity style={styles.dateButton} onPress={() => setShowStartPicker(true)} activeOpacity={0.8}>
+              <Text style={styles.dateButtonText}>{formatDate(startDate)}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.label}>End Date</Text>
+            <TouchableOpacity style={styles.dateButton} onPress={() => setShowEndPicker(true)} activeOpacity={0.8}>
+              <Text style={styles.dateButtonText}>{formatDate(endDate)}</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.noteCard}>
             <Text style={styles.noteText}>
-              Promo codes apply in cart before customers send an order request.
+              Promotions apply automatically at checkout when the order qualifies — customers don't need to enter a code.
             </Text>
           </View>
 
@@ -219,9 +242,7 @@ export default function EditPromoScreen() {
             <TouchableOpacity
               style={styles.cancelButton}
               onPress={() => {
-                if (!unsavedChanges.handleExitAttempt()) {
-                  return;
-                }
+                if (!unsavedChanges.handleExitAttempt()) return;
                 router.back();
               }}
               activeOpacity={0.8}
@@ -236,24 +257,33 @@ export default function EditPromoScreen() {
               activeOpacity={0.8}
             >
               <Text style={[styles.saveButtonText, (!isValid || isSaving) && styles.saveButtonTextDisabled]}>
-                {isSaving ? 'Saving...' : 'Save Promo'}
+                {isSaving ? 'Saving...' : 'Save Promotion'}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
       </SafeAreaView>
 
-      {showDatePicker && (
+      {showStartPicker && (
         <DateTimePicker
-          value={expiryDate}
+          value={startDate}
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          minimumDate={new Date()}
           onChange={(event, selectedDate) => {
-            setShowDatePicker(Platform.OS === 'ios');
-            if (selectedDate) {
-              setExpiryDate(selectedDate);
-            }
+            setShowStartPicker(Platform.OS === 'ios');
+            if (selectedDate) setStartDate(selectedDate);
+          }}
+        />
+      )}
+      {showEndPicker && (
+        <DateTimePicker
+          value={endDate}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          minimumDate={startDate}
+          onChange={(event, selectedDate) => {
+            setShowEndPicker(Platform.OS === 'ios');
+            if (selectedDate) setEndDate(selectedDate);
           }}
         />
       )}
@@ -280,29 +310,12 @@ export default function EditPromoScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  headerSafe: {
-    backgroundColor: Colors.background,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  section: {
-    marginTop: 24,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    marginBottom: 12,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
+  headerSafe: { backgroundColor: Colors.background },
+  safeArea: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 16 },
+  section: { marginTop: 24 },
+  label: { fontSize: 16, fontWeight: '600' as const, color: Colors.text, marginBottom: 12 },
   input: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
@@ -312,14 +325,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  helperText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginTop: 8,
-  },
-  radioGroup: {
-    gap: 12,
-  },
+  radioGroup: { gap: 12 },
   radioOption: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -339,70 +345,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center' as const,
     marginRight: 12,
   },
-  radioButtonSelected: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: Colors.primary,
-  },
-  radioLabel: {
-    fontSize: 16,
-    color: Colors.text,
-  },
-  inputWithPrefix: {
-    position: 'relative' as const,
-  },
-  inputWithPrefixInput: {
-    paddingLeft: 36,
-  },
-  prefix: {
-    position: 'absolute' as const,
-    left: 16,
-    top: 16,
-    fontSize: 16,
-    color: Colors.textSecondary,
-    zIndex: 1,
-  },
-  suffix: {
-    position: 'absolute' as const,
-    right: 16,
-    top: 16,
-    fontSize: 16,
-    color: Colors.textSecondary,
-    zIndex: 1,
-  },
-  dateButton: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  dateButtonText: {
-    fontSize: 16,
-    color: Colors.white,
-  },
-  noteCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    marginTop: 24,
-  },
-  noteText: {
-    fontSize: 14,
-    color: Colors.textMuted,
-    textAlign: 'center' as const,
-    lineHeight: 20,
-  },
-  footer: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  footerButtons: {
-    flexDirection: 'row' as const,
-    gap: 12,
-  },
+  radioButtonSelected: { width: 14, height: 14, borderRadius: 7, backgroundColor: Colors.primary },
+  radioLabel: { fontSize: 16, color: Colors.text },
+  inputWithPrefix: { position: 'relative' as const },
+  inputWithPrefixInput: { paddingLeft: 36 },
+  prefix: { position: 'absolute' as const, left: 16, top: 16, fontSize: 16, color: Colors.textSecondary, zIndex: 1 },
+  suffix: { position: 'absolute' as const, right: 16, top: 16, fontSize: 16, color: Colors.textSecondary, zIndex: 1 },
+  dateButton: { backgroundColor: Colors.surface, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: Colors.border },
+  dateButtonText: { fontSize: 16, color: Colors.text },
+  noteCard: { backgroundColor: Colors.surface, borderRadius: 12, padding: 14, marginTop: 24 },
+  noteText: { fontSize: 14, color: Colors.textMuted, textAlign: 'center' as const, lineHeight: 20 },
+  footer: { padding: 16, borderTopWidth: 1, borderTopColor: Colors.border },
+  footerButtons: { flexDirection: 'row' as const, gap: 12 },
   cancelButton: {
     flex: 1,
     backgroundColor: Colors.white,
@@ -414,30 +368,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.charcoal,
     minHeight: 52,
   },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: Colors.charcoal,
-  },
-  saveButton: {
-    flex: 1,
-    backgroundColor: Colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center' as const,
-  },
-  saveButtonDisabled: {
-    backgroundColor: Colors.surface,
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: Colors.white,
-  },
-  saveButtonTextDisabled: {
-    color: Colors.textSecondary,
-  },
-  bottomSpacer: {
-    height: 40,
-  },
+  cancelButtonText: { fontSize: 16, fontWeight: '600' as const, color: Colors.charcoal },
+  saveButton: { flex: 1, backgroundColor: Colors.primary, paddingVertical: 16, borderRadius: 12, alignItems: 'center' as const },
+  saveButtonDisabled: { backgroundColor: Colors.surface },
+  saveButtonText: { fontSize: 16, fontWeight: '600' as const, color: Colors.white },
+  saveButtonTextDisabled: { color: Colors.textSecondary },
+  bottomSpacer: { height: 40 },
 });

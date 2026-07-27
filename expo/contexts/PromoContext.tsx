@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
+import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { auth, callable, db } from '@/lib/firebase';
 import type { VendorPromotion, PromotionType } from '@/mocks/promotionsData';
 import { setExternalPromotions } from '@/mocks/promotionsData';
 
@@ -22,7 +23,6 @@ export interface VendorPromotionDraft {
   endDate: string;
 }
 
-const PROMOTIONS_STORAGE_KEY = '@the platform_vendor_promotions';
 const MAX_ACTIVE_PROMOTIONS = 3;
 
 function generatePromoTitle(draft: VendorPromotionDraft): string {
@@ -96,119 +96,121 @@ function getIconForType(type: PromotionType): VendorPromotion['icon'] {
   }
 }
 
+function draftToBackendPayload(draft: VendorPromotionDraft) {
+  return {
+    title: generatePromoTitle(draft),
+    shortDescription: generateShortDescription(draft),
+    fullDescription: generateFullDescription(draft),
+    type: draft.type,
+    discountValue: draft.discountValue,
+    minimumOrder: draft.minimumOrder,
+    maxDiscount: draft.maxDiscount ?? null,
+    freeItemName: draft.freeItemName ?? null,
+    bogoItemName: draft.bogoItemName ?? null,
+    applicableItemIds: draft.freeItemId ? [draft.freeItemId] : draft.bogoItemId ? [draft.bogoItemId] : null,
+    startDate: draft.startDate,
+    endDate: draft.endDate,
+    icon: getIconForType(draft.type),
+  };
+}
+
+interface PromotionDoc {
+  promotionId: string;
+  vendorId: string;
+  title: string;
+  shortDescription: string;
+  fullDescription: string;
+  type: PromotionType;
+  discountValue: number;
+  minimumOrder: number;
+  maxDiscount?: number | null;
+  applicableCategoryIds?: string[] | null;
+  freeItemName?: string | null;
+  bogoItemName?: string | null;
+  applicableItemIds?: string[] | null;
+  active: boolean;
+  startDate: string;
+  endDate: string;
+  icon: VendorPromotion['icon'];
+}
+
+function toVendorPromotion(doc: PromotionDoc): VendorPromotion {
+  return {
+    id: doc.promotionId,
+    vendorId: doc.vendorId,
+    title: doc.title,
+    shortDescription: doc.shortDescription,
+    fullDescription: doc.fullDescription,
+    type: doc.type,
+    discountValue: doc.discountValue,
+    minimumOrder: doc.minimumOrder,
+    maxDiscount: doc.maxDiscount ?? undefined,
+    freeItemName: doc.freeItemName ?? undefined,
+    bogoItemName: doc.bogoItemName ?? undefined,
+    applicableItemIds: doc.applicableItemIds ?? undefined,
+    active: doc.active,
+    startDate: doc.startDate,
+    endDate: doc.endDate,
+    icon: doc.icon,
+  };
+}
+
 export const [PromoContext, usePromo] = createContextHook(() => {
   const [promotions, setPromotions] = useState<VendorPromotion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [vendorId, setVendorId] = useState<string | null>(null);
 
   useEffect(() => {
-    void loadPromotions();
-  }, []);
-
-  const loadPromotions = async () => {
-    try {
-      const stored = await AsyncStorage.getItem(PROMOTIONS_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as VendorPromotion[];
-        setPromotions(parsed);
-        console.log('[PromoContext] Loaded', parsed.length, 'promotions');
+    const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        setVendorId(null);
+        setIsLoading(false);
+        return;
       }
-    } catch (error) {
-      console.error('[PromoContext] Failed to load promotions:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const persist = useCallback(async (updated: VendorPromotion[]) => {
-    try {
-      await AsyncStorage.setItem(PROMOTIONS_STORAGE_KEY, JSON.stringify(updated));
-      setPromotions(updated);
-    } catch (error) {
-      console.error('[PromoContext] Failed to persist promotions:', error);
-      throw error;
-    }
+      const tokenResult = await user.getIdTokenResult();
+      setVendorId((tokenResult.claims.vendorId as string | undefined) ?? null);
+    });
+    return unsubscribeAuth;
   }, []);
 
-  const activePromotions = useMemo(
-    () => promotions.filter((p) => p.active),
-    [promotions]
-  );
-
+  // Real-time promotions list, straight from
+  // vendors/{vendorId}/promotions — the same collection
+  // createPromotion/updatePromotion/deletePromotion write to.
   useEffect(() => {
-    setExternalPromotions(promotions);
-  }, [promotions]);
+    if (!vendorId) return;
+    const q = query(collection(db, 'vendors', vendorId, 'promotions'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => toVendorPromotion(d.data() as PromotionDoc));
+      setPromotions(list);
+      setExternalPromotions(list);
+      setIsLoading(false);
+    });
+    return unsubscribe;
+  }, [vendorId]);
 
+  const activePromotions = useMemo(() => promotions.filter((p) => p.active), [promotions]);
   const canAddPromotion = activePromotions.length < MAX_ACTIVE_PROMOTIONS;
 
-  const createPromotion = useCallback(async (draft: VendorPromotionDraft, vendorId: string) => {
-    const newPromo: VendorPromotion = {
-      id: `promo-${Date.now()}`,
-      vendorId,
-      title: generatePromoTitle(draft),
-      shortDescription: generateShortDescription(draft),
-      fullDescription: generateFullDescription(draft),
-      type: draft.type,
-      discountValue: draft.discountValue,
-      minimumOrder: draft.minimumOrder,
-      freeItemName: draft.freeItemName,
-      bogoItemName: draft.bogoItemName,
-      applicableItemIds: draft.freeItemId ? [draft.freeItemId] : draft.bogoItemId ? [draft.bogoItemId] : undefined,
-      active: true,
-      startDate: draft.startDate,
-      endDate: draft.endDate,
-      icon: getIconForType(draft.type),
-    };
-
-    const updated = [...promotions, newPromo];
-    await persist(updated);
-    console.log('[PromoContext] Created promotion:', newPromo.id, newPromo.title);
-    return newPromo;
-  }, [promotions, persist]);
+  const createPromotion = useCallback(async (draft: VendorPromotionDraft, _vendorId: string) => {
+    const create = callable<Record<string, unknown>, { success: true; promotionId: string }>('createPromotion');
+    const res = await create(draftToBackendPayload(draft));
+    return res.data;
+  }, []);
 
   const updatePromotion = useCallback(async (promoId: string, draft: VendorPromotionDraft) => {
-    const updated = promotions.map((p) => {
-      if (p.id !== promoId) return p;
-      return {
-        ...p,
-        title: generatePromoTitle(draft),
-        shortDescription: generateShortDescription(draft),
-        fullDescription: generateFullDescription(draft),
-        type: draft.type,
-        discountValue: draft.discountValue,
-        minimumOrder: draft.minimumOrder,
-        freeItemName: draft.freeItemName,
-        bogoItemName: draft.bogoItemName,
-        applicableItemIds: draft.freeItemId ? [draft.freeItemId] : draft.bogoItemId ? [draft.bogoItemId] : undefined,
-        startDate: draft.startDate,
-        endDate: draft.endDate,
-        icon: getIconForType(draft.type),
-      };
-    });
-    await persist(updated);
-    console.log('[PromoContext] Updated promotion:', promoId);
-  }, [promotions, persist]);
+    const update = callable<Record<string, unknown>, { success: true }>('updatePromotion');
+    await update({ promotionId: promoId, ...draftToBackendPayload(draft) });
+  }, []);
 
   const deletePromotion = useCallback(async (promoId: string) => {
-    const updated = promotions.filter((p) => p.id !== promoId);
-    await persist(updated);
-    console.log('[PromoContext] Deleted promotion:', promoId);
-  }, [promotions, persist]);
+    const del = callable<{ promotionId: string }, { success: true }>('deletePromotion');
+    await del({ promotionId: promoId });
+  }, []);
 
   const togglePromotion = useCallback(async (promoId: string) => {
-    const promo = promotions.find((p) => p.id === promoId);
-    if (!promo) return;
-
-    if (!promo.active && activePromotions.length >= MAX_ACTIVE_PROMOTIONS) {
-      console.log('[PromoContext] Cannot activate — max active promotions reached');
-      return;
-    }
-
-    const updated = promotions.map((p) =>
-      p.id === promoId ? { ...p, active: !p.active } : p
-    );
-    await persist(updated);
-    console.log('[PromoContext] Toggled promotion:', promoId, '→', !promo.active);
-  }, [promotions, activePromotions.length, persist]);
+    const toggle = callable<{ promotionId: string }, { success: true }>('togglePromotionActive');
+    await toggle({ promotionId: promoId });
+  }, []);
 
   const getPromotion = useCallback((promoId: string) => {
     return promotions.find((p) => p.id === promoId) ?? null;

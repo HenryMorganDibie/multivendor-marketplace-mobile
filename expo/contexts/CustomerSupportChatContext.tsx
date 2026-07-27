@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { collection, onSnapshot, orderBy, query, Timestamp } from 'firebase/firestore';
+import { auth, callable, db } from '@/lib/firebase';
 
 export interface SupportMessage {
   id: string;
@@ -19,195 +21,123 @@ export interface CustomerSupportChat {
   isActive: boolean;
 }
 
-const STORAGE_KEY = 'customer_support_chat';
 const LAST_READ_KEY = 'customer_support_last_read';
 
-const INITIAL_SYSTEM_MESSAGES: SupportMessage[] = [
-  {
-    id: 'sys-1',
-    type: 'system',
-    content: 'This chat is with the official the platform Support account.',
-    sender: 'system',
-    timestamp: new Date().toISOString(),
-  },
-  {
-    id: 'sys-2',
-    type: 'system',
-    content: 'Responses may be assisted by AI and reviewed by a human agent.',
-    sender: 'system',
-    timestamp: new Date().toISOString(),
-  },
-  {
-    id: 'sys-3',
-    type: 'system',
-    content: 'Never share your password, OTP, or verification codes.',
-    sender: 'system',
-    timestamp: new Date().toISOString(),
-  },
-];
+interface CreateTicketResponse {
+  success: true;
+  ticketId: string;
+  chatId: string;
+  created: boolean;
+}
 
-const GREETING_MESSAGE: SupportMessage = {
-  id: 'greeting-1',
-  type: 'text',
-  content: 'Hi 👋, thanks for contacting the platform Support.\n\nHow can we help you today?',
-  sender: 'support',
-  timestamp: new Date().toISOString(),
-};
+interface RawMessage {
+  messageId: string;
+  senderRole: 'customer' | 'vendor' | 'admin' | 'system';
+  type: string;
+  content: string;
+  systemSubtype?: string | null;
+  createdAt?: Timestamp | null;
+}
+
+function mapMessage(raw: RawMessage): SupportMessage {
+  const sender: SupportMessage['sender'] =
+    raw.senderRole === 'admin' ? 'support' : raw.senderRole === 'system' ? 'system' : 'customer';
+  return {
+    id: raw.messageId,
+    type: raw.type === 'system' ? 'system' : 'text',
+    content: raw.content,
+    sender,
+    timestamp: raw.createdAt ? raw.createdAt.toDate().toISOString() : new Date().toISOString(),
+  };
+}
 
 export const [CustomerSupportChatProvider, useCustomerSupportChat] = createContextHook(() => {
+  const [chatId, setChatId] = useState<string | null>(null);
   const [supportChat, setSupportChat] = useState<CustomerSupportChat | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastReadAt, setLastReadAt] = useState<string | null>(null);
+  const creatingRef = useRef(false);
 
   useEffect(() => {
-    loadSupportChat();
+    AsyncStorage.getItem(LAST_READ_KEY).then((v) => v && setLastReadAt(v));
   }, []);
 
-  const loadSupportChat = async () => {
-    try {
-      const [stored, storedLastRead] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEY),
-        AsyncStorage.getItem(LAST_READ_KEY),
-      ]);
-      if (stored) {
-        setSupportChat(JSON.parse(stored));
-      }
-      if (storedLastRead) {
-        setLastReadAt(storedLastRead);
-      }
-    } catch (error) {
-      console.error('Failed to load customer support chat:', error);
-    } finally {
+  // Real-time message listener — once a ticket/chatId exists, every
+  // message (from the customer, from an admin, or a system message) comes
+  // straight from chatThreads/{chatId}/messages, the same collection every
+  // other chat type in the app already reads from.
+  useEffect(() => {
+    if (!chatId) return;
+    const q = query(collection(db, 'chatThreads', chatId, 'messages'), orderBy('createdAt', 'asc'));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const messages = snap.docs.map((d) => mapMessage(d.data() as RawMessage));
+      setSupportChat((prev) => ({
+        id: chatId,
+        conversationType: 'support',
+        createdAt: prev?.createdAt ?? new Date().toISOString(),
+        lastActivityAt: new Date().toISOString(),
+        messages,
+        isActive: true,
+      }));
       setIsLoading(false);
-    }
-  };
+    });
+    return unsubscribe;
+  }, [chatId]);
 
-  const saveSupportChat = async (chat: CustomerSupportChat) => {
+  const getOrCreateSupportChat = useCallback(async (): Promise<void> => {
+    if (chatId || creatingRef.current || !auth.currentUser) return;
+    creatingRef.current = true;
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(chat));
+      const createTicket = callable<{ subject: string; initialMessage: string }, CreateTicketResponse>('createSupportTicket');
+      const res = await createTicket({ subject: 'Support request', initialMessage: 'Hi, I need help.' });
+      setChatId(res.data.chatId);
     } catch (error) {
-      console.error('Failed to save customer support chat:', error);
+      console.error('[CustomerSupportChat] Failed to create/resume support ticket:', error);
+      setIsLoading(false);
+    } finally {
+      creatingRef.current = false;
     }
-  };
-
-  const createSupportChat = useCallback((): CustomerSupportChat => {
-    const now = new Date().toISOString();
-    const newChat: CustomerSupportChat = {
-      id: 'customer-support-chat',
-      conversationType: 'support',
-      createdAt: now,
-      lastActivityAt: now,
-      messages: [
-        ...INITIAL_SYSTEM_MESSAGES.map((msg, index) => ({
-          ...msg,
-          timestamp: new Date(Date.now() + index * 100).toISOString(),
-        })),
-        {
-          ...GREETING_MESSAGE,
-          timestamp: new Date(Date.now() + 400).toISOString(),
-        },
-      ],
-      isActive: true,
-    };
-
-    setSupportChat(newChat);
-    saveSupportChat(newChat);
-    console.log('Created new customer support chat');
-    return newChat;
-  }, []);
-
-  const getOrCreateSupportChat = useCallback((): CustomerSupportChat => {
-    if (supportChat) {
-      if (!supportChat.isActive) {
-        const reactivated: CustomerSupportChat = {
-          ...supportChat,
-          isActive: true,
-          lastActivityAt: new Date().toISOString(),
-        };
-        setSupportChat(reactivated);
-        saveSupportChat(reactivated);
-        console.log('Reactivated customer support chat');
-        return reactivated;
-      }
-      return supportChat;
-    }
-    return createSupportChat();
-  }, [supportChat, createSupportChat]);
+  }, [chatId]);
 
   const hasSupportChat = useCallback((): boolean => {
     return supportChat !== null && supportChat.isActive;
-  }, [supportChat]);
-
-  const endSupportChat = useCallback(() => {
-    if (!supportChat) return;
-
-    const endedChat: CustomerSupportChat = {
-      ...supportChat,
-      isActive: false,
-      lastActivityAt: new Date().toISOString(),
-    };
-
-    setSupportChat(endedChat);
-    saveSupportChat(endedChat);
-    console.log('Customer support chat ended (marked inactive)');
   }, [supportChat]);
 
   const isSupportChatActive = useCallback((): boolean => {
     return supportChat?.isActive ?? false;
   }, [supportChat]);
 
-  const addMessage = useCallback((content: string, sender: 'customer' | 'support') => {
-    setSupportChat(prev => {
-      if (!prev) return prev;
-
-      const newMessage: SupportMessage = {
-        id: `msg-${Date.now()}`,
-        type: 'text',
-        content,
-        sender,
-        timestamp: new Date().toISOString(),
-      };
-
-      const updated: CustomerSupportChat = {
-        ...prev,
-        lastActivityAt: new Date().toISOString(),
-        messages: [...prev.messages, newMessage],
-      };
-
-      saveSupportChat(updated);
-      return updated;
-    });
+  const endSupportChat = useCallback(() => {
+    // Ticket resolution happens admin-side (resolveSupportTicket); the
+    // customer ending the conversation locally doesn't change ticket state.
   }, []);
+
+  const addMessage = useCallback(async (content: string, _sender: 'customer' | 'support') => {
+    if (!chatId) return;
+    try {
+      const send = callable<{ chatId: string; type: string; content: string }, unknown>('sendChatMessage');
+      await send({ chatId, type: 'text', content });
+    } catch (error) {
+      console.error('[CustomerSupportChat] Failed to send message:', error);
+    }
+  }, [chatId]);
 
   const getUnreadCount = useCallback((): number => {
     if (!supportChat) return 0;
-
-    const lastCustomerMessageIndex = supportChat.messages
-      .map((m, i) => ({ ...m, index: i }))
-      .filter(m => m.sender === 'customer')
-      .pop()?.index ?? -1;
-
-    const unreadAfterLastCustomerMsg = supportChat.messages
-      .slice(lastCustomerMessageIndex + 1)
-      .filter(m => m.sender === 'support');
-
-    if (lastReadAt) {
-      return unreadAfterLastCustomerMsg.filter(
-        m => new Date(m.timestamp).getTime() > new Date(lastReadAt).getTime()
-      ).length;
-    }
-
-    return unreadAfterLastCustomerMsg.length;
+    const supportMessages = supportChat.messages.filter((m) => m.sender === 'support');
+    if (!lastReadAt) return supportMessages.length;
+    return supportMessages.filter((m) => new Date(m.timestamp).getTime() > new Date(lastReadAt).getTime()).length;
   }, [supportChat, lastReadAt]);
 
   const markSupportAsRead = useCallback(() => {
     const now = new Date().toISOString();
     setLastReadAt(now);
-    AsyncStorage.setItem(LAST_READ_KEY, now).catch(err =>
-      console.error('Failed to save lastReadAt:', err)
-    );
-    console.log('[CustomerSupportChat] Marked support as read');
-  }, []);
+    AsyncStorage.setItem(LAST_READ_KEY, now).catch((err) => console.error('Failed to save lastReadAt:', err));
+    if (chatId) {
+      const markRead = callable<{ chatId: string }, unknown>('markChatRead');
+      markRead({ chatId }).catch((err) => console.error('[CustomerSupportChat] markChatRead failed:', err));
+    }
+  }, [chatId]);
 
   return {
     supportChat,
