@@ -40,6 +40,7 @@ import { useTodaysNote } from '@/contexts/TodaysNoteContext';
 import { mockOrders } from '@/mocks/ordersData';
 import TodaysNoteModal from '@/components/TodaysNoteModal';
 import VendorSetupChecklist from '@/components/VendorSetupChecklist';
+import { useVendorOnboarding } from '@/contexts/VendorOnboardingContext';
 import { getMockInsights, ICON_MAP, type InsightData } from '@/mocks/insightsData';
 import { useInvoices } from '@/contexts/InvoiceContext';
 import {
@@ -649,9 +650,17 @@ export default function VendorDashboardScreen() {
   const { vendor: _vendor, updateVendor: _updateVendor } = useVendor();
   const { note: todaysNote } = useTodaysNote();
   const { verificationData } = useVerification();
+  const { isPublished: isStorefrontPublished } = useVendorOnboarding();
 
   const verificationStatus = verificationData.status;
-  const showVerificationBanner = verificationStatus !== 'approved' && !verificationBannerDismissed;
+  // Verification is deliberately shown in ONE place at a time. While a vendor
+  // is still setting up, it lives as the final stage of the setup stepper, so a
+  // banner here would repeat the same requirement twice on one screen and make
+  // an ordinary incomplete setup look like a problem. Once the storefront is
+  // actually published, the stepper is finished and this becomes the only place
+  // discovery is mentioned — at which point it's genuinely useful.
+  const showVerificationBanner =
+    verificationStatus !== 'approved' && !verificationBannerDismissed && isStorefrontPublished;
 
   React.useEffect(() => {
     if (usernameSelectionPending) {

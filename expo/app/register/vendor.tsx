@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MapPin, UserCircle, TicketCheck } from 'lucide-react-native';
+import { MapPin, UserCircle, TicketCheck, Eye, EyeOff } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import LocationCascadeFields from '@/components/LocationCascadeFields';
 import type { LocationValue } from '@/components/LocationCascadeFields';
@@ -122,6 +122,7 @@ export default function VendorSignupScreen() {
     validationStatus: 'idle',
   });
 
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [focusedField, setFocusedField] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -384,19 +385,33 @@ export default function VendorSignupScreen() {
 
             <View style={styles.inputSection}>
               <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={[styles.input, focusedField === 'password' && styles.inputFocused, errors.password ? styles.inputError : null]}
-                value={password}
-                onChangeText={(t) => { setPassword(t); clearError('password'); }}
-                onFocus={() => setFocusedField('password')}
-                onBlur={() => setFocusedField('')}
-                placeholder="Minimum 8 characters"
-                placeholderTextColor="#9CA3AF"
-                secureTextEntry
-                autoCapitalize="none"
-                editable={!isLoading}
-                testID="vendor-password"
-              />
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={[styles.passwordInput, focusedField === 'password' && styles.inputFocused, errors.password ? styles.inputError : null]}
+                  value={password}
+                  onChangeText={(t) => { setPassword(t); clearError('password'); }}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField('')}
+                  placeholder="Minimum 8 characters"
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  editable={!isLoading}
+                  testID="vendor-password"
+                />
+                <TouchableOpacity
+                  style={styles.passwordToggle}
+                  onPress={() => setShowPassword(v => !v)}
+                  disabled={isLoading}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  testID="vendor-password-toggle"
+                >
+                  {showPassword
+                    ? <EyeOff size={20} color="#9CA3AF" strokeWidth={2} />
+                    : <Eye size={20} color="#9CA3AF" strokeWidth={2} />}
+                </TouchableOpacity>
+              </View>
               {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
             </View>
 
@@ -447,7 +462,7 @@ export default function VendorSignupScreen() {
                 editable={!isLoading && referralValidation.validationStatus !== 'pending'}
                 testID="vendor-referral-code"
               />
-              <Text style={styles.helperText}>Optional — enter the code from a the platform field rep. Or another vendor.</Text>
+              <Text style={styles.helperText}>Optional — enter a referral code from a the platform representative or another vendor.</Text>
               {referralValidation.validationStatus === 'pending' ? (
                 <View style={styles.validationRow}>
                   <ActivityIndicator color="#FF8C42" size="small" />
@@ -462,7 +477,7 @@ export default function VendorSignupScreen() {
 
             <View style={styles.planNote}>
               <Text style={styles.planNoteText}>
-                New vendors start on the Basic plan. Your storefront link works right away, and you can verify your business later to appear in Home, Search, and Explore.
+                New vendors start on the Basic plan. After completing the required storefront setup, you can publish and share your storefront link. Complete verification later to appear in Home, Search and Explore.
               </Text>
             </View>
 
@@ -479,6 +494,37 @@ export default function VendorSignupScreen() {
                 <Text style={styles.primaryButtonText}>Create Vendor Account</Text>
               )}
             </TouchableOpacity>
+
+            {/* Consent is shown at the point of account creation, which is the
+                moment it actually applies. Vendors get the Vendor Agreement in
+                addition to the two documents every account is bound by. */}
+            <Text style={styles.legalText}>
+              By creating an account, you agree to the platform&apos;s{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push('/legal/terms' as any)}
+                testID="vendor-legal-terms"
+              >
+                Terms of Service
+              </Text>
+              ,{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push('/legal/vendor-agreement' as any)}
+                testID="vendor-legal-vendor-agreement"
+              >
+                Vendor Agreement
+              </Text>
+              {' '}and{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push('/legal/privacy' as any)}
+                testID="vendor-legal-privacy"
+              >
+                Privacy Policy
+              </Text>
+              .
+            </Text>
 
             <View style={styles.bottomSection}>
               <Text style={styles.bottomText}>Already have an account? </Text>
@@ -528,6 +574,9 @@ const styles = StyleSheet.create({
   sectionHeaderText: { fontSize: 13, fontWeight: '700' as const, color: '#FF8C42', textTransform: 'uppercase' as const, letterSpacing: 0.5 },
   errorText: { fontSize: 13, color: '#DC2626', marginTop: 6, paddingHorizontal: 4 },
   helperText: { fontSize: 12, color: '#6B7280', lineHeight: 17, marginTop: 6, paddingHorizontal: 4 },
+  passwordRow: { position: 'relative' as const, justifyContent: 'center' as const },
+  passwordInput: { borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 16, paddingRight: 48, paddingVertical: 14, fontSize: 15.5, color: '#1F2937', backgroundColor: '#FFFFFF' },
+  passwordToggle: { position: 'absolute' as const, right: 14, padding: 4 },
   validationRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, marginTop: 8, paddingHorizontal: 4 },
   pendingText: { fontSize: 13, color: '#9A3412' },
   successText: { fontSize: 13, color: '#16A34A', marginTop: 6, paddingHorizontal: 4, fontWeight: '600' as const },
@@ -542,6 +591,8 @@ const styles = StyleSheet.create({
   primaryButtonText: { fontSize: 16, fontWeight: '600' as const, color: '#FFFFFF' },
   bottomSection: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, paddingVertical: 24 },
   bottomText: { fontSize: 15, color: '#6B7280' },
+  legalText: { fontSize: 12.5, lineHeight: 18, color: '#6B7280', textAlign: 'center' as const, marginTop: 14, paddingHorizontal: 4 },
+  legalLink: { color: '#FF8C42', fontWeight: '600' as const },
   bottomLink: { fontSize: 15, color: '#FF8C42', fontWeight: '600' as const },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' as const },
   modalContainer: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', paddingTop: 8 },

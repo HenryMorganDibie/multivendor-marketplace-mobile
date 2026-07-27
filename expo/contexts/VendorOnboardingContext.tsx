@@ -121,6 +121,12 @@ export const [VendorOnboardingProvider, useVendorOnboarding] = createContextHook
       canPublish: status?.canPublish ?? false,
       blockedReasons: status?.blockedReasons ?? [],
       hasSystemGeneratedUsername: status?.hasSystemGeneratedUsername ?? false,
+      // Exposed so the dashboard can decide where verification is mentioned:
+      // inside the setup stepper before publishing, or as a discovery prompt
+      // after. Defaults to false so a vendor whose status hasn't loaded yet is
+      // never wrongly treated as already live.
+      isPublished: status?.isPublished ?? false,
+      isDiscoverable: status?.isDiscoverable ?? false,
       isSetupComplete,
       isLoading,
       error,
