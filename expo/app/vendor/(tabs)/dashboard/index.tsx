@@ -39,6 +39,7 @@ import { mockVendor } from '@/mocks/vendorData';
 import { useTodaysNote } from '@/contexts/TodaysNoteContext';
 import { mockOrders } from '@/mocks/ordersData';
 import TodaysNoteModal from '@/components/TodaysNoteModal';
+import VendorSetupChecklist from '@/components/VendorSetupChecklist';
 import { getMockInsights, ICON_MAP, type InsightData } from '@/mocks/insightsData';
 import { useInvoices } from '@/contexts/InvoiceContext';
 import {
@@ -874,6 +875,11 @@ export default function VendorDashboardScreen() {
             rejectionReason={verificationData.rejectionReason}
           />
         )}
+
+        {/* Sits above the KPI cards deliberately: for a vendor who hasn't
+            finished setup, the KPIs are all zeroes and the next action
+            matters more than the numbers. Hides itself once setup is done. */}
+        <VendorSetupChecklist />
 
         <View style={styles.kpiRow}>
           <View style={[styles.kpiCard, { backgroundColor: '#FFF7ED' }]}>
