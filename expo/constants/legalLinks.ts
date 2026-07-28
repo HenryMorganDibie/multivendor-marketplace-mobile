@@ -9,22 +9,25 @@ import * as WebBrowser from 'expo-web-browser';
  * advice, and shipping them inside the app means an app-store release every
  * time a clause moves.
  *
- * Every legal URL in the app comes from this file so there is exactly one place
- * to correct. Two things still need confirming from the client:
+ * The paths below are the real routes in the the platform-website repo, confirmed
+ * against its app router rather than guessed. Each page is built and reads its
+ * body from the CMS; they currently render "Content pending publication"
+ * because the legal copy has not been published yet. That is a content
+ * dependency, not a code one: these links start working the moment the
+ * documents go live, with no app change.
  *
- *  1. The domain. The app currently references the platform.com, the platform.app and
- *     vendor.the platform.com in different places. These use the platform.com because
- *     that is what the existing terms and privacy references already use.
- *  2. The paths below, once the website's legal section is published. The site
- *     is not finished yet, so these will not resolve until it is.
+ * Every legal URL in the app comes from this file so there is one place to
+ * correct. Still to confirm: the domain. The app references the platform.com,
+ * the platform.app and vendor.the platform.com in different places. This uses
+ * the platform.com, matching the existing terms and privacy references.
  */
-const LEGAL_BASE_URL = 'https://the platform.com/legal';
+const SITE_BASE_URL = 'https://the platform.com';
 
 export const LEGAL_LINKS = {
-  termsOfUse: `${LEGAL_BASE_URL}/terms-of-use`,
-  privacyPolicy: `${LEGAL_BASE_URL}/privacy-policy`,
-  customerAgreement: `${LEGAL_BASE_URL}/customer-agreement`,
-  vendorAgreement: `${LEGAL_BASE_URL}/vendor-agreement`,
+  termsOfUse: `${SITE_BASE_URL}/terms-of-service`,
+  privacyPolicy: `${SITE_BASE_URL}/privacy-policy`,
+  customerAgreement: `${SITE_BASE_URL}/customer-terms`,
+  vendorAgreement: `${SITE_BASE_URL}/vendor-terms`,
 } as const;
 
 export type LegalDocument = keyof typeof LEGAL_LINKS;
