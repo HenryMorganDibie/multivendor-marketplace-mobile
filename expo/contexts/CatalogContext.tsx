@@ -1,7 +1,75 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { auth, db, callable } from '@/lib/firebase';
 import type { HighlightLabel } from '@/utils/itemTagging';
 
 export type SelectionType = 'radio' | 'checkbox';
+
+/**
+ * Backend ↔ app shape translation for catalog items.
+ *
+ * Two vocabularies genuinely differ and must be translated at this boundary
+ * rather than leaking either way:
+ *  - the backend's id field is `itemId`, the app's is `id`
+ *  - the backend's ModerationStatus is 'pending' | 'approved' | 'rejected' |
+ *    'flagged'; this app's older type uses 'pending_review' for the first of
+ *    those. Screens were comparing against 'pending_review', so a real item
+ *    never matched and its "under review" treatment never appeared.
+ */
+const BACKEND_TO_APP_STATUS: Record<string, ModerationStatus> = {
+  pending: 'pending_review',
+  approved: 'approved',
+  rejected: 'rejected',
+  // 'flagged' has no app-side equivalent; treat it as rejected so it is at
+  // least visibly not-live rather than silently rendering as approved.
+  flagged: 'rejected',
+};
+
+function fromBackendItem(docId: string, d: Record<string, unknown>): CatalogItem {
+  return {
+    id: (d.itemId as string) ?? docId,
+    name: (d.name as string) ?? '',
+    basePrice: (d.basePrice as number) ?? 0,
+    salePrice: (d.salePrice as number | null) ?? undefined,
+    description: (d.description as string | null) ?? '',
+    photos: Array.isArray(d.photos) ? (d.photos as string[]) : [],
+    isAvailable: Boolean(d.isAvailable),
+    isTaxExempt: Boolean(d.isTaxExempt),
+    isHidden: Boolean(d.isHidden),
+    isOutOfStock: Boolean(d.isOutOfStock),
+    isFeatured: Boolean(d.isFeatured),
+    categoryId: (d.categoryId as string | null) ?? UNCATEGORIZED_ID,
+    addOnGroups: Array.isArray(d.addOnGroups) ? (d.addOnGroups as CatalogItem['addOnGroups']) : [],
+    moderationStatus: BACKEND_TO_APP_STATUS[(d.moderationStatus as string) ?? 'pending'] ?? 'pending_review',
+    trackInventory: Boolean(d.trackInventory),
+    inventoryQuantity: (d.inventoryQuantity as number | undefined) ?? undefined,
+    lowStockThreshold: (d.lowStockThreshold as number | null) ?? undefined,
+    highlightLabel: (d.highlightLabel as HighlightLabel | undefined) ?? undefined,
+    orderCount: (d.orderCount as number | undefined) ?? 0,
+  };
+}
+
+/** Strips app-only and server-controlled fields before sending to the backend.
+ * moderationStatus is deliberately never sent: the client does not get to
+ * decide its own review state, and the backend rejects it anyway. */
+function toBackendPayload(item: Omit<CatalogItem, 'id'>): Record<string, unknown> {
+  return {
+    name: item.name,
+    description: item.description ?? null,
+    basePrice: item.basePrice,
+    salePrice: item.salePrice ?? null,
+    photos: item.photos,
+    categoryId: item.categoryId === UNCATEGORIZED_ID ? null : item.categoryId,
+    isAvailable: item.isAvailable,
+    isHidden: item.isHidden,
+    isFeatured: item.isFeatured,
+    isTaxExempt: item.isTaxExempt,
+    trackInventory: item.trackInventory,
+    inventoryQuantity: item.inventoryQuantity ?? 0,
+    lowStockThreshold: item.lowStockThreshold ?? null,
+    addOnGroups: item.addOnGroups,
+  };
+}
 
 function normalizeItem(input: Omit<CatalogItem, 'id' | 'moderationStatus'>): Omit<CatalogItem, 'id'> {
   return {
@@ -263,6 +331,53 @@ export function CatalogProvider({ children }: { children: React.ReactNode }) {
     },
   ]);
 
+  /**
+   * Live subscription to the vendor's real catalog.
+   *
+   * A Firestore listener rather than a one-off fetch, because moderation
+   * decisions are made by someone else: when an admin approves or rejects an
+   * item, the vendor's screen should update without them having to pull to
+   * refresh or guess. Vendors can read their own catalogItems under the
+   * security rules, so this needs no extra backend endpoint.
+   *
+   * The mock array above is the pre-auth placeholder. Once a real vendor session
+   * exists, the first snapshot replaces it wholesale — including with an empty
+   * list, which is the correct view for a new vendor with no items.
+   */
+  useEffect(() => {
+    let unsubscribeSnapshot: (() => void) | null = null;
+
+    const unsubscribeAuth = auth.onIdTokenChanged(async (user) => {
+      unsubscribeSnapshot?.();
+      unsubscribeSnapshot = null;
+
+      if (!user) return;
+      // vendorId lives on the custom claim, set by completeRegistration.
+      const token = await user.getIdTokenResult();
+      const vendorId = token.claims.vendorId as string | undefined;
+      if (!vendorId) return;
+
+      const itemsRef = collection(db, 'vendors', vendorId, 'catalogItems');
+      unsubscribeSnapshot = onSnapshot(
+        itemsRef,
+        (snap) => {
+          setItems(snap.docs.map((d) => fromBackendItem(d.id, d.data())));
+        },
+        (err) => {
+          // Leaving stale mock data on screen would be worse than an empty
+          // catalog, since the vendor could act on items that don't exist.
+          console.error('[Catalog] Live catalog subscription failed:', err);
+          setItems([]);
+        },
+      );
+    });
+
+    return () => {
+      unsubscribeSnapshot?.();
+      unsubscribeAuth();
+    };
+  }, []);
+
   const addCategory = useCallback((name: string) => {
     const newCategory: Category = {
       id: `cat_${Date.now()}`,
@@ -295,24 +410,47 @@ export function CatalogProvider({ children }: { children: React.ReactNode }) {
     setCategories(reordered);
   }, []);
 
-  const addItem = useCallback((item: Omit<CatalogItem, 'id' | 'moderationStatus'>) => {
+  // ── Backend-backed mutations ────────────────────────────────────────────
+  // These call the real Cloud Functions rather than mutating local state. The
+  // Firestore listener above then pushes the authoritative result back, so the
+  // UI reflects what the backend actually stored — including moderation status,
+  // which the client must never decide for itself. Local state is deliberately
+  // NOT optimistically updated for moderation-relevant fields: showing an item
+  // as live before it has been approved is the exact failure this system exists
+  // to prevent.
+  const addItem = useCallback(async (item: Omit<CatalogItem, 'id' | 'moderationStatus'>) => {
     const normalized = normalizeItem(item);
-    const newItem: CatalogItem = {
-      ...normalized,
-      id: `item_${Date.now()}`,
-    };
-    setItems((prev) => [...prev, newItem]);
-    console.log('New item created with pending_review status:', newItem.name);
+    try {
+      const create = callable<Record<string, unknown>, { success: true; itemId: string }>('createCatalogItem');
+      await create(toBackendPayload(normalized));
+    } catch (err) {
+      console.error('[Catalog] createCatalogItem failed:', err);
+      throw err;
+    }
   }, []);
 
-  const updateItem = useCallback((id: string, item: Omit<CatalogItem, 'id' | 'moderationStatus'>) => {
+  const updateItem = useCallback(async (id: string, item: Omit<CatalogItem, 'id' | 'moderationStatus'>) => {
     const normalized = normalizeItem(item);
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...normalized, id } : i)));
-    console.log('Item updated - now pending review:', id);
+    try {
+      const update = callable<Record<string, unknown>, { success: true; pendingRevision?: boolean }>('updateCatalogItem');
+      const res = await update({ itemId: id, ...toBackendPayload(normalized) });
+      if (res.data.pendingRevision) {
+        console.log('[Catalog] Edit held as a pending revision; live version unchanged:', id);
+      }
+    } catch (err) {
+      console.error('[Catalog] updateCatalogItem failed:', err);
+      throw err;
+    }
   }, []);
 
-  const deleteItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
+  const deleteItem = useCallback(async (id: string) => {
+    try {
+      const remove = callable<{ itemId: string }, { success: true }>('deleteCatalogItem');
+      await remove({ itemId: id });
+    } catch (err) {
+      console.error('[Catalog] deleteCatalogItem failed:', err);
+      throw err;
+    }
   }, []);
 
   const getItemsByCategory = useCallback(
