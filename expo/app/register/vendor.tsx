@@ -573,7 +573,13 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 13, color: '#DC2626', marginTop: 6, paddingHorizontal: 4 },
   helperText: { fontSize: 12, color: '#6B7280', lineHeight: 17, marginTop: 6, paddingHorizontal: 4 },
   passwordRow: { position: 'relative' as const, justifyContent: 'center' as const },
-  passwordInput: { borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 16, paddingRight: 48, paddingVertical: 14, fontSize: 15.5, color: '#1F2937', backgroundColor: '#FFFFFF' },
+  // Matches `input` above, plus room for the visibility toggle. It used to have
+  // its own background, border width and font size, so the password field did
+  // not look like the fields directly above it on the same form.
+  passwordInput: {
+    backgroundColor: '#F7F7F8', borderRadius: 12, paddingVertical: 15, paddingHorizontal: 16,
+    paddingRight: 48, fontSize: 16, color: '#2B2B2B', borderWidth: 1, borderColor: '#EEEEEE',
+  },
   passwordToggle: { position: 'absolute' as const, right: 14, padding: 4 },
   validationRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, marginTop: 8, paddingHorizontal: 4 },
   pendingText: { fontSize: 13, color: '#9A3412' },

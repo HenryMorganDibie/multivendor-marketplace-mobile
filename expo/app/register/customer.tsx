@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MapPin } from 'lucide-react-native';
+import { MapPin, Eye, EyeOff } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import LocationCascadeFields from '@/components/LocationCascadeFields';
 import type { LocationValue } from '@/components/LocationCascadeFields';
@@ -20,6 +20,20 @@ import { useUserLocation } from '@/contexts/UserLocationContext';
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+/**
+ * Reduce whatever was typed to a single capitalised letter.
+ *
+ * \p{L} rather than A-Z on purpose: a customer whose surname starts with Ñ, Ø
+ * or É is entitled to their own initial, and an A-Z filter silently swallowed
+ * the keystroke and left the field looking broken. Digits, punctuation and
+ * whitespace are dropped as they are typed, so the field cannot hold anything
+ * but one letter.
+ */
+export function normalizeLastInitial(raw: string): string {
+  const letters = raw.replace(/[^\p{L}]/gu, '');
+  return letters.slice(0, 1).toUpperCase();
 }
 
 type FieldErrors = Record<string, string | undefined>;
@@ -35,6 +49,7 @@ export default function CustomerSignupScreen() {
   const [password, setPassword] = useState<string>('');
 
   const [location, setLocation] = useState<LocationValue | null>(null);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
 
   const [focusedField, setFocusedField] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -127,7 +142,7 @@ export default function CustomerSignupScreen() {
           <View style={styles.content}>
             <View style={styles.header}>
               <Text style={styles.title}>Create your account</Text>
-              <Text style={styles.subtitle}>Shop from verified vendors near you</Text>
+              <Text style={styles.subtitle}>Discover vendors, place orders and manage your purchases.</Text>
             </View>
 
             <View style={styles.row}>
@@ -152,7 +167,7 @@ export default function CustomerSignupScreen() {
                 <TextInput
                   style={[styles.input, focusedField === 'lastInitial' && styles.inputFocused, errors.lastInitial ? styles.inputError : null]}
                   value={lastInitial}
-                  onChangeText={(t) => { setLastInitial(t.replace(/[^a-zA-Z]/g, '').slice(0, 1)); clearError('lastInitial'); }}
+                  onChangeText={(t) => { setLastInitial(normalizeLastInitial(t)); clearError('lastInitial'); }}
                   onFocus={() => setFocusedField('lastInitial')}
                   onBlur={() => setFocusedField('')}
                   placeholder="D"
@@ -166,6 +181,10 @@ export default function CustomerSignupScreen() {
                 {errors.lastInitial ? <Text style={styles.errorText}>{errors.lastInitial}</Text> : null}
               </View>
             </View>
+
+            <Text style={styles.helperText} testID="customer-lastinitial-helper">
+              We collect only your last initial to help protect your privacy.
+            </Text>
 
             <View style={styles.inputSection}>
               <Text style={styles.label}>Email Address</Text>
@@ -188,19 +207,33 @@ export default function CustomerSignupScreen() {
 
             <View style={styles.inputSection}>
               <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={[styles.input, focusedField === 'password' && styles.inputFocused, errors.password ? styles.inputError : null]}
-                value={password}
-                onChangeText={(t) => { setPassword(t); clearError('password'); }}
-                onFocus={() => setFocusedField('password')}
-                onBlur={() => setFocusedField('')}
-                placeholder="Minimum 8 characters"
-                placeholderTextColor="#9CA3AF"
-                secureTextEntry
-                autoCapitalize="none"
-                editable={!isLoading}
-                testID="customer-password"
-              />
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={[styles.passwordInput, focusedField === 'password' && styles.inputFocused, errors.password ? styles.inputError : null]}
+                  value={password}
+                  onChangeText={(t) => { setPassword(t); clearError('password'); }}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField('')}
+                  placeholder="Minimum 8 characters"
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  editable={!isLoading}
+                  testID="customer-password"
+                />
+                <TouchableOpacity
+                  style={styles.passwordToggle}
+                  onPress={() => setShowPassword(v => !v)}
+                  disabled={isLoading}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  testID="customer-password-toggle"
+                >
+                  {showPassword
+                    ? <EyeOff size={20} color="#9CA3AF" strokeWidth={2} />
+                    : <Eye size={20} color="#9CA3AF" strokeWidth={2} />}
+                </TouchableOpacity>
+              </View>
               {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
             </View>
 
@@ -217,6 +250,37 @@ export default function CustomerSignupScreen() {
               disabled={isLoading}
               testIDPrefix="customer"
             />
+
+            {/* Above the button, matching the vendor screen: the customer reads
+                what they are agreeing to before the action, not after it. Each
+                document is separately tappable. */}
+            <Text style={styles.legalText}>
+              By creating a customer account, you agree to the platform&apos;s{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push('/legal/terms' as any)}
+                testID="customer-legal-terms"
+              >
+                Terms of Use
+              </Text>
+              ,{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push('/legal/privacy' as any)}
+                testID="customer-legal-privacy"
+              >
+                Privacy Policy
+              </Text>
+              , and{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push('/legal/customer-terms' as any)}
+                testID="customer-legal-customer-agreement"
+              >
+                Customer Agreement
+              </Text>
+              .
+            </Text>
 
             <TouchableOpacity
               style={[styles.primaryButton, (!isFormComplete || isLoading) && styles.primaryButtonDisabled]}
@@ -263,12 +327,24 @@ const styles = StyleSheet.create({
   },
   inputFocused: { borderColor: '#FF8C42', backgroundColor: '#FFFBF8' },
   inputError: { borderColor: '#DC2626' },
+  // Same as `input`, plus room for the visibility toggle. Kept in step with it
+  // deliberately: the password field previously had its own background, border
+  // width and font size, so it did not look like the fields above it.
+  passwordRow: { position: 'relative' as const, justifyContent: 'center' as const },
+  passwordInput: {
+    backgroundColor: '#F7F7F8', borderRadius: 12, paddingVertical: 15, paddingHorizontal: 16,
+    paddingRight: 48, fontSize: 16, color: '#2B2B2B', borderWidth: 1, borderColor: '#EEEEEE',
+  },
+  passwordToggle: { position: 'absolute' as const, right: 14, padding: 4 },
+  helperText: { fontSize: 12, color: '#6B7280', lineHeight: 17, marginTop: -6, marginBottom: 16, paddingHorizontal: 4 },
+  legalText: { fontSize: 12.5, lineHeight: 18, color: '#6B7280', textAlign: 'center' as const, marginTop: 14, paddingHorizontal: 4 },
+  legalLink: { color: '#FF8C42', fontWeight: '600' as const },
   sectionHeaderRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, marginTop: 8, marginBottom: 14 },
   sectionHeaderText: { fontSize: 13, fontWeight: '700' as const, color: '#FF8C42', textTransform: 'uppercase' as const, letterSpacing: 0.5 },
   errorText: { fontSize: 13, color: '#DC2626', marginTop: 6, paddingHorizontal: 4 },
   primaryButton: {
     backgroundColor: '#FF8C42', borderRadius: 14, height: 52, alignItems: 'center' as const,
-    justifyContent: 'center' as const, marginTop: 8,
+    justifyContent: 'center' as const, marginTop: 4,
     shadowColor: '#FF8C42', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 4,
   },
   primaryButtonDisabled: { backgroundColor: 'rgba(255,140,66,0.35)', shadowOpacity: 0, elevation: 0 },
