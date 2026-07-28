@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MapPin, UserCircle, TicketCheck, Eye, EyeOff } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
+import { openLegalDocument } from '@/constants/legalLinks';
 import LocationCascadeFields from '@/components/LocationCascadeFields';
 import type { LocationValue } from '@/components/LocationCascadeFields';
 
@@ -486,7 +487,7 @@ export default function VendorSignupScreen() {
               By creating a vendor account, you agree to the platform&apos;s{' '}
               <Text
                 style={styles.legalLink}
-                onPress={() => router.push('/legal/terms' as any)}
+                onPress={() => void openLegalDocument('termsOfUse')}
                 testID="vendor-legal-terms"
               >
                 Terms of Use
@@ -494,7 +495,7 @@ export default function VendorSignupScreen() {
               ,{' '}
               <Text
                 style={styles.legalLink}
-                onPress={() => router.push('/legal/privacy' as any)}
+                onPress={() => void openLegalDocument('privacyPolicy')}
                 testID="vendor-legal-privacy"
               >
                 Privacy Policy
@@ -502,7 +503,7 @@ export default function VendorSignupScreen() {
               , and{' '}
               <Text
                 style={styles.legalLink}
-                onPress={() => router.push('/legal/vendor-agreement' as any)}
+                onPress={() => void openLegalDocument('vendorAgreement')}
                 testID="vendor-legal-vendor-agreement"
               >
                 Vendor Agreement

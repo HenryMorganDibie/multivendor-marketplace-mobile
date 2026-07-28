@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MapPin, Eye, EyeOff } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
+import { openLegalDocument } from '@/constants/legalLinks';
 import LocationCascadeFields from '@/components/LocationCascadeFields';
 import type { LocationValue } from '@/components/LocationCascadeFields';
 import { useUserLocation } from '@/contexts/UserLocationContext';
@@ -258,7 +259,7 @@ export default function CustomerSignupScreen() {
               By creating a customer account, you agree to the platform&apos;s{' '}
               <Text
                 style={styles.legalLink}
-                onPress={() => router.push('/legal/terms' as any)}
+                onPress={() => void openLegalDocument('termsOfUse')}
                 testID="customer-legal-terms"
               >
                 Terms of Use
@@ -266,7 +267,7 @@ export default function CustomerSignupScreen() {
               ,{' '}
               <Text
                 style={styles.legalLink}
-                onPress={() => router.push('/legal/privacy' as any)}
+                onPress={() => void openLegalDocument('privacyPolicy')}
                 testID="customer-legal-privacy"
               >
                 Privacy Policy
@@ -274,7 +275,7 @@ export default function CustomerSignupScreen() {
               , and{' '}
               <Text
                 style={styles.legalLink}
-                onPress={() => router.push('/legal/customer-terms' as any)}
+                onPress={() => void openLegalDocument('customerAgreement')}
                 testID="customer-legal-customer-agreement"
               >
                 Customer Agreement
