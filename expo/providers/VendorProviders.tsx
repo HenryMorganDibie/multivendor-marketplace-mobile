@@ -16,6 +16,7 @@ import { VendorDraftProvider } from '@/contexts/VendorDraftContext';
 import { ChangeRequestsProvider } from '@/contexts/ChangeRequestsContext';
 import { ReviewsProvider } from '@/contexts/ReviewsContext';
 import { VendorOnboardingProvider } from '@/contexts/VendorOnboardingContext';
+import { VendorDashboardProvider } from '@/contexts/VendorDashboardContext';
 
 interface VendorProvidersProps {
   children: ReactNode;
@@ -41,7 +42,9 @@ export function VendorProviders({ children }: VendorProvidersProps) {
                                     <ChangeRequestsProvider>
                           <ReviewsProvider>
                                       <VendorOnboardingProvider>
-                                        {children}
+                                        <VendorDashboardProvider>
+                                          {children}
+                                        </VendorDashboardProvider>
                                       </VendorOnboardingProvider>
                           </ReviewsProvider>
                                     </ChangeRequestsProvider>

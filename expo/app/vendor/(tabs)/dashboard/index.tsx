@@ -41,6 +41,7 @@ import { mockOrders } from '@/mocks/ordersData';
 import TodaysNoteModal from '@/components/TodaysNoteModal';
 import VendorSetupChecklist from '@/components/VendorSetupChecklist';
 import { useVendorOnboarding } from '@/contexts/VendorOnboardingContext';
+import { useVendorDashboard } from '@/contexts/VendorDashboardContext';
 import { getMockInsights, ICON_MAP, type InsightData } from '@/mocks/insightsData';
 import { useInvoices } from '@/contexts/InvoiceContext';
 import {
@@ -652,6 +653,19 @@ export default function VendorDashboardScreen() {
   const { verificationData } = useVerification();
   const { isPublished: isStorefrontPublished } = useVendorOnboarding();
 
+  // Real figures from getVendorDashboard. Named "live*" to make it obvious at
+  // each usage site that these are backend values, not the mock-order
+  // derivations that still feed some of the older sections below.
+  const {
+    ordersToday: liveOrdersToday,
+    pendingOrders: livePendingOrders,
+    todayRevenue: liveTodayRevenue,
+    bestSeller: liveBestSeller,
+  } = useVendorDashboard();
+
+  const dashboardCurrency = ((mockVendor.currency as Currency) ||
+    getCurrencyFromCountryCode(mockVendor.countryCode)) as Currency;
+
   const verificationStatus = verificationData.status;
   // Verification is deliberately shown in ONE place at a time. While a vendor
   // is still setting up, it lives as the final stage of the setup stepper, so a
@@ -899,8 +913,11 @@ export default function VendorDashboardScreen() {
               <Calendar size={18} color="#C2410C" />
             </View>
             <Text style={styles.kpiLabel}>Orders Today</Text>
-            <Text style={styles.kpiValue}>{todayOrders.length}</Text>
-            <MiniSparkline data={ORDERS_SPARKLINE_DATA} />
+            <Text style={styles.kpiValue}>{liveOrdersToday}</Text>
+            {/* Sparkline needs real per-day history, which getVendorDashboard
+                doesn't return yet. Showing a decorative shape next to a real
+                figure would imply a trend that isn't measured, so it's hidden
+                until there's actual history behind it. */}
           </View>
 
           <View style={[styles.kpiCard, { backgroundColor: '#FFFBEB' }]}>
@@ -908,8 +925,10 @@ export default function VendorDashboardScreen() {
               <AlertCircle size={18} color="#B45309" />
             </View>
             <Text style={styles.kpiLabel}>Pending</Text>
-            <Text style={styles.kpiValue}>{pendingOrders.length}</Text>
-            <Text style={styles.kpiSub}>{pendingOrders.length} needs action</Text>
+            <Text style={styles.kpiValue}>{livePendingOrders}</Text>
+            <Text style={styles.kpiSub}>
+              {livePendingOrders === 0 ? 'Nothing needs action' : `${livePendingOrders} needs action`}
+            </Text>
           </View>
         </View>
 
@@ -919,13 +938,16 @@ export default function VendorDashboardScreen() {
               <TrendingUp size={18} color="#16A34A" />
             </View>
             <Text style={styles.kpiLabel}>Best Seller</Text>
-            {bestSeller ? (
+            {/* Undefined means the plan doesn't include this widget; null means
+                the plan includes it but nothing has sold yet. Those are
+                genuinely different messages to a vendor. */}
+            {liveBestSeller ? (
               <>
-                <Text style={styles.kpiValueSmall} numberOfLines={1}>{bestSeller.name}</Text>
-                <Text style={styles.kpiSub}>{bestSeller.count} sold</Text>
+                <Text style={styles.kpiValueSmall} numberOfLines={1}>{liveBestSeller.name}</Text>
+                <Text style={styles.kpiSub}>{liveBestSeller.quantitySold} sold</Text>
               </>
             ) : (
-              <Text style={styles.kpiSub}>No data</Text>
+              <Text style={styles.kpiSub}>No sales yet</Text>
             )}
           </View>
 
@@ -933,17 +955,12 @@ export default function VendorDashboardScreen() {
             <View style={[styles.kpiIconWrap, { backgroundColor: 'rgba(37,99,235,0.1)' }]}>
               <DollarSign size={18} color="#2563EB" />
             </View>
-            <Text style={styles.kpiLabel}>Revenue</Text>
-            <Text style={styles.kpiValue}>{formatCompactCurrency(totalRevenue, (mockVendor.currency as Currency) || getCurrencyFromCountryCode(mockVendor.countryCode))}</Text>
-            <RevenueChangeRow current={totalRevenue} previous={REVENUE_PREV_PERIOD} timeRange={timeRange} />
-            <View style={{ marginTop: 8 }}>
-              <MiniSparkline
-                data={REVENUE_7DAY}
-                width={REVENUE_SPARKLINE_WIDTH}
-                height={REVENUE_SPARKLINE_HEIGHT}
-                color="#2563EB"
-              />
-            </View>
+            <Text style={styles.kpiLabel}>Today&apos;s Revenue</Text>
+            <Text style={styles.kpiValue}>{formatCompactCurrency(liveTodayRevenue, dashboardCurrency)}</Text>
+            {/* No period-comparison row and no sparkline: comparing against a
+                previous period needs historical revenue the backend doesn't
+                return yet, and a "+123% vs yesterday" next to a real figure
+                would be fabricated. Restored when Phase 5 adds the trend. */}
           </View>
         </View>
 
