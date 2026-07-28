@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
+import CatalogItemModerationCard from '@/components/CatalogItemModerationCard';
 import {
   ChevronLeft,
   MoreVertical,
@@ -58,7 +59,12 @@ export default function ItemDetailsScreen() {
     item.salePrice !== null &&
     item.salePrice < item.basePrice;
   const displayPrice = item.salePrice ?? item.basePrice;
-  const isPending = item.moderationStatus === 'pending_review';
+  // The backend's ModerationStatus uses 'pending'; this app's older mock type
+  // used 'pending_review'. Both are accepted so the dimmed-gallery treatment
+  // works against real data as well as any screen still on mock data — checking
+  // only the mock spelling meant it never triggered for a real item.
+  const isPending =
+    item.moderationStatus === 'pending_review' || item.moderationStatus === ('pending' as typeof item.moderationStatus);
   const isHidden = item.isHidden;
 
   const highlightOpt = item.highlightLabel
@@ -203,24 +209,22 @@ export default function ItemDetailsScreen() {
           </View>
         )}
 
-        {/* State notice banner */}
-        {(isPending || isHidden) && (
-          <View style={[styles.stateBanner, isPending && !isHidden ? styles.stateBannerPending : styles.stateBannerHidden]}>
-            {isPending && !isHidden ? (
-              <>
-                <Clock size={13} color='#92400E' strokeWidth={2.5} />
-                <Text style={styles.stateBannerTextPending}>Under review — visible only to you until approved</Text>
-              </>
-            ) : (
-              <>
-                <EyeOff size={13} color={Colors.textSecondary} strokeWidth={2} />
-                <Text style={styles.stateBannerTextHidden}>Hidden from your storefront</Text>
-              </>
-            )}
+        {/* Vendor-only "hidden" notice. Moderation state is handled separately
+            below by CatalogItemModerationCard, which reads the real backend
+            status — the two were previously conflated in one banner driven by a
+            mock status value that never matched what the backend returns. */}
+        {isHidden && (
+          <View style={[styles.stateBanner, styles.stateBannerHidden]}>
+            <EyeOff size={13} color={Colors.textSecondary} strokeWidth={2} />
+            <Text style={styles.stateBannerTextHidden}>Hidden from your storefront</Text>
           </View>
         )}
 
         <View style={styles.body}>
+          <CatalogItemModerationCard
+            itemId={String(id)}
+            onEdit={() => router.push(`/vendor/catalog/item/${id}/edit` as never)}
+          />
           {/* Name + Price */}
           <View style={styles.nameSection}>
             <View style={styles.nameRow}>

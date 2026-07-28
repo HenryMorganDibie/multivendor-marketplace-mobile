@@ -477,7 +477,7 @@ export default function VendorSignupScreen() {
 
             <View style={styles.planNote}>
               <Text style={styles.planNoteText}>
-                New vendors start on the Basic plan. After completing the required storefront setup, you can publish and share your storefront link. Complete verification later to appear in Home, Search and Explore.
+                New vendors start on the Basic plan. After completing the required storefront setup, you can publish and share your storefront link. Complete verification to appear in Home, Search and Explore.
               </Text>
             </View>
 

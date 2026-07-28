@@ -2,7 +2,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useSegments } from 'expo-router';
-import { createUserWithEmailAndPassword, deleteUser } from 'firebase/auth';
+import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth as firebaseAuth, db as firestore, callable } from '@/lib/firebase';
 import { VendorPlan } from './VendorPlanContext';
@@ -526,9 +526,55 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const login = useCallback(async (credentials: LoginCredentials): Promise<LoginResponse> => {
     try {
+      // Authenticate against real Firebase Auth first. Registration creates the
+      // account there, so login has to check there too — reading only the local
+      // account store meant a vendor who registered could not sign in on a
+      // second device, or after the app's storage was cleared, and any account
+      // created outside this device (seeded, or by support) was invisible.
+      let firebaseUid: string | null = null;
+      try {
+        const credential = await signInWithEmailAndPassword(
+          firebaseAuth,
+          credentials.emailOrPhone.trim(),
+          credentials.password ?? '',
+        );
+        firebaseUid = credential.user.uid;
+        // Pull a fresh token so role/vendorId custom claims are present before
+        // any callable runs.
+        await credential.user.getIdToken(true);
+        console.log('[AUTH] Firebase sign-in succeeded:', firebaseUid);
+      } catch (firebaseError: unknown) {
+        const code = (firebaseError as { code?: string })?.code ?? '';
+        // Fall through to the local store only for "no such account" style
+        // errors, so pre-existing local-only test accounts keep working during
+        // the migration. A wrong password is a definite no.
+        if (/wrong-password|invalid-credential/.test(code)) {
+          return { success: false, error: 'Incorrect email or password. Please try again.' };
+        }
+        console.log('[AUTH] Firebase sign-in unavailable, falling back to local store:', code);
+      }
+
       const response = await mockAuthenticateUser(credentials);
 
       if (!response.success) {
+        // Authenticated with Firebase but no local profile yet (e.g. first
+        // sign-in on this device). Build a minimal local session from the
+        // Firebase account rather than refusing a valid login.
+        if (firebaseUid) {
+          const minimalUser = {
+            id: firebaseUid,
+            identifier: credentials.emailOrPhone.trim(),
+            email: credentials.emailOrPhone.trim(),
+            role: 'vendor' as UserRole,
+            status: 'active' as AccountStatus,
+            onboardingComplete: true,
+            authProvider: 'email' as AuthProvider,
+          } as User;
+          await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(minimalUser));
+          await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+          setAuthState({ user: minimalUser, isLoading: false, isAuthenticated: true, hasSeenOnboarding: true });
+          return { success: true, user: minimalUser };
+        }
         return response;
       }
 
