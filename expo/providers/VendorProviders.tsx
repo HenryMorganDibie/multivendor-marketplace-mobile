@@ -12,7 +12,6 @@ import { InvoiceBrandingProvider } from '@/contexts/InvoiceBrandingContext';
 import { AppointmentReminderProvider } from '@/contexts/AppointmentReminderContext';
 import { VendorQuietHoursProvider } from '@/contexts/VendorQuietHoursContext';
 import { VendorChatModeProvider } from '@/contexts/VendorChatModeContext';
-import { VendorDraftProvider } from '@/contexts/VendorDraftContext';
 import { ChangeRequestsProvider } from '@/contexts/ChangeRequestsContext';
 import { ReviewsProvider } from '@/contexts/ReviewsContext';
 import { VendorOnboardingProvider } from '@/contexts/VendorOnboardingContext';
@@ -38,7 +37,10 @@ export function VendorProviders({ children }: VendorProvidersProps) {
                               <AppointmentReminderProvider>
                               <VendorQuietHoursProvider>
                                 <VendorChatModeProvider>
-                                  <VendorDraftProvider>
+                                  {/* VendorDraftProvider used to sit here. It moved up to
+                                    * DeferredProviders because the vendor chats list reads it on
+                                    * first render, before this deferred tree mounts. See the note
+                                    * there. */}
                                     <ChangeRequestsProvider>
                           <ReviewsProvider>
                                       <VendorOnboardingProvider>
@@ -48,7 +50,6 @@ export function VendorProviders({ children }: VendorProvidersProps) {
                                       </VendorOnboardingProvider>
                           </ReviewsProvider>
                                     </ChangeRequestsProvider>
-                                  </VendorDraftProvider>
                                 </VendorChatModeProvider>
                               </VendorQuietHoursProvider>
                             </AppointmentReminderProvider>
