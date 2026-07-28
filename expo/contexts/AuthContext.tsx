@@ -692,6 +692,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           phoneNumber: data.phone,
           country: data.location?.countryName ?? data.country,
           countryCode: data.location?.countryCode,
+          // Customer registration will not enable its button until state and
+          // area are chosen, but these were never sent, so completeRegistration
+          // stored profile.region / profile.area as null. The customer was made
+          // to pick a location that was then thrown away, which matters for a
+          // marketplace that sells itself on vendors near you.
+          region: data.location?.stateName,
+          area: data.location?.areaName,
           referralCode: data.referralCode,
         });
 

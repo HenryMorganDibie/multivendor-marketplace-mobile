@@ -16,6 +16,7 @@ import { MapPin } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import LocationCascadeFields from '@/components/LocationCascadeFields';
 import type { LocationValue } from '@/components/LocationCascadeFields';
+import { useUserLocation } from '@/contexts/UserLocationContext';
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -26,6 +27,7 @@ type FieldErrors = Record<string, string | undefined>;
 export default function CustomerSignupScreen() {
   const router = useRouter();
   const { checkAccountExists, registerAccount } = useAuth();
+  const { setInitialCountry } = useUserLocation();
 
   const [firstName, setFirstName] = useState<string>('');
   const [lastInitial, setLastInitial] = useState<string>('');
@@ -90,6 +92,17 @@ export default function CustomerSignupScreen() {
         setIsLoading(false);
         return;
       }
+
+      // Carry the location they just gave us into UserLocationContext. It only
+      // ever read AsyncStorage, so without this a customer who had just picked
+      // country, state and area on this form landed on the home screen and was
+      // immediately asked to "Select your country" all over again.
+      await setInitialCountry(
+        location!.countryCode,
+        location!.stateCode || undefined,
+        undefined,
+        location!.areaName || undefined,
+      );
 
       console.log('[AUTH FLOW] Customer registration successful → customer onboarding');
       router.replace('/customer' as any);
