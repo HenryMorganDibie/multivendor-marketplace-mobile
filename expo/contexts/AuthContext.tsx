@@ -239,7 +239,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       router.replace(path as any);
     };
 
-    const publicRoutes = ['login', 'create-account', 'register', 'verify-otp', 'onboarding', 'complete-profile', 'vendor-setup-complete'];
+    // 'legal' must be public: the consent links sit on the registration screen,
+    // so anyone reading the Terms, Privacy Policy or Vendor Agreement before
+    // creating an account is by definition not signed in yet. Without it the
+    // guard bounced them to login, which made the consent links look broken.
+    const publicRoutes = ['login', 'create-account', 'register', 'verify-otp', 'onboarding', 'complete-profile', 'vendor-setup-complete', 'legal'];
     const isPublicRoute = publicRoutes.includes(firstSegment);
 
     if (!authState.isAuthenticated) {
