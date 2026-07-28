@@ -483,7 +483,7 @@ export default function EditItemScreen() {
         {/* HIGHLIGHT LABEL */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>HIGHLIGHT LABEL</Text>
-          <Text style={styles.sectionHelper}>Optional — highlights this item with a custom label</Text>
+          <Text style={styles.sectionHelper}>Optional. Highlights this item with a custom label</Text>
           <View style={styles.highlightGrid}>
             {HIGHLIGHT_LABEL_OPTIONS.map((opt) => {
               const isSelected = highlightLabel === opt.value;

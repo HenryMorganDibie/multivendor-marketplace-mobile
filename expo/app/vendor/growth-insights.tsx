@@ -994,7 +994,7 @@ function generateAIInsights(params: {
       id: 'top-source',
       title: `${topSource.name} is your top channel`,
       explanation: `Most of your orders (${topSource.orders}) came from ${topSource.name} this period.`,
-      action: 'Double down on this channel — it\'s working for you.',
+      action: 'Double down on this channel. It\'s working for you.',
       actionLabel: 'View orders',
       actionType: 'NAVIGATE_ORDERS',
       overrideType: 'info',
@@ -1656,9 +1656,9 @@ function SmartInsightsSection({
   }, [fadeAnim]);
 
   const mockInsights: SmartInsight[] = [
-    { id: 'm1', message: 'Your conversion rate is strong at 6% — visitors are actively buying', type: 'positive', IconComponent: TrendingUp },
+    { id: 'm1', message: 'Your conversion rate is strong at 6%, visitors are actively buying', type: 'positive', IconComponent: TrendingUp },
     { id: 'm2', message: 'Most customers come from the platform Marketplace with 5 orders this period', type: 'info', IconComponent: Store },
-    { id: 'm3', message: 'You have low repeat customers at 15% — consider running promotions to boost loyalty', type: 'warning', IconComponent: Users },
+    { id: 'm3', message: 'You have low repeat customers at 15%, consider running promotions to boost loyalty', type: 'warning', IconComponent: Users },
   ];
 
   return (

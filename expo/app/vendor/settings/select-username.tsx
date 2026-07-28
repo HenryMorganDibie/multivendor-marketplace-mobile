@@ -268,7 +268,7 @@ export default function SelectUsernameScreen() {
               ) : showSuccess ? (
                 <Text style={styles.successText}>Username is available</Text>
               ) : (
-                <Text style={styles.helperText}>3–30 characters · letters, numbers, underscores</Text>
+                <Text style={styles.helperText}>3 to 30 characters · letters, numbers, underscores</Text>
               )}
 
               {/* Rules card */}

@@ -85,7 +85,7 @@ export default function VerificationScreen() {
           requirements: {
             title: 'What you need',
             items: ['Government ID', 'Selfie check'],
-            estimatedTime: '2–5 minutes',
+            estimatedTime: '2 to 5 minutes',
           },
         };
       case 'retry_required':
@@ -182,7 +182,7 @@ export default function VerificationScreen() {
           requirements: {
             title: 'What you need',
             items: ['Government ID', 'Selfie check'],
-            estimatedTime: '2–5 minutes',
+            estimatedTime: '2 to 5 minutes',
           },
         };
     }

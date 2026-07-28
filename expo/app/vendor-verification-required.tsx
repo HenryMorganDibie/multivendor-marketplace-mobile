@@ -74,7 +74,7 @@ export default function VendorVerificationRequiredScreen() {
                 <View style={styles.detailIconCircle}>
                   <Clock size={20} color={Colors.text} strokeWidth={2} />
                 </View>
-                <Text style={styles.detailText}>Review takes 24–48 hours</Text>
+                <Text style={styles.detailText}>Review takes 24 to 48 hours</Text>
               </View>
             </View>
 

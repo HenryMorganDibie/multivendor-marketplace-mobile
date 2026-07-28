@@ -187,7 +187,7 @@ export default function StoreStatusScreen() {
 
   const formatDayHours = (config: DayHoursConfig): string => {
     if (config.closed || config.ranges.length === 0) return 'Closed';
-    return config.ranges.map(r => `${r.open} – ${r.close}`).join(', ');
+    return config.ranges.map(r => `${r.open} to ${r.close}`).join(', ');
   };
 
   return (

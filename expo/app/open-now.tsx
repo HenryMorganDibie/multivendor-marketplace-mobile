@@ -46,7 +46,7 @@ export default function OpenNowScreen() {
           loadingSkeleton={<VendorListSkeleton count={5} />}
           emptyIcon={<Clock size={36} color={Colors.textMuted} strokeWidth={1.5} />}
           emptyTitle="No vendors open right now"
-          emptyDescription="Check back later — vendors in your area will appear here when they're open."
+          emptyDescription="Check back later. Vendors in your area will appear here when they're open."
           style={styles.stateContainer}
         >
           <FlatList

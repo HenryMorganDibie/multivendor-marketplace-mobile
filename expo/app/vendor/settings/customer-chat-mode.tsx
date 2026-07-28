@@ -59,17 +59,17 @@ export default function CustomerChatModeScreen() {
   const options: { mode: CustomerChatMode; label: string; description: string }[] = [
     {
       mode: 'disabled',
-      label: 'Disabled — Orders Only',
+      label: 'Disabled: orders only',
       description: 'Customers cannot message you directly. Orders and payments continue normally.',
     },
     {
       mode: 'limited',
-      label: 'Limited — Clarifications Only',
+      label: 'Limited: clarifications only',
       description: 'Customers can only send messages related to order clarifications.',
     },
     {
       mode: 'enabled',
-      label: 'Enabled — Full Chat',
+      label: 'Enabled: full chat',
       description: 'Customers can message you freely before and during orders.',
     },
   ];

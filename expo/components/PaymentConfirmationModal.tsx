@@ -152,7 +152,7 @@ export default function PaymentConfirmationModal({
 
               {/* Proof upload */}
               <Text style={styles.sectionLabel}>PAYMENT PROOF</Text>
-              <Text style={styles.sectionHint}>Optional — attach up to 3 images</Text>
+              <Text style={styles.sectionHint}>Optional. Attach up to 3 images</Text>
 
               <View style={styles.proofGrid}>
                 {proofs.map(proof => (
@@ -191,7 +191,7 @@ export default function PaymentConfirmationModal({
               {proofs.length === 0 && (
                 <View style={styles.noProofHint}>
                   <ImageIcon size={14} color={Colors.textMuted} />
-                  <Text style={styles.noProofHintText}>No proof attached — you can skip this step</Text>
+                  <Text style={styles.noProofHintText}>No proof attached. You can skip this step</Text>
                 </View>
               )}
 

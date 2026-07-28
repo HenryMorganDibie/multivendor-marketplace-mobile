@@ -46,7 +46,7 @@ const slides: Slide[] = [
   {
     icon: 'settings',
     title: 'You control your business',
-    body: 'Set your hours, pricing, delivery options, and availability — your rules.',
+    body: 'Set your hours, pricing, delivery options, and availability. Your rules.',
   },
 ];
 

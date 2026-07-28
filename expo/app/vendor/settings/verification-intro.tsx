@@ -59,7 +59,7 @@ export default function VerificationIntroScreen() {
 
           <View style={styles.timeCard}>
             <Text style={styles.timeLabel}>Estimated time</Text>
-            <Text style={styles.timeValue}>2–5 minutes</Text>
+            <Text style={styles.timeValue}>2 to 5 minutes</Text>
           </View>
 
           <View style={styles.bottomSpacer} />

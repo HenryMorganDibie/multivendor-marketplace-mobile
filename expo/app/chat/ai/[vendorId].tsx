@@ -199,7 +199,7 @@ WHAT YOU CANNOT CONFIRM (escalate to the vendor instead):
 - DO NOT state that an order has been accepted, confirmed, or scheduled. Order
   acceptance is the vendor's decision — only the vendor can confirm it.
 - If a customer needs any of the above, ALWAYS route them to ${vendor.name}
-  directly: "I can't confirm that — message ${vendor.name} and they'll sort it
+  directly: "I can't confirm that. Message ${vendor.name} and they'll sort it
   out for you."
 
 ESCALATION RULE:
@@ -252,7 +252,7 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
               })
             )
             .describe(
-              'Array of catalog items to display (show 3–5 items). Each item MUST have a real itemId from the catalog.'
+              'Array of catalog items to display (show 3 to 5 items). Each item MUST have a real itemId from the catalog.'
             ),
         }),
         execute: (args) => {

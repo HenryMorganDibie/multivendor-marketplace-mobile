@@ -166,7 +166,7 @@ export default function SetAppLockPinScreen() {
             </Text>
             <Text style={styles.subtitle}>
               {step === 'enter'
-                ? 'Choose a 4–6 digit PIN to lock your app.'
+                ? 'Choose a 4 to 6 digit PIN to lock your app.'
                 : 'Re-enter your PIN to confirm.'}
             </Text>
 

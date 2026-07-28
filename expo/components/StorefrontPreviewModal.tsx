@@ -404,7 +404,7 @@ export default function StorefrontPreviewModal({
           <SafeAreaView edges={['bottom']} style={styles.previewBannerSafe}>
             <View style={styles.previewBanner}>
               <Eye size={13} color="#FFFFFF" />
-              <Text style={styles.previewBannerText}>Preview Mode — Customers see your live storefront</Text>
+              <Text style={styles.previewBannerText}>Preview mode: customers see your live storefront</Text>
             </View>
           </SafeAreaView>
         </View>

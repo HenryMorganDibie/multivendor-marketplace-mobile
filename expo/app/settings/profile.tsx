@@ -220,7 +220,7 @@ export default function ProfileScreen() {
             />
             {firstNameError
               ? <Text style={styles.errorText}>{firstNameError}</Text>
-              : <Text style={styles.helperText}>Letters only · 2–20 characters</Text>
+              : <Text style={styles.helperText}>Letters only · 2 to 20 characters</Text>
             }
           </View>
 

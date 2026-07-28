@@ -36,12 +36,12 @@ const slides: Slide[] = [
   {
     icon: 'message',
     title: 'Chat, order & track in one place',
-    body: 'Ask questions, place orders, and stay updated — all in one secure chat.',
+    body: 'Ask questions, place orders, and stay updated, all in one secure chat.',
   },
   {
     icon: 'map',
     title: 'Discover trusted vendors near you',
-    body: 'Food, fashion, beauty, services & more — all verified and local.',
+    body: 'Food, fashion, beauty, services and more, all verified and local.',
   },
 ];
 

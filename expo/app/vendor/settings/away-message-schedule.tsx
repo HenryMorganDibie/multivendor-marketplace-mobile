@@ -25,7 +25,7 @@ const SCHEDULE_OPTIONS: { value: AwayScheduleType; label: string; description: s
   {
     value: 'outside_business_hours',
     label: 'Outside business hours',
-    description: 'Active when outside standard hours (9 AM – 6 PM).',
+    description: 'Active when outside standard hours (9 AM to 6 PM).',
   },
   {
     value: 'custom',

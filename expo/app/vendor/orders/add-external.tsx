@@ -902,7 +902,7 @@ export default function RecordExternalOrderScreen() {
             {/* SECTION 3: CUSTOMER INFO */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Customer Info</Text>
-              <Text style={styles.sectionSubtitle}>Optional — recorded for your reference only</Text>
+              <Text style={styles.sectionSubtitle}>Optional. Recorded for your reference only</Text>
               <View style={styles.sectionCardPadded}>
                 <View style={styles.field}>
                   <Text style={styles.fieldLabel}>Customer Name (optional)</Text>
@@ -970,7 +970,7 @@ export default function RecordExternalOrderScreen() {
             {canUseScreenshots && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Screenshots</Text>
-                <Text style={styles.sectionSubtitle}>Optional — attach screenshots from WhatsApp, Instagram, or other sources</Text>
+                <Text style={styles.sectionSubtitle}>Optional. Attach screenshots from WhatsApp, Instagram, or other sources</Text>
 
                 {screenshots.length > 0 ? (
                   <View>
@@ -1010,7 +1010,7 @@ export default function RecordExternalOrderScreen() {
             {/* SECTION 6: NOTES (Optional) */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Internal Notes</Text>
-              <Text style={styles.sectionSubtitle}>Optional — visible only to you</Text>
+              <Text style={styles.sectionSubtitle}>Optional. Visible only to you</Text>
               <View style={styles.sectionCardPadded}>
                 <TextInput
                   style={[styles.input, styles.notesInput, { borderWidth: 0, borderRadius: 0, paddingHorizontal: 0, paddingVertical: 0, backgroundColor: 'transparent' }]}

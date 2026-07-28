@@ -72,7 +72,7 @@ export default function ReportProblemScreen() {
     });
     setTimeout(() => {
       setIsSending(false);
-      Alert.alert('Report submitted', 'Thanks — our team will review it and get back to you soon.', [
+      Alert.alert('Report submitted', 'Thanks. Our team will review it and get back to you soon.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     }, 900);

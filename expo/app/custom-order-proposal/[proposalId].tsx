@@ -423,7 +423,7 @@ export default function CustomerProposalScreen() {
           <SafeAreaView edges={['bottom']} style={styles.bottomActions}>
             <View style={styles.lockedFooter}>
               <Lock size={15} color={Colors.success} strokeWidth={2} />
-              <Text style={styles.lockedFooterText}>Order locked — awaiting vendor confirmation</Text>
+              <Text style={styles.lockedFooterText}>Order locked. Awaiting vendor confirmation</Text>
             </View>
           </SafeAreaView>
         )}

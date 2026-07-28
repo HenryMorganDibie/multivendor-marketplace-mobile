@@ -239,7 +239,7 @@ export default function SecurityScreen() {
               activeOpacity={0.7}
             >
               <Text style={styles.unlockOptionText}>Set App Lock PIN</Text>
-              <Text style={styles.unlockOptionSubtext}>4–6 digit PIN</Text>
+              <Text style={styles.unlockOptionSubtext}>4 to 6 digit PIN</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

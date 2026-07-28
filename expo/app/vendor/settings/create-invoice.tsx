@@ -1520,7 +1520,7 @@ function FulfilmentMethodSheet({
               <Text style={styles.fulfilmentSheetCancel}>Cancel</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.fulfilmentSheetHint}>Optional — choose how this invoice is fulfilled.</Text>
+          <Text style={styles.fulfilmentSheetHint}>Optional. Choose how this invoice is fulfilled.</Text>
           {options.map((opt) => {
             const isSelected = selected === opt.method;
             return (

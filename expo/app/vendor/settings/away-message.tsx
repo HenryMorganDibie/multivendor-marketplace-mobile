@@ -45,7 +45,7 @@ export default function AwayMessageScreen() {
       case 'always':
         return 'Always send';
       case 'outside_business_hours':
-        return `Outside business hours, ${formatTime('18:00')} – ${formatTime('09:00')}`;
+        return `Outside business hours, ${formatTime('18:00')} to ${formatTime('09:00')}`;
       case 'custom':
         return `${formatTime(settings.customScheduleStart)} – ${formatTime(settings.customScheduleEnd)}`;
       default:

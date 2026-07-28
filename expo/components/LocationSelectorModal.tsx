@@ -294,7 +294,7 @@ export default function LocationSelectorModal({ visible, onComplete }: LocationS
                   onPress={() => handleAreaSelect(null)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.skipCityText}>Skip — use entire state</Text>
+                  <Text style={styles.skipCityText}>Skip, use entire state</Text>
                 </TouchableOpacity>
 
                 <View style={styles.listCard}>

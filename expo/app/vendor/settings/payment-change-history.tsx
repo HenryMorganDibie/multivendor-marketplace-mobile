@@ -32,7 +32,7 @@ const mockHistory: ChangeHistoryItem[] = [
     time: '10:05 AM',
     action: 'Rejected',
     methodType: 'Card Payment',
-    detail: 'Request declined — incomplete verification',
+    detail: 'Request declined: incomplete verification',
   },
   {
     id: '3',
