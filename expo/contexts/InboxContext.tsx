@@ -6,11 +6,41 @@ import {
   OrderStatusType,
   mockCustomerInbox,
   mockVendorInbox,
+  MOCK_VENDOR_ID,
+  MOCK_CUSTOMER_ID,
 } from '@/mocks/inboxData';
 import { chatService } from '@/services/chatService';
 import type { Chat, ChatMessage } from '@/mocks/chatData';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PAGE_SIZE = 20;
+
+/**
+ * Chat is still backed by seeded demo threads rather than Firestore. Those
+ * threads all belong to the built-in demo accounts, so anyone signing in with
+ * a real account must not inherit them: a vendor who registered a minute ago
+ * would otherwise open Chat to thirteen conversations with customers they have
+ * never had, and a tab badge counting unread messages that were never sent to
+ * them.
+ *
+ * The seed is therefore scoped to the accounts it was written for. Nothing ever
+ * signs in *as* `v1` / `customer-001` (those ids only exist inside the mock
+ * data), so the local test logins are mapped onto them, otherwise the seed
+ * would be unreachable for everyone and the chat screens could not be shown
+ * populated at all. Real Firebase uids match nothing and start empty, which is
+ * also what the Firestore listener will produce once chat is wired.
+ */
+const DEMO_INBOX_ACCOUNTS: Record<string, string> = {
+  '1': MOCK_CUSTOMER_ID, // customer@test.com
+  '2': MOCK_VENDOR_ID, // vendor@test.com
+  [MOCK_CUSTOMER_ID]: MOCK_CUSTOMER_ID,
+  [MOCK_VENDOR_ID]: MOCK_VENDOR_ID,
+};
+
+function seedFor(accountId: string | undefined, demoId: string, seed: InboxSnapshot[]): InboxSnapshot[] {
+  if (!accountId) return [];
+  return DEMO_INBOX_ACCOUNTS[accountId] === demoId ? seed : [];
+}
 
 /**
  * Derive a list-friendly preview text from the most recent visible message
@@ -36,10 +66,25 @@ function lastVisibleMessage(chat: Chat): ChatMessage | undefined {
 }
 
 export const [InboxProvider, useInbox] = createContextHook(() => {
-  const [customerInbox, setCustomerInbox] = useState<InboxSnapshot[]>(mockCustomerInbox);
-  const [vendorInbox, setVendorInbox] = useState<InboxSnapshot[]>(mockVendorInbox);
+  const { user } = useAuth();
+  const accountId = user?.id;
+
+  const [customerInbox, setCustomerInbox] = useState<InboxSnapshot[]>(() =>
+    seedFor(accountId, MOCK_CUSTOMER_ID, mockCustomerInbox));
+  const [vendorInbox, setVendorInbox] = useState<InboxSnapshot[]>(() =>
+    seedFor(accountId, MOCK_VENDOR_ID, mockVendorInbox));
   const [customerPage, setCustomerPage] = useState(1);
   const [vendorPage, setVendorPage] = useState(1);
+
+  // Auth resolves after first render, and the signed-in account can change
+  // without the provider unmounting (log out, register, log back in), so the
+  // seed is re-evaluated on every identity change rather than only at init.
+  useEffect(() => {
+    setCustomerInbox(seedFor(accountId, MOCK_CUSTOMER_ID, mockCustomerInbox));
+    setVendorInbox(seedFor(accountId, MOCK_VENDOR_ID, mockVendorInbox));
+    setCustomerPage(1);
+    setVendorPage(1);
+  }, [accountId]);
 
   /**
    * Subscribe to chatService writes. When a chat is written to, find inbox
