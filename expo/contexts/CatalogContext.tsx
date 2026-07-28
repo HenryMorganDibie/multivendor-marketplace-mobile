@@ -345,11 +345,14 @@ export function CatalogProvider({ children }: { children: React.ReactNode }) {
    * list, which is the correct view for a new vendor with no items.
    */
   useEffect(() => {
-    let unsubscribeSnapshot: (() => void) | null = null;
+    let unsubscribeItems: (() => void) | null = null;
+    let unsubscribeCategories: (() => void) | null = null;
 
     const unsubscribeAuth = auth.onIdTokenChanged(async (user) => {
-      unsubscribeSnapshot?.();
-      unsubscribeSnapshot = null;
+      unsubscribeItems?.();
+      unsubscribeCategories?.();
+      unsubscribeItems = null;
+      unsubscribeCategories = null;
 
       if (!user) return;
       // vendorId lives on the custom claim, set by completeRegistration.
@@ -357,23 +360,50 @@ export function CatalogProvider({ children }: { children: React.ReactNode }) {
       const vendorId = token.claims.vendorId as string | undefined;
       if (!vendorId) return;
 
-      const itemsRef = collection(db, 'vendors', vendorId, 'catalogItems');
-      unsubscribeSnapshot = onSnapshot(
-        itemsRef,
+      unsubscribeItems = onSnapshot(
+        collection(db, 'vendors', vendorId, 'catalogItems'),
         (snap) => {
           setItems(snap.docs.map((d) => fromBackendItem(d.id, d.data())));
         },
         (err) => {
           // Leaving stale mock data on screen would be worse than an empty
           // catalog, since the vendor could act on items that don't exist.
-          console.error('[Catalog] Live catalog subscription failed:', err);
+          console.error('[Catalog] Live items subscription failed:', err);
           setItems([]);
+        },
+      );
+
+      // Categories must come from the backend too, not just items. With real
+      // items and mock categories, every real item's categoryId matched nothing
+      // in the local list and the detail screen fell back to showing
+      // "Uncategorized" for items that were properly categorised.
+      unsubscribeCategories = onSnapshot(
+        collection(db, 'vendors', vendorId, 'catalogCategories'),
+        (snap) => {
+          setCategories(
+            snap.docs
+              .map((d) => {
+                const data = d.data();
+                return {
+                  id: (data.categoryId as string) ?? d.id,
+                  name: (data.name as string) ?? '',
+                  order: (data.order as number) ?? 0,
+                  isSystem: Boolean(data.isSystem),
+                };
+              })
+              .sort((a, b) => a.order - b.order),
+          );
+        },
+        (err) => {
+          console.error('[Catalog] Live categories subscription failed:', err);
+          setCategories([]);
         },
       );
     });
 
     return () => {
-      unsubscribeSnapshot?.();
+      unsubscribeItems?.();
+      unsubscribeCategories?.();
       unsubscribeAuth();
     };
   }, []);

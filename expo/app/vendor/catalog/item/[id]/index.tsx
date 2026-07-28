@@ -9,12 +9,13 @@ import {
   Modal,
   Pressable,
   Share,
+  Linking,
   Dimensions,
   FlatList,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import CatalogItemModerationCard from '@/components/CatalogItemModerationCard';
+import CatalogItemModerationCard, { type ItemModerationState } from '@/components/CatalogItemModerationCard';
 import {
   ChevronLeft,
   MoreVertical,
@@ -39,12 +40,25 @@ import ForwardToModal, { type ForwardPayload } from '@/components/ForwardToModal
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Learn more opens the the platform website rather than an in-app screen, so the
+// moderation policy is explained in one place that can be updated without
+// shipping an app release. Env-overridable so staging can point elsewhere.
+const CATALOG_MODERATION_HELP_URL =
+  process.env.EXPO_PUBLIC_CATALOG_MODERATION_HELP_URL ??
+  'https://the platform.com/help/item-review';
+
 export default function ItemDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { getItemById, getCategoryById } = useCatalog();
   const insets = useSafeAreaInsets();
   const [showMenu, setShowMenu] = useState(false);
   const [showForward, setShowForward] = useState(false);
+  // Sharing or forwarding an item customers can't see yet sends them to a dead
+  // end, so those actions are disabled until it's actually visible. Starts null
+  // (unknown) and only enables on a positive confirmation from the backend —
+  // defaulting to enabled would briefly allow sharing an unapproved item.
+  const [moderationState, setModerationState] = useState<ItemModerationState | null>(null);
+  const canShareWithCustomers = moderationState?.isVisibleToCustomers === true;
   const [photoIndex, setPhotoIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
@@ -197,15 +211,15 @@ export default function ItemDetailsScreen() {
             )}
           </View>
         ) : (
+          // Short placeholder rather than a full-height empty block. An item with
+          // no photo shouldn't spend a whole screen of space saying so, and it
+          // pushed the actual product details below the fold.
           <View style={[
             styles.photoPlaceholder,
             (isPending || isHidden) && styles.photoPlaceholderMuted,
           ]}>
-            <Package
-              size={48}
-              color={isPending ? '#D97706' : isHidden ? Colors.textMuted : Colors.textMuted}
-              strokeWidth={1.5}
-            />
+            <Package size={26} color={Colors.textMuted} strokeWidth={1.5} />
+            <Text style={styles.photoPlaceholderText}>No image added</Text>
           </View>
         )}
 
@@ -223,7 +237,10 @@ export default function ItemDetailsScreen() {
         <View style={styles.body}>
           <CatalogItemModerationCard
             itemId={String(id)}
+            currency={currency}
             onEdit={() => router.push(`/vendor/catalog/item/${id}/edit` as never)}
+            onLearnMore={() => void Linking.openURL(CATALOG_MODERATION_HELP_URL)}
+            onStateLoaded={setModerationState}
           />
           {/* Name + Price */}
           <View style={styles.nameSection}>
@@ -290,11 +307,6 @@ export default function ItemDetailsScreen() {
                   <Text style={[styles.chipText, { color: inventoryLabel.color }]}>
                     {inventoryLabel.text}
                   </Text>
-                </View>
-              )}
-              {item.moderationStatus === 'pending_review' && (
-                <View style={[styles.chip, styles.chipPending]}>
-                  <Text style={[styles.chipText, styles.chipTextPending]}>Under review</Text>
                 </View>
               )}
             </View>
@@ -397,9 +409,11 @@ export default function ItemDetailsScreen() {
               <View style={styles.menuHandle} />
 
               <TouchableOpacity
-                style={styles.menuItem}
+                style={[styles.menuItem, !canShareWithCustomers && styles.menuItemDisabled]}
                 onPress={handleForward}
+                disabled={!canShareWithCustomers}
                 activeOpacity={0.7}
+                testID="item-menu-forward"
               >
                 <View style={[styles.menuIcon, { backgroundColor: '#EFF6FF' }]}>
                   <MessageSquare size={18} color="#3B82F6" strokeWidth={2} />
@@ -410,9 +424,11 @@ export default function ItemDetailsScreen() {
               <View style={styles.menuDivider} />
 
               <TouchableOpacity
-                style={styles.menuItem}
+                style={[styles.menuItem, !canShareWithCustomers && styles.menuItemDisabled]}
                 onPress={handleShare}
+                disabled={!canShareWithCustomers}
                 activeOpacity={0.7}
+                testID="item-menu-share"
               >
                 <View style={[styles.menuIcon, { backgroundColor: Colors.primarySoft }]}>
                   <Share2 size={18} color={Colors.primary} strokeWidth={2} />
@@ -565,12 +581,20 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   photoPlaceholder: {
-    height: 240,
+    // 240 was the same height as a real image, so a missing photo consumed a
+    // full screen of space and pushed the product details out of view.
+    height: 96,
+    flexDirection: 'row',
+    gap: 8,
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+  },
+  photoPlaceholderText: {
+    fontSize: 13.5,
+    color: Colors.textMuted,
   },
   body: {
     paddingHorizontal: 16,
@@ -766,6 +790,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 11,
     gap: 12,
+  },
+  // Dimmed rather than hidden: a vendor should still see that sharing exists
+  // and will be available once the item is approved, instead of wondering
+  // where the option went.
+  menuItemDisabled: {
+    opacity: 0.4,
   },
   menuIcon: {
     width: 36,

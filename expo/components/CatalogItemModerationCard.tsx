@@ -1,22 +1,29 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Clock, AlertCircle, CheckCircle2, RefreshCw, Pencil } from 'lucide-react-native';
+import { Clock, AlertCircle, RefreshCw, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { callable } from '@/lib/firebase';
+import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
 
 /**
  * Phase 2 — the vendor's view of an item's moderation state.
  *
- * Read from getCatalogItemModeration rather than the catalog list, because the
- * proposed values and any rejection reason live in a private subcollection that
- * the item document deliberately does not expose (customers can read the item
- * document directly, and Firestore rules cannot hide individual fields).
+ * Modelled on the WhatsApp Business catalog pattern the client specified: a compact
+ * strip directly beneath the product image, not a large coloured status card.
+ * The product image and details stay the focus; moderation is a thin band of
+ * context above them. An item awaiting review is a normal part of listing, so
+ * it should not dominate the screen like an error would.
  *
- * Four states a vendor can be in, and they need genuinely different messages:
- *  - pending: first review, not visible to customers yet
- *  - rejected: refused, needs editing and resubmitting
- *  - approved with a pending revision: live version still showing, edit queued
- *  - approved with a rejected revision: live version still showing, edit refused
+ * Read from getCatalogItemModeration rather than the catalog document, because
+ * the proposed edit and any rejection reason live in a private subcollection
+ * that customers cannot read.
+ *
+ * The four states carry genuinely different consequences, which is why the copy
+ * differs rather than being one generic "pending" message:
+ *  - new item under review: not visible to customers at all
+ *  - approved + changes under review: still live, customers see the old version
+ *  - approved + changes refused: still live, the edit needs fixing
+ *  - approved: live, no outstanding work
  */
 
 type BackendModerationStatus = 'pending' | 'approved' | 'rejected' | 'flagged';
@@ -28,7 +35,7 @@ interface PendingRevisionView {
   liveValues: Record<string, unknown>;
 }
 
-interface ModerationResponse {
+export interface ItemModerationState {
   success: true;
   moderationStatus: BackendModerationStatus;
   rejectionReason: string | null;
@@ -37,7 +44,8 @@ interface ModerationResponse {
   pendingRevision: PendingRevisionView | null;
 }
 
-/** Field keys are backend names; vendors should see human labels. */
+/** Sentence-case labels. Ordinary words like price and name are not proper
+ * nouns and shouldn't be capitalised mid-sentence. */
 const FIELD_LABELS: Record<string, string> = {
   name: 'Name',
   description: 'Description',
@@ -48,39 +56,60 @@ const FIELD_LABELS: Record<string, string> = {
   addOnGroups: 'Add-ons',
 };
 
-function describeChangedFields(changes: Record<string, unknown>): string {
-  const labels = Object.keys(changes).map((k) => FIELD_LABELS[k] ?? k);
-  if (labels.length === 0) return 'Changes';
-  if (labels.length === 1) return labels[0];
-  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
-  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+/** Renders a proposed or live value in a form a vendor can actually read:
+ * prices formatted as money, photo arrays as a count, not raw JSON. */
+function formatFieldValue(key: string, value: unknown, currency: Currency): string {
+  if (value === null || value === undefined || value === '') return 'Not set';
+  if (key === 'basePrice' || key === 'salePrice') {
+    return formatPriceWithCommas(Number(value), currency);
+  }
+  if (key === 'photos' && Array.isArray(value)) {
+    return value.length === 1 ? '1 photo' : `${value.length} photos`;
+  }
+  if (key === 'addOnGroups' && Array.isArray(value)) {
+    return value.length === 1 ? '1 add-on group' : `${value.length} add-on groups`;
+  }
+  return String(value);
 }
 
 export default function CatalogItemModerationCard({
   itemId,
+  currency,
   onEdit,
+  onLearnMore,
+  onStateLoaded,
 }: {
   itemId: string;
+  currency: Currency;
   onEdit?: () => void;
+  onLearnMore?: () => void;
+  /** Lets the host screen disable actions that don't apply yet. Critically,
+   * this differs by state: a brand-new item under review must not be shared,
+   * but an approved item with a pending edit stays fully shareable and
+   * orderable, because the approved version is still live. */
+  onStateLoaded?: (state: ItemModerationState | null) => void;
 }) {
-  const [data, setData] = useState<ModerationResponse | null>(null);
+  const [data, setData] = useState<ItemModerationState | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [showComparison, setShowComparison] = useState<boolean>(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const get = callable<{ itemId: string }, ModerationResponse>('getCatalogItemModeration');
+      const get = callable<{ itemId: string }, ItemModerationState>('getCatalogItemModeration');
       const res = await get({ itemId });
       setData(res.data);
+      onStateLoaded?.(res.data);
     } catch (err) {
       console.error('[ItemModeration] Failed to load:', err);
       setError("Couldn't load this item's review status.");
+      onStateLoaded?.(null);
     } finally {
       setIsLoading(false);
     }
-  }, [itemId]);
+  }, [itemId, onStateLoaded]);
 
   useEffect(() => {
     void load();
@@ -88,178 +117,218 @@ export default function CatalogItemModerationCard({
 
   if (isLoading) {
     return (
-      <View style={styles.card} testID="item-moderation-loading">
-        <ActivityIndicator size="small" color={Colors.primary} />
+      <View style={[styles.strip, styles.stripNeutral]} testID="item-moderation-loading">
+        <ActivityIndicator size="small" color={Colors.textSecondary} />
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.card} testID="item-moderation-error">
-        <View style={styles.row}>
-          <AlertCircle size={16} color={Colors.error} strokeWidth={2} />
-          <Text style={styles.errorText}>{error}</Text>
+      <View style={[styles.strip, styles.stripNeutral]} testID="item-moderation-error">
+        <AlertCircle size={17} color={Colors.error} strokeWidth={2} style={styles.icon} />
+        <View style={styles.textCol}>
+          <Text style={styles.body}>{error}</Text>
+          <TouchableOpacity style={styles.retryRow} onPress={() => void load()} testID="item-moderation-retry">
+            <RefreshCw size={12} color={Colors.primary} strokeWidth={2.5} />
+            <Text style={styles.link}>Try again</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.retryRow} onPress={() => void load()} testID="item-moderation-retry">
-          <RefreshCw size={14} color={Colors.primary} strokeWidth={2.5} />
-          <Text style={styles.retryText}>Try again</Text>
-        </TouchableOpacity>
       </View>
     );
   }
 
   if (!data) return null;
-
   const { moderationStatus, rejectionReason, pendingRevision } = data;
 
-  // A refused edit is the most urgent thing to surface: the item is still live,
-  // but the vendor's intended change was refused and needs action.
+  /** Compact, expandable comparison of what customers see now versus what was
+   * submitted. Without this a vendor can't tell whether the name and price on
+   * screen are the live values or their pending edit. */
+  const renderComparison = (revision: PendingRevisionView, changesHeading: string) => {
+    const keys = Object.keys(revision.proposedChanges);
+    if (keys.length === 0) return null;
+    return (
+      <View style={styles.comparisonWrap}>
+        <TouchableOpacity
+          style={styles.comparisonToggle}
+          onPress={() => setShowComparison((v) => !v)}
+          activeOpacity={0.7}
+          testID="item-moderation-comparison-toggle"
+        >
+          <Text style={styles.link}>{showComparison ? 'Hide details' : 'View details'}</Text>
+          {showComparison
+            ? <ChevronUp size={14} color={Colors.primary} strokeWidth={2.5} />
+            : <ChevronDown size={14} color={Colors.primary} strokeWidth={2.5} />}
+        </TouchableOpacity>
+
+        {showComparison && (
+          <View style={styles.comparison} testID="item-moderation-comparison">
+            <Text style={styles.comparisonHeading}>Currently visible to customers</Text>
+            {keys.map((k) => (
+              <View key={`live-${k}`} style={styles.comparisonRow}>
+                <Text style={styles.comparisonLabel}>{FIELD_LABELS[k] ?? k}</Text>
+                <Text style={styles.comparisonValue}>{formatFieldValue(k, revision.liveValues[k], currency)}</Text>
+              </View>
+            ))}
+
+            <Text style={[styles.comparisonHeading, styles.comparisonHeadingSpaced]}>{changesHeading}</Text>
+            {keys.map((k) => (
+              <View key={`new-${k}`} style={styles.comparisonRow}>
+                <Text style={styles.comparisonLabel}>{FIELD_LABELS[k] ?? k}</Text>
+                <Text style={styles.comparisonValue}>{formatFieldValue(k, revision.proposedChanges[k], currency)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   if (pendingRevision?.status === 'rejected') {
     return (
-      <View style={[styles.card, styles.cardDanger]} testID="item-moderation-revision-rejected">
-        <View style={styles.row}>
-          <AlertCircle size={16} color={Colors.error} strokeWidth={2} />
-          <Text style={styles.titleDanger}>Your change wasn&apos;t approved</Text>
+      <View style={[styles.strip, styles.stripDanger]} testID="item-moderation-revision-rejected">
+        <AlertCircle size={17} color="#DC2626" strokeWidth={2} style={styles.icon} />
+        <View style={styles.textCol}>
+          <Text style={styles.title}>Your changes were not approved.</Text>
+          <Text style={styles.body}>Customers can still see the currently approved version.</Text>
+          {pendingRevision.rejectionReason ? (
+            <View style={styles.reasonBlock}>
+              <Text style={styles.reasonLabel}>Reason</Text>
+              <Text style={styles.reasonText}>{pendingRevision.rejectionReason}</Text>
+            </View>
+          ) : null}
+          {renderComparison(pendingRevision, 'Changes not approved')}
+          {onEdit ? (
+            <TouchableOpacity style={styles.actionButton} onPress={onEdit} testID="item-moderation-edit">
+              <Text style={styles.actionText}>Edit and Resubmit</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
-        <Text style={styles.body}>
-          {describeChangedFields(pendingRevision.proposedChanges)} couldn&apos;t be updated. Customers
-          are still seeing the version that was approved before.
-        </Text>
-        {pendingRevision.rejectionReason ? (
-          <View style={styles.reasonBox}>
-            <Text style={styles.reasonLabel}>Reason</Text>
-            <Text style={styles.reasonText}>{pendingRevision.rejectionReason}</Text>
-          </View>
-        ) : null}
-        {onEdit ? (
-          <TouchableOpacity style={styles.actionButton} onPress={onEdit} testID="item-moderation-edit">
-            <Pencil size={14} color="#FFFFFF" strokeWidth={2.5} />
-            <Text style={styles.actionText}>Edit and resubmit</Text>
-          </TouchableOpacity>
-        ) : null}
       </View>
     );
   }
 
   if (pendingRevision?.status === 'pending') {
     return (
-      <View style={[styles.card, styles.cardPending]} testID="item-moderation-revision-pending">
-        <View style={styles.row}>
-          <Clock size={16} color="#B45309" strokeWidth={2} />
-          <Text style={styles.titlePending}>Change under review</Text>
+      <View style={[styles.strip, styles.stripNeutral]} testID="item-moderation-revision-pending">
+        <Clock size={17} color={Colors.textSecondary} strokeWidth={2} style={styles.icon} />
+        <View style={styles.textCol}>
+          <Text style={styles.title}>Your changes are under review.</Text>
+          <Text style={styles.body}>
+            Customers can still see the currently approved version while we review your changes.{' '}
+            {onLearnMore ? <Text style={styles.link} onPress={onLearnMore}>Learn more</Text> : null}
+          </Text>
+          {renderComparison(pendingRevision, 'Changes under review')}
         </View>
-        <Text style={styles.body}>
-          {describeChangedFields(pendingRevision.proposedChanges)} {Object.keys(pendingRevision.proposedChanges).length === 1 ? 'is' : 'are'} waiting
-          for approval. Customers keep seeing the approved version until it&apos;s reviewed, so your
-          listing stays live.
-        </Text>
       </View>
     );
   }
 
   if (moderationStatus === 'rejected') {
     return (
-      <View style={[styles.card, styles.cardDanger]} testID="item-moderation-rejected">
-        <View style={styles.row}>
-          <AlertCircle size={16} color={Colors.error} strokeWidth={2} />
-          <Text style={styles.titleDanger}>Not approved</Text>
+      <View style={[styles.strip, styles.stripDanger]} testID="item-moderation-rejected">
+        <AlertCircle size={17} color="#DC2626" strokeWidth={2} style={styles.icon} />
+        <View style={styles.textCol}>
+          <Text style={styles.title}>This item was not approved.</Text>
+          <Text style={styles.body}>Customers cannot see it in your storefront.</Text>
+          {rejectionReason ? (
+            <View style={styles.reasonBlock}>
+              <Text style={styles.reasonLabel}>Reason</Text>
+              <Text style={styles.reasonText}>{rejectionReason}</Text>
+            </View>
+          ) : null}
+          {onEdit ? (
+            <TouchableOpacity style={styles.actionButton} onPress={onEdit} testID="item-moderation-edit">
+              <Text style={styles.actionText}>Edit and Resubmit</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
-        <Text style={styles.body}>
-          This item isn&apos;t visible to customers. Make the changes below and it&apos;ll go back for
-          review automatically.
-        </Text>
-        {rejectionReason ? (
-          <View style={styles.reasonBox}>
-            <Text style={styles.reasonLabel}>Reason</Text>
-            <Text style={styles.reasonText}>{rejectionReason}</Text>
-          </View>
-        ) : null}
-        {onEdit ? (
-          <TouchableOpacity style={styles.actionButton} onPress={onEdit} testID="item-moderation-edit">
-            <Pencil size={14} color="#FFFFFF" strokeWidth={2.5} />
-            <Text style={styles.actionText}>Edit and resubmit</Text>
-          </TouchableOpacity>
-        ) : null}
       </View>
     );
   }
 
   if (moderationStatus === 'pending') {
     return (
-      <View style={[styles.card, styles.cardPending]} testID="item-moderation-pending">
-        <View style={styles.row}>
-          <Clock size={16} color="#B45309" strokeWidth={2} />
-          <Text style={styles.titlePending}>Under review</Text>
+      <View style={[styles.strip, styles.stripNeutral]} testID="item-moderation-pending">
+        <Clock size={17} color={Colors.textSecondary} strokeWidth={2} style={styles.icon} />
+        <View style={styles.textCol}>
+          <Text style={styles.title}>This item is under review.</Text>
+          <Text style={styles.body}>
+            Once approved, customers will be able to see it in your storefront.{' '}
+            {onLearnMore ? <Text style={styles.link} onPress={onLearnMore}>Learn more</Text> : null}
+          </Text>
         </View>
-        <Text style={styles.body}>
-          Visible only to you until it&apos;s approved. It can&apos;t be ordered or appear in search
-          yet.
-        </Text>
       </View>
     );
   }
 
-  // Approved and nothing outstanding — confirm it plainly rather than showing
-  // nothing, so a vendor can tell "approved" from "not loaded".
+  // Approved with nothing outstanding: a small inline indicator, not a large
+  // permanent success card. A normal live item shouldn't spend screen space
+  // telling the vendor it's normal.
   return (
-    <View style={[styles.card, styles.cardOk]} testID="item-moderation-approved">
-      <View style={styles.row}>
-        <CheckCircle2 size={16} color="#16A34A" strokeWidth={2} />
-        <Text style={styles.titleOk}>Approved</Text>
-      </View>
-      <Text style={styles.body}>
-        {data.isVisibleToCustomers
-          ? 'Live and visible to customers.'
-          : 'Approved, but hidden from your storefront by your own settings.'}
+    <View style={styles.approvedRow} testID="item-moderation-approved">
+      <CheckCircle2 size={15} color={Colors.success} strokeWidth={2.5} />
+      <Text style={styles.approvedLabel}>Approved</Text>
+      <Text style={styles.approvedSub}>
+        {data.isVisibleToCustomers ? 'Visible to customers' : 'Hidden by your settings'}
       </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: '#FFFFFF',
-  },
-  cardPending: { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' },
-  cardDanger: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
-  cardOk: { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' },
-  row: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 7 },
-  titlePending: { fontSize: 14.5, fontWeight: '700' as const, color: '#92400E' },
-  titleDanger: { fontSize: 14.5, fontWeight: '700' as const, color: '#991B1B' },
-  titleOk: { fontSize: 14.5, fontWeight: '700' as const, color: '#166534' },
-  body: { fontSize: 13, lineHeight: 19, color: Colors.textSecondary, marginTop: 6 },
-  reasonBox: {
-    marginTop: 10,
-    padding: 10,
-    borderRadius: 9,
-    backgroundColor: 'rgba(0,0,0,0.035)',
-  },
-  reasonLabel: {
-    fontSize: 10.5,
-    fontWeight: '700' as const,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase' as const,
-    color: Colors.textMuted,
-  },
-  reasonText: { fontSize: 13, lineHeight: 19, color: Colors.text, marginTop: 3 },
-  actionButton: {
+  // Compact full-width strip flush under the gallery, WhatsApp-style, rather
+  // than an inset coloured card.
+  strip: {
     flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: 6,
-    marginTop: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
+    alignItems: 'flex-start' as const,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  stripNeutral: { backgroundColor: Colors.surfaceMuted ?? '#EFF1F5' },
+  stripDanger: { backgroundColor: Colors.errorLight ?? '#FEF2F2' },
+  icon: { marginRight: 10, marginTop: 1 },
+  textCol: { flex: 1 },
+  title: { fontSize: 14, fontWeight: '700' as const, color: Colors.text, marginBottom: 2 },
+  body: { fontSize: 13.5, lineHeight: 19, color: Colors.textSecondary },
+  link: { fontSize: 13.5, fontWeight: '600' as const, color: Colors.primary },
+  retryRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 5, marginTop: 5 },
+
+  reasonBlock: { marginTop: 9 },
+  reasonLabel: { fontSize: 12, fontWeight: '700' as const, color: Colors.text },
+  reasonText: { fontSize: 13.5, lineHeight: 19, color: Colors.textSecondary, marginTop: 1 },
+
+  comparisonWrap: { marginTop: 9 },
+  comparisonToggle: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4 },
+  comparison: {
+    marginTop: 9,
+    padding: 11,
+    borderRadius: 9,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+  },
+  comparisonHeading: { fontSize: 11.5, fontWeight: '700' as const, color: Colors.textMuted, letterSpacing: 0.3 },
+  comparisonHeadingSpaced: { marginTop: 11 },
+  comparisonRow: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, gap: 12, marginTop: 5 },
+  comparisonLabel: { fontSize: 13, color: Colors.textSecondary },
+  comparisonValue: { flex: 1, fontSize: 13, color: Colors.text, textAlign: 'right' as const, fontWeight: '500' as const },
+
+  actionButton: {
+    alignSelf: 'flex-start' as const,
+    marginTop: 11,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 9,
     backgroundColor: Colors.primary,
   },
   actionText: { fontSize: 13.5, fontWeight: '700' as const, color: '#FFFFFF' },
-  errorText: { flex: 1, fontSize: 13, color: Colors.textSecondary },
-  retryRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, marginTop: 8 },
-  retryText: { fontSize: 13, fontWeight: '600' as const, color: Colors.primary },
+
+  approvedRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+  },
+  approvedLabel: { fontSize: 13.5, fontWeight: '700' as const, color: Colors.success },
+  approvedSub: { fontSize: 13, color: Colors.textSecondary },
 });

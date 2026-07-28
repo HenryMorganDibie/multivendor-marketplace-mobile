@@ -151,7 +151,7 @@ export default function VendorSignupScreen() {
     }
 
     if (!isReferralCodeFormatValid(normalizedCode)) {
-      const error = 'Use 3–20 letters/numbers. Hyphen is allowed.';
+      const error = 'Use 3 to 20 letters or numbers. Hyphen is allowed.';
       setReferralValidation({ valid: false, validationStatus: 'invalid', error });
       setErrors(p => ({ ...p, referralCode: error }));
       return { valid: false, status: 'inactive' };
@@ -196,7 +196,7 @@ export default function VendorSignupScreen() {
       setReferralValidation({
         valid: false,
         validationStatus: 'invalid',
-        error: 'Use 3–20 letters/numbers. Hyphen is allowed.',
+        error: 'Use 3 to 20 letters or numbers. Hyphen is allowed.',
       });
       clearError('referralCode');
       return;
@@ -222,7 +222,7 @@ export default function VendorSignupScreen() {
 
     const normalizedReferralCode = normalizeReferralCode(referralCode);
     if (normalizedReferralCode && !isReferralCodeFormatValid(normalizedReferralCode)) {
-      newErrors.referralCode = 'Use 3–20 letters/numbers. Hyphen is allowed.';
+      newErrors.referralCode = 'Use 3 to 20 letters or numbers. Hyphen is allowed.';
     }
 
     setErrors(newErrors);
@@ -434,13 +434,11 @@ export default function VendorSignupScreen() {
               countryOnly
             />
 
-            <View style={styles.sectionHeaderRow}>
-              <TicketCheck size={16} color="#FF8C42" strokeWidth={2} />
-              <Text style={styles.sectionHeaderText}>Referral</Text>
-            </View>
-
+            {/* No section header for referral: it's one optional field, so giving
+                it the same visual weight as Location or Personal details
+                overstated it and made the form feel longer than it is. */}
             <View style={styles.inputSection}>
-              <Text style={styles.label}>Referral Code</Text>
+              <Text style={styles.label}>Referral code</Text>
               <TextInput
                 style={[
                   styles.input,
@@ -462,7 +460,7 @@ export default function VendorSignupScreen() {
                 editable={!isLoading && referralValidation.validationStatus !== 'pending'}
                 testID="vendor-referral-code"
               />
-              <Text style={styles.helperText}>Optional — enter a referral code from a the platform representative or another vendor.</Text>
+              <Text style={styles.helperText}>Optional. Enter a referral code from a the platform representative or another vendor.</Text>
               {referralValidation.validationStatus === 'pending' ? (
                 <View style={styles.validationRow}>
                   <ActivityIndicator color="#FF8C42" size="small" />
@@ -477,9 +475,40 @@ export default function VendorSignupScreen() {
 
             <View style={styles.planNote}>
               <Text style={styles.planNoteText}>
-                New vendors start on the Basic plan. After completing the required storefront setup, you can publish and share your storefront link. Complete verification to appear in Home, Search and Explore.
+                New vendors start on the Basic plan. Complete the required setup to publish and share your storefront. Verify your business to appear in Home, Search and Explore.
               </Text>
             </View>
+
+            {/* Consent sits directly above the button that commits to it, so the
+                vendor reads what they're agreeing to before the action, not
+                after it. Each document is separately tappable. */}
+            <Text style={styles.legalText}>
+              By creating a vendor account, you agree to the platform&apos;s{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push('/legal/terms' as any)}
+                testID="vendor-legal-terms"
+              >
+                Terms of Use
+              </Text>
+              ,{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push('/legal/privacy' as any)}
+                testID="vendor-legal-privacy"
+              >
+                Privacy Policy
+              </Text>
+              , and{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push('/legal/vendor-agreement' as any)}
+                testID="vendor-legal-vendor-agreement"
+              >
+                Vendor Agreement
+              </Text>
+              .
+            </Text>
 
             <TouchableOpacity
               style={[styles.primaryButton, (!isFormComplete || isLoading) && styles.primaryButtonDisabled]}
@@ -494,37 +523,6 @@ export default function VendorSignupScreen() {
                 <Text style={styles.primaryButtonText}>Create Vendor Account</Text>
               )}
             </TouchableOpacity>
-
-            {/* Consent is shown at the point of account creation, which is the
-                moment it actually applies. Vendors get the Vendor Agreement in
-                addition to the two documents every account is bound by. */}
-            <Text style={styles.legalText}>
-              By creating an account, you agree to the platform&apos;s{' '}
-              <Text
-                style={styles.legalLink}
-                onPress={() => router.push('/legal/terms' as any)}
-                testID="vendor-legal-terms"
-              >
-                Terms of Service
-              </Text>
-              ,{' '}
-              <Text
-                style={styles.legalLink}
-                onPress={() => router.push('/legal/vendor-agreement' as any)}
-                testID="vendor-legal-vendor-agreement"
-              >
-                Vendor Agreement
-              </Text>
-              {' '}and{' '}
-              <Text
-                style={styles.legalLink}
-                onPress={() => router.push('/legal/privacy' as any)}
-                testID="vendor-legal-privacy"
-              >
-                Privacy Policy
-              </Text>
-              .
-            </Text>
 
             <View style={styles.bottomSection}>
               <Text style={styles.bottomText}>Already have an account? </Text>
