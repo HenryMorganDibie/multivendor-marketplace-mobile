@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Eye, EyeOff, Lock } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import {
   View,
@@ -39,6 +40,7 @@ export default function LoginScreen() {
   const [authError, setAuthError] = useState('');
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     const trimmedEmail = email.trim();
@@ -215,9 +217,11 @@ export default function LoginScreen() {
               </View>
 
               <View style={styles.inputSection}>
+                <View style={styles.passwordWrap}>
                 <TextInput
                   style={[
                     styles.input,
+                    styles.passwordInput,
                     passwordFocused && styles.inputFocused,
                     passwordError ? styles.inputError : null,
                   ]}
@@ -230,12 +234,24 @@ export default function LoginScreen() {
                   onBlur={() => setPasswordFocused(false)}
                   placeholder="Password"
                   placeholderTextColor="#9CA3AF"
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
                   editable={!isLoading}
                   testID="login-password-input"
                 />
+                <TouchableOpacity
+                  style={styles.passwordToggle}
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  testID="login-password-toggle"
+                >
+                  {showPassword
+                    ? <EyeOff size={20} color="#9CA3AF" strokeWidth={1.8} />
+                    : <Eye size={20} color="#9CA3AF" strokeWidth={1.8} />}
+                </TouchableOpacity>
+                </View>
                 {passwordError ? (
                   <Text style={styles.fieldErrorText}>{passwordError}</Text>
                 ) : null}
@@ -272,7 +288,10 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.trustText}>Your data is private and never sold.</Text>
+            <View style={styles.trustRow}>
+              <Lock size={12} color="#9CA3AF" strokeWidth={2} />
+              <Text style={styles.trustText}>Your data is private and never sold.</Text>
+            </View>
 
             <View style={styles.bottomSection}>
               <Text style={styles.bottomText}>New to the platform? </Text>
@@ -453,12 +472,31 @@ const styles = StyleSheet.create({
     color: '#FF8C42',
     fontWeight: '500' as const,
   },
+  passwordWrap: {
+    position: 'relative' as const,
+    justifyContent: 'center' as const,
+  },
+  passwordInput: {
+    // Room for the toggle so a long password never runs underneath it.
+    paddingRight: 48,
+  },
+  passwordToggle: {
+    position: 'absolute' as const,
+    right: 16,
+    height: '100%' as const,
+    justifyContent: 'center' as const,
+  },
+  trustRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 28,
+  },
   trustText: {
     fontSize: 13,
     color: '#6B7280',
-    textAlign: 'center' as const,
-    marginTop: 8,
-    marginBottom: 28,
   },
   bottomSection: {
     flexDirection: 'row' as const,

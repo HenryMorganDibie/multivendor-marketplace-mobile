@@ -89,6 +89,13 @@ export default function CreateAccountScreen() {
                   Discover vendors, place orders and manage your purchases.
                 </Text>
               </View>
+              {selectedRole === 'customer' ? (
+                <View style={styles.selectedCheck}>
+                  <Check size={14} color="#FFFFFF" strokeWidth={3} />
+                </View>
+              ) : (
+                <View style={styles.selectedCheckPlaceholder} />
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -116,6 +123,13 @@ export default function CreateAccountScreen() {
                   Showcase your business, manage orders and chat with customers.
                 </Text>
               </View>
+              {selectedRole === 'vendor' ? (
+                <View style={styles.selectedCheck}>
+                  <Check size={14} color="#FFFFFF" strokeWidth={3} />
+                </View>
+              ) : (
+                <View style={styles.selectedCheckPlaceholder} />
+              )}
             </TouchableOpacity>
           </View>
 
@@ -209,6 +223,22 @@ const styles = StyleSheet.create({
   },
   optionTextWrap: {
     flex: 1,
+  },
+  selectedCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FF8C42',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginLeft: 12,
+  },
+  // Holds the same width when nothing is selected, so choosing a card does not
+  // shove its text sideways.
+  selectedCheckPlaceholder: {
+    width: 22,
+    height: 22,
+    marginLeft: 12,
   },
   optionTitle: {
     fontSize: 17,
