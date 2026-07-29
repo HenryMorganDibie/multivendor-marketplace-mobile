@@ -27,10 +27,14 @@ const TRENDING_DAYS = 14;
  * retired: the first claimed sales data nobody checked, the second assumed
  * every vendor is a restaurant. Sales are described by the Popular system tag,
  * computed from real order counts in computeSystemTags below.
+ *
+ * A fifth label is still to come. "Featured" was proposed and deliberately not
+ * used: the Visibility section of the same form already has a Featured toggle
+ * that pins an item to the top of its category, and both used a star, so the
+ * word would have meant a placement control and a label on one screen.
  */
 export const HIGHLIGHT_LABEL_OPTIONS: { value: HighlightLabel; label: string; emoji: string }[] = [
   { value: 'vendors_pick', label: "Vendor's Pick", emoji: '👍' },
-  { value: 'featured_label', label: 'Featured', emoji: '⭐' },
   { value: 'signature', label: 'Signature', emoji: '✨' },
   { value: 'limited_availability', label: 'Limited Availability', emoji: '⏳' },
   { value: 'recommended', label: 'Recommended', emoji: '💡' },
