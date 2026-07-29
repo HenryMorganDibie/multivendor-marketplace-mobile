@@ -1,0 +1,89 @@
+# Phase 2: catalog moderation, seen from the vendor's side on a device.
+#
+# Signs in as the seeded demo vendor, whose catalog already contains items in
+# each moderation state, and captures how each one presents natively.
+#
+# The states themselves are proven by phase2-acceptance-tests.js against the
+# backend. This flow exists to show the vendor-facing side of them on a real
+# screen: wording, layout, and that an unavailable or under-review item is
+# still readable rather than a dead row.
+#
+# Run:  maestro test maestro/phase2-catalog-moderation.yaml
+appId: com.the platform.app
+env:
+  VENDOR_EMAIL: demo.vendor@the platform.com
+  VENDOR_PASSWORD: DemoPass123!
+---
+- launchApp:
+    clearState: true
+
+- assertVisible: "Log in"
+- tapOn:
+    id: "login-email-input"
+- inputText: ${VENDOR_EMAIL}
+- tapOn:
+    id: "login-password-input"
+- inputText: ${VENDOR_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "login-submit-button"
+
+- extendedWaitUntil:
+    visible: "Dashboard"
+    timeout: 45000
+- takeScreenshot: evidence/android/p2-01-dashboard
+
+# ── Catalog ─────────────────────────────────────────────────────────────────
+- tapOn: "Catalog"
+- extendedWaitUntil:
+    visible: "Catalog"
+    timeout: 20000
+- takeScreenshot: evidence/android/p2-02-catalog-list
+
+# "Unavailable" rather than "Out of stock", because the platform sells services,
+# bookings and made-to-order work as well as physical stock.
+- assertNotVisible: "Out of stock"
+
+# ── An item under review ────────────────────────────────────────────────────
+# The moderation strip follows the WhatsApp Business pattern: a compact line
+# saying what is happening, with the detail behind View details.
+- runFlow:
+    when:
+      visible: "Under review"
+    commands:
+      - tapOn: "Under review"
+      - extendedWaitUntil:
+          visible: "This item is under review"
+          timeout: 15000
+      - takeScreenshot: evidence/android/p2-03-item-under-review
+      - runFlow:
+          when:
+            visible: "View details"
+          commands:
+            - tapOn: "View details"
+            - assertVisible: "Currently visible to customers"
+            - takeScreenshot: evidence/android/p2-04-live-vs-submitted
+      - back
+
+# ── An item whose edit was refused ──────────────────────────────────────────
+- runFlow:
+    when:
+      visible: "Changes were not approved"
+    commands:
+      - tapOn: "Changes were not approved"
+      - assertVisible: "Your changes were not approved."
+      # The point of the whole revision model: refusing an edit must not take
+      # the working listing offline.
+      - assertVisible: "Customers can still see the currently approved version."
+      - takeScreenshot: evidence/android/p2-05-revision-rejected
+      - back
+
+# ── An approved item ────────────────────────────────────────────────────────
+- runFlow:
+    when:
+      visible: "Approved"
+    commands:
+      - tapOn: "Approved"
+      - assertVisible: "Visible to customers"
+      - takeScreenshot: evidence/android/p2-06-approved-live
+      - back

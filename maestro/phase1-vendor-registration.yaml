@@ -1,0 +1,98 @@
+# Phase 1: vendor registration, driven on a real device or emulator.
+#
+# Uses the same testIDs as the web acceptance run, so this exercises the same
+# elements a user touches rather than a parallel test-only path.
+#
+# Run:  maestro test maestro/phase1-vendor-registration.yaml
+appId: com.the platform.app
+---
+- launchApp:
+    clearState: true
+
+# ── Login screen ────────────────────────────────────────────────────────────
+- assertVisible: "Log in"
+# The placeholder social buttons are hidden until the providers are real, so
+# neither should be on screen. A control that fabricates an account is worse
+# than no control.
+- assertNotVisible: "Continue with Apple"
+- assertNotVisible: "Continue with Google"
+- takeScreenshot: evidence/android/01-login
+
+# ── Choose account type ─────────────────────────────────────────────────────
+- tapOn: "Create an account"
+- assertVisible: "Vendor"
+- takeScreenshot: evidence/android/02-choose-account-type
+
+- tapOn:
+    id: "role-vendor-card"
+- tapOn:
+    id: "role-continue-button"
+
+# ── Registration form: seven fields, nothing more ───────────────────────────
+- assertVisible: "Create your vendor account"
+# Business name, category and description are deliberately collected later
+# through the dashboard checklist, not at signup.
+- assertNotVisible: "Business Name"
+- assertNotVisible: "Category"
+- takeScreenshot: evidence/android/03-registration-seven-fields
+
+- tapOn:
+    id: "vendor-firstname"
+- inputText: "Ada"
+- tapOn:
+    id: "vendor-lastname"
+- inputText: "Obi"
+- tapOn:
+    id: "vendor-email"
+- inputText: "maestro.vendor.${maestroTimestamp}@the platform.test"
+- tapOn:
+    id: "vendor-phone"
+- inputText: "+2348012345678"
+- tapOn:
+    id: "vendor-password"
+- inputText: "DemoPass123!"
+- hideKeyboard
+- takeScreenshot: evidence/android/04-registration-filled
+
+# Password visibility, matching the customer screen.
+- tapOn:
+    id: "vendor-password-toggle"
+- takeScreenshot: evidence/android/05-password-visible
+- tapOn:
+    id: "vendor-password-toggle"
+
+# ── Country only. State and area are not asked for at signup. ───────────────
+- tapOn:
+    id: "vendor-country"
+- assertVisible: "Nigeria"
+- takeScreenshot: evidence/android/06-country-picker
+- tapOn: "Nigeria"
+- hideKeyboard
+- takeScreenshot: evidence/android/07-country-selected
+
+# ── Legal consent sits above the button, three separate documents ───────────
+- scrollUntilVisible:
+    element:
+      text: "By creating a vendor account"
+    direction: DOWN
+- assertVisible: "Terms of Use"
+- assertVisible: "Privacy Policy"
+- assertVisible: "Vendor Agreement"
+- takeScreenshot: evidence/android/08-legal-consent
+
+# ── Create the account ──────────────────────────────────────────────────────
+- tapOn:
+    id: "vendor-create-account"
+- extendedWaitUntil:
+    visible: "Storefront setup"
+    timeout: 45000
+- takeScreenshot: evidence/android/09-dashboard
+
+# ── Criterion 6: nothing on this dashboard belongs to another vendor ────────
+- assertVisible: "0"
+- assertNotVisible: "3 new customers this week"
+- assertNotVisible: "Average reply time"
+- scroll
+- takeScreenshot: evidence/android/10-setup-checklist
+- scroll
+- takeScreenshot: evidence/android/11-checklist-continued
