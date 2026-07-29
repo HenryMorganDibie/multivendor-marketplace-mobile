@@ -10,23 +10,20 @@
       "ios": {
         "simulator": true,
         "resourceClass": "m-medium"
-      },
-      "channel": "development"
+      }
     },
     "android-development": {
       "developmentClient": true,
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "channel": "development"
+      }
     },
     "android-preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "channel": "preview"
+      }
     },
     "production": {
       "autoIncrement": true,

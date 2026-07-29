@@ -85,6 +85,26 @@ toolkit and nothing imports `MapView` or `react-native-maps` anywhere.
 `npx expo-doctor` now reports **18/18 checks passed**, from two failing checks
 before this work.
 
+## First build results
+
+Both profiles built successfully on the first attempt, under the platform's Expo
+organisation, with no Apple Developer Program and no Google Play Console.
+
+| Platform | Profile | Result | Artifact |
+|---|---|---|---|
+| iOS | `ios-simulator` | Finished | `.tar.gz` containing the `.app` for the Simulator |
+| Android | `android-development` | Finished | Installable `.apk` |
+
+Build pages live under
+`expo.dev/accounts/the platform-technologies/projects/<project>/builds/<id>`.
+
+The Android build used a debug keystore that EAS generated and stores against
+the organisation, so it belongs to the platform rather than to whoever ran the build.
+
+Note on roles: renaming the project on Expo requires Owner or Admin. A
+contractor holding only the Developer role cannot rename it, cannot change
+members and cannot touch billing, which is the intended arrangement.
+
 ## What still needs the paid accounts
 
 **Apple Developer Program**
