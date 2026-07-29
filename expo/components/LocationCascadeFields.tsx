@@ -218,44 +218,44 @@ export default function LocationCascadeFields({
         {errors?.country ? <Text style={styles.errorText}>{errors.country}</Text> : null}
       </View>
 
-      {!countryOnly && (
+      {/* Each step appears only once the one above it is answered. Previously
+          all three rendered at once with the lower two greyed out, so a new
+          user met three fields and could use one. A control that exists only to
+          say "not yet" is worse than no control: it takes up the space, invites
+          a tap, and does nothing. */}
+      {!countryOnly && selectedCountry && (
         <View style={styles.fieldSection}>
           <Text style={styles.label}>{stateLabel}</Text>
           <TouchableOpacity
-            style={[styles.selectorButton, !selectedCountry && styles.selectorDisabled, errors?.state ? styles.inputError : null]}
-            onPress={() => { if (selectedCountry) setShowStateModal(true); }}
-            activeOpacity={selectedCountry ? 0.7 : 1}
-            disabled={disabled || !selectedCountry}
+            style={[styles.selectorButton, errors?.state ? styles.inputError : null]}
+            onPress={() => setShowStateModal(true)}
+            activeOpacity={0.7}
+            disabled={disabled}
             testID={`${testIDPrefix}-state`}
           >
             <Text style={[styles.selectorText, !selectedState && styles.selectorPlaceholder]}>
-              {selectedState?.name || (selectedCountry ? `Select your ${stateLabel.toLowerCase()}` : 'Select a country first')}
+              {selectedState?.name || `Select your ${stateLabel.toLowerCase()}`}
             </Text>
-            <ChevronDown size={20} color={selectedCountry ? '#9CA3AF' : '#C5C5C5'} strokeWidth={2} />
+            <ChevronDown size={20} color="#9CA3AF" strokeWidth={2} />
           </TouchableOpacity>
           {errors?.state ? <Text style={styles.errorText}>{errors.state}</Text> : null}
         </View>
       )}
 
-      {!countryOnly && (
+      {!countryOnly && selectedState && hasAreas && (
         <View style={styles.fieldSection}>
           <Text style={styles.label}>Area / City</Text>
           <TouchableOpacity
-            style={[styles.selectorButton, !selectedState && styles.selectorDisabled, errors?.area ? styles.inputError : null]}
-            onPress={() => { if (selectedState && hasAreas) setShowAreaModal(true); }}
-            activeOpacity={selectedState && hasAreas ? 0.7 : 1}
-            disabled={disabled || !selectedState || !hasAreas}
+            style={[styles.selectorButton, errors?.area ? styles.inputError : null]}
+            onPress={() => setShowAreaModal(true)}
+            activeOpacity={0.7}
+            disabled={disabled}
             testID={`${testIDPrefix}-area`}
           >
             <Text style={[styles.selectorText, !selectedArea && styles.selectorPlaceholder]}>
-              {selectedArea?.name
-                || (!selectedState
-                  ? 'Select a state first'
-                  : hasAreas
-                    ? 'Select your area'
-                    : 'Covered by state')}
+              {selectedArea?.name || 'Select your area'}
             </Text>
-            <ChevronDown size={20} color={selectedState && hasAreas ? '#9CA3AF' : '#C5C5C5'} strokeWidth={2} />
+            <ChevronDown size={20} color="#9CA3AF" strokeWidth={2} />
           </TouchableOpacity>
           {errors?.area ? <Text style={styles.errorText}>{errors.area}</Text> : null}
         </View>

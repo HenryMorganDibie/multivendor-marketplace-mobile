@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MapPin, UserCircle, TicketCheck, Eye, EyeOff } from 'lucide-react-native';
+import { MapPin, UserCircle, TicketCheck, Eye, EyeOff, Check } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { openLegalDocument } from '@/constants/legalLinks';
 import LocationCascadeFields from '@/components/LocationCascadeFields';
@@ -207,6 +207,22 @@ export default function VendorSignupScreen() {
     clearError('referralCode');
   };
 
+  // Measured y offset of each field, recorded on layout. Order matters: it is
+  // the order the fields appear, so "first invalid" means first on screen
+  // rather than first in whatever order validation happened to run.
+  const scrollRef = useRef<ScrollView>(null);
+  const fieldOffsets = useRef<Record<string, number>>({});
+  const FIELD_ORDER = ['firstName', 'lastName', 'email', 'phone', 'password', 'country', 'referralCode'] as const;
+
+  const scrollToFirstError = (errs: FieldErrors) => {
+    const target = FIELD_ORDER.find((k) => errs[k]);
+    if (!target) return;
+    const y = fieldOffsets.current[target];
+    if (typeof y !== 'number') return;
+    // A little headroom so the label is visible, not just the input.
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
+  };
+
   const handleSubmit = async () => {
     const newErrors: FieldErrors = {};
     if (firstName.trim().length < 2) newErrors.firstName = 'Enter your first name';
@@ -227,7 +243,10 @@ export default function VendorSignupScreen() {
     }
 
     setErrors(newErrors);
-    if (Object.values(newErrors).some(Boolean)) return;
+    if (Object.values(newErrors).some(Boolean)) {
+      scrollToFirstError(newErrors);
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -244,6 +263,7 @@ export default function VendorSignupScreen() {
       const check = await checkAccountExists(trimmedEmail);
       if (check.exists) {
         setErrors({ email: 'An account already exists with this email. Please log in.' });
+        scrollToFirstError({ email: 'x' });
         setIsLoading(false);
         return;
       }
@@ -298,6 +318,7 @@ export default function VendorSignupScreen() {
     >
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -313,7 +334,13 @@ export default function VendorSignupScreen() {
               <Text style={styles.sectionHeaderText}>Owner Information</Text>
             </View>
 
-            <View style={styles.row}>
+            <View
+              style={styles.row}
+              onLayout={(e) => {
+                fieldOffsets.current.firstName = e.nativeEvent.layout.y;
+                fieldOffsets.current.lastName = e.nativeEvent.layout.y;
+              }}
+            >
               <View style={[styles.inputSection, styles.rowItem]}>
                 <Text style={styles.label}>First Name</Text>
                 <TextInput
@@ -348,7 +375,7 @@ export default function VendorSignupScreen() {
               </View>
             </View>
 
-            <View style={styles.inputSection}>
+            <View style={styles.inputSection} onLayout={(e) => { fieldOffsets.current.email = e.nativeEvent.layout.y; }}>
               <Text style={styles.label}>Email Address</Text>
               <TextInput
                 style={[styles.input, focusedField === 'email' && styles.inputFocused, errors.email ? styles.inputError : null]}
@@ -367,7 +394,7 @@ export default function VendorSignupScreen() {
               {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
             </View>
 
-            <View style={styles.inputSection}>
+            <View style={styles.inputSection} onLayout={(e) => { fieldOffsets.current.phone = e.nativeEvent.layout.y; }}>
               <Text style={styles.label}>Phone Number</Text>
               <TextInput
                 style={[styles.input, focusedField === 'phone' && styles.inputFocused, errors.phone ? styles.inputError : null]}
@@ -384,7 +411,7 @@ export default function VendorSignupScreen() {
               {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
             </View>
 
-            <View style={styles.inputSection}>
+            <View style={styles.inputSection} onLayout={(e) => { fieldOffsets.current.password = e.nativeEvent.layout.y; }}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.passwordRow}>
                 <TextInput
@@ -425,6 +452,7 @@ export default function VendorSignupScreen() {
                 the business details, because currency, plan pricing and
                 country availability are all resolved from it the moment the
                 account is created. State and area move to onboarding. */}
+            <View onLayout={(e) => { fieldOffsets.current.country = e.nativeEvent.layout.y; }}>
             <LocationCascadeFields
               value={location}
               onChange={setLocation}
@@ -434,11 +462,12 @@ export default function VendorSignupScreen() {
               testIDPrefix="vendor"
               countryOnly
             />
+            </View>
 
             {/* No section header for referral: it's one optional field, so giving
                 it the same visual weight as Location or Personal details
                 overstated it and made the form feel longer than it is. */}
-            <View style={styles.inputSection}>
+            <View style={styles.inputSection} onLayout={(e) => { fieldOffsets.current.referralCode = e.nativeEvent.layout.y; }}>
               <Text style={styles.label}>Referral code</Text>
               <TextInput
                 style={[
@@ -474,10 +503,21 @@ export default function VendorSignupScreen() {
               ) : null}
             </View>
 
+            {/* Three separate outcomes read as three lines, not one paragraph.
+                Prose makes a reader work out how many things they are being
+                told; a list tells them before they start. */}
             <View style={styles.planNote}>
-              <Text style={styles.planNoteText}>
-                New vendors start on the Basic plan. Complete the required setup to publish and share your storefront. Verify your business to appear in Home, Search and Explore.
-              </Text>
+              <Text style={styles.planNoteTitle}>After creating your account</Text>
+              {[
+                'Start on the Basic plan',
+                'Complete setup to publish your storefront',
+                'Verify your business to appear in discovery',
+              ].map((line) => (
+                <View key={line} style={styles.planNoteRow}>
+                  <Check size={14} color="#E0631A" strokeWidth={3} />
+                  <Text style={styles.planNoteText}>{line}</Text>
+                </View>
+              ))}
             </View>
 
             {/* Consent sits directly above the button that commits to it, so the
@@ -586,13 +626,20 @@ const styles = StyleSheet.create({
   pendingText: { fontSize: 13, color: '#9A3412' },
   successText: { fontSize: 13, color: '#16A34A', marginTop: 6, paddingHorizontal: 4, fontWeight: '600' as const },
   planNote: { backgroundColor: '#FFF7ED', borderRadius: 12, padding: 14, marginBottom: 18, borderWidth: 1, borderColor: '#FED7AA' },
-  planNoteText: { fontSize: 13, color: '#9A3412', lineHeight: 19 },
+  planNoteTitle: {
+    fontSize: 13, fontWeight: '600' as const, color: '#9A3412', marginBottom: 8,
+  },
+  planNoteRow: {
+    flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: 8, marginBottom: 6,
+  },
+  // flex so a long line wraps under itself rather than pushing the tick out.
+  planNoteText: { flex: 1, fontSize: 13, color: '#9A3412', lineHeight: 19 },
   primaryButton: {
     backgroundColor: '#FF8C42', borderRadius: 14, height: 52, alignItems: 'center' as const,
     justifyContent: 'center' as const, marginTop: 4,
     shadowColor: '#FF8C42', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 4,
   },
-  primaryButtonDisabled: { backgroundColor: 'rgba(255,140,66,0.35)', shadowOpacity: 0, elevation: 0 },
+  primaryButtonDisabled: { backgroundColor: '#F0C9AE', shadowOpacity: 0, elevation: 0 },
   primaryButtonText: { fontSize: 16, fontWeight: '600' as const, color: '#FFFFFF' },
   bottomSection: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, paddingVertical: 24 },
   bottomText: { fontSize: 15, color: '#6B7280' },
