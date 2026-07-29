@@ -522,7 +522,7 @@ export default function AddItemScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>HIGHLIGHT LABEL</Text>
-          <Text style={styles.sectionHelper}>Optional. Highlights this item with a custom label</Text>
+          <Text style={styles.sectionHelper}>Optional</Text>
           <View style={styles.highlightGrid}>
             {HIGHLIGHT_LABEL_OPTIONS.map((opt) => {
               const isSelected = highlightLabel === opt.value;
@@ -541,9 +541,6 @@ export default function AddItemScreen() {
               );
             })}
           </View>
-          <Text style={styles.systemTagNote}>
-            System tags (Popular, New, Promo) are applied automatically based on performance data.
-          </Text>
         </View>
 
         <View style={styles.section}>
@@ -1374,11 +1371,6 @@ const styles = StyleSheet.create({
   highlightLabelSelected: {
     color: Colors.primary,
     fontWeight: '600' as const,
-  },
-  systemTagNote: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    lineHeight: 17,
   },
 });
 

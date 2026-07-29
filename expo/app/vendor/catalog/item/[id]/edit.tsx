@@ -486,7 +486,7 @@ export default function EditItemScreen() {
         {/* HIGHLIGHT LABEL */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>HIGHLIGHT LABEL</Text>
-          <Text style={styles.sectionHelper}>Optional. Highlights this item with a custom label</Text>
+          <Text style={styles.sectionHelper}>Optional</Text>
           <View style={styles.highlightGrid}>
             {HIGHLIGHT_LABEL_OPTIONS.map((opt) => {
               const isSelected = highlightLabel === opt.value;
@@ -505,9 +505,6 @@ export default function EditItemScreen() {
               );
             })}
           </View>
-          <Text style={styles.systemTagNote}>
-            System tags (Popular, New, Promo) are applied automatically based on performance data.
-          </Text>
         </View>
 
         {/* ADD-ONS */}
@@ -773,9 +770,6 @@ const styles = StyleSheet.create({
   highlightEmoji: { fontSize: 16 },
   highlightLabelText: { fontSize: 13, fontWeight: '500', color: Colors.text },
   highlightLabelSelected: { color: Colors.primary, fontWeight: '600' },
-  systemTagNote: {
-    fontSize: 12, color: Colors.textMuted, lineHeight: 17,
-  },
   addButton: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   addButtonText: { fontSize: 14, color: Colors.primary, fontWeight: '600' },
   addOnGroupCard: {
