@@ -182,7 +182,7 @@ export default function CustomerProfileScreen() {
         <View style={styles.menuCard}>
           <MenuRow
             icon={<LogOut size={16} color={Colors.error} strokeWidth={2} />}
-            label="Log Out"
+            label="Log out"
             onPress={() => handleItemPress('logout')}
             showDivider={false}
             destructive
@@ -194,9 +194,9 @@ export default function CustomerProfileScreen() {
 
       <LaektivaModal
         visible={showLogoutModal}
-        title="Log Out"
+        title="Log out"
         message="Are you sure you want to log out?"
-        primaryButton={{ label: 'Log Out', onPress: handleLogout }}
+        primaryButton={{ label: 'Log out', onPress: handleLogout }}
         secondaryButton={{ label: 'Cancel', onPress: () => setShowLogoutModal(false) }}
         destructive
       />

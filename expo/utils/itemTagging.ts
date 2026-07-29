@@ -1,5 +1,15 @@
 export type SystemTag = 'popular' | 'new' | 'promo';
-export type HighlightLabel = 'chefs_pick' | 'spicy' | 'limited' | 'best_seller';
+export type HighlightLabel =
+  | 'vendors_pick'
+  | 'featured_label'
+  | 'signature'
+  | 'limited_availability'
+  | 'recommended'
+  // Retired. Kept in the union so items still carrying one keep rendering.
+  | 'chefs_pick'
+  | 'spicy'
+  | 'limited'
+  | 'best_seller';
 
 const NEW_ITEM_DAYS = 14;
 const POPULAR_TOP_PERCENTILE = 0.8;
@@ -8,28 +18,30 @@ const TRENDING_DAYS = 14;
 /**
  * What a vendor may put on their own item.
  *
- * "Best Seller" was here and has been removed. The other three are the vendor
- * saying something about their own product, which is theirs to say. "Best
- * Seller" is a claim about sales that nobody checks, so a brand-new item with
- * no orders could carry it, and a customer reading it has no way to tell.
+ * Every one of these is the vendor speaking about their own product, which is
+ * theirs to say. None of them asserts anything about sales, ratings or other
+ * vendors, because nothing here is verified and a customer cannot tell a
+ * measured claim from a typed one.
  *
- * Sales are already described honestly by the Popular system tag, which is
- * computed from real order counts in computeSystemTags below and cannot be set
- * by hand. That leaves nothing for a self-applied version to add.
- *
- * 'best_seller' stays in the HighlightLabel type and in
- * getHighlightLabelDisplay so items already carrying it keep rendering. It just
- * cannot be chosen again.
+ * "Best Seller" and "Chef's Pick" were previously selectable and have been
+ * retired: the first claimed sales data nobody checked, the second assumed
+ * every vendor is a restaurant. Sales are described by the Popular system tag,
+ * computed from real order counts in computeSystemTags below.
  */
 export const HIGHLIGHT_LABEL_OPTIONS: { value: HighlightLabel; label: string; emoji: string }[] = [
-  { value: 'chefs_pick', label: "Chef's Pick", emoji: '👨‍🍳' },
-  { value: 'spicy', label: 'Spicy', emoji: '🌶️' },
-  { value: 'limited', label: 'Limited', emoji: '⏳' },
+  { value: 'vendors_pick', label: "Vendor's Pick", emoji: '👍' },
+  { value: 'featured_label', label: 'Featured', emoji: '⭐' },
+  { value: 'signature', label: 'Signature', emoji: '✨' },
+  { value: 'limited_availability', label: 'Limited Availability', emoji: '⏳' },
+  { value: 'recommended', label: 'Recommended', emoji: '💡' },
 ];
 
+// No longer selectable, still rendered for items that already carry one.
 const RETIRED_HIGHLIGHT_LABELS: Record<string, { label: string; emoji: string }> = {
-  // No longer selectable, but still rendered for items that already carry it.
   best_seller: { label: 'Best Seller', emoji: '🏆' },
+  chefs_pick: { label: "Chef's Pick", emoji: '👨‍🍳' },
+  spicy: { label: 'Spicy', emoji: '🌶️' },
+  limited: { label: 'Limited Availability', emoji: '⏳' },
 };
 
 export function getHighlightLabelDisplay(label: HighlightLabel): { label: string; emoji: string } {

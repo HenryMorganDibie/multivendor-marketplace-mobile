@@ -277,7 +277,7 @@ export default function VendorSettingsScreen() {
               onPress={() => handleItemPress('logout')}
               activeOpacity={0.7}
             >
-              <Text style={styles.logoutText}>Logout</Text>
+              <Text style={styles.logoutText}>Log out</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -286,10 +286,10 @@ export default function VendorSettingsScreen() {
 
       <LaektivaModal
         visible={showLogoutModal}
-        title="Logout"
-        message="Are you sure you want to logout?"
+        title="Log out"
+        message="Are you sure you want to log out?"
         primaryButton={{
-          label: 'Logout',
+          label: 'Log out',
           onPress: handleLogout,
         }}
         secondaryButton={{
