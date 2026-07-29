@@ -9,7 +9,23 @@ appId: com.the platform.app
 - launchApp:
     clearState: true
 
+# The emulator runs on software GPU alongside the dev servers, so Android
+# itself occasionally throws a "System UI isn't responding" dialog over the
+# app. It is an emulator resourcing artefact, nothing to do with the app, but
+# it swallows taps, so it is dismissed if present.
+- runFlow:
+    when:
+      visible: "System UI isn't responding"
+    commands:
+      - tapOn: "Wait"
+
 # ── Login screen ────────────────────────────────────────────────────────────
+# The JS bundle has to parse and Firebase has to initialise before anything
+# renders, which takes noticeably longer on a cold native start than in the web
+# preview. Waiting for the screen rather than asserting immediately.
+- extendedWaitUntil:
+    visible: "Welcome back"
+    timeout: 150000
 - assertVisible: "Log in"
 # The placeholder social buttons are hidden until the providers are real, so
 # neither should be on screen. A control that fabricates an account is worse
@@ -36,18 +52,29 @@ appId: com.the platform.app
 - assertNotVisible: "Category"
 - takeScreenshot: evidence/android/03-registration-seven-fields
 
+# A fresh address each run, so the flow never trips over "account already
+# exists" from the previous one. Maestro evaluates JS inside ${}.
+- evalScript: ${output.email = 'maestro.vendor.' + Date.now() + '@the platform.test'}
+
+# The keyboard is dismissed between fields. On a phone it covers the lower half
+# of the form, so the next input is genuinely off-screen rather than just
+# obscured, and a tap lands on the keyboard instead.
 - tapOn:
     id: "vendor-firstname"
 - inputText: "Ada"
+- hideKeyboard
 - tapOn:
     id: "vendor-lastname"
 - inputText: "Obi"
+- hideKeyboard
 - tapOn:
     id: "vendor-email"
-- inputText: "maestro.vendor.${maestroTimestamp}@the platform.test"
+- inputText: ${output.email}
+- hideKeyboard
 - tapOn:
     id: "vendor-phone"
 - inputText: "+2348012345678"
+- hideKeyboard
 - tapOn:
     id: "vendor-password"
 - inputText: "DemoPass123!"
@@ -67,25 +94,39 @@ appId: com.the platform.app
 - assertVisible: "Nigeria"
 - takeScreenshot: evidence/android/06-country-picker
 - tapOn: "Nigeria"
-- hideKeyboard
+# No hideKeyboard here. On Android Maestro implements it as a BACK key press,
+# and selecting from the country modal leaves no keyboard open, so the press
+# fell through to navigation and took the flow out of the form entirely. The
+# screenshots looked like a scrolling problem; the flow had already left the
+# screen before the scroll ran.
 - takeScreenshot: evidence/android/07-country-selected
 
 # ── Legal consent sits above the button, three separate documents ───────────
-- scrollUntilVisible:
-    element:
-      text: "By creating a vendor account"
-    direction: DOWN
-- assertVisible: "Terms of Use"
-- assertVisible: "Privacy Policy"
-- assertVisible: "Vendor Agreement"
+# Plain scrolls rather than scrollUntilVisible. On Android 14 with gesture
+# navigation, Maestro's scroll-until-visible swipes from near the screen edge,
+# which Android interprets as the system back gesture: the flow navigated
+# backwards out of the form instead of scrolling it.
+- scroll
+- scroll
+
+# Regex rather than exact text. Each document name is its own tappable Text
+# inside one sentence, so the node Maestro sees carries the whole sentence and
+# an exact match on the fragment never hits.
+- assertVisible: ".*Terms of Use.*"
+- assertVisible: ".*Privacy Policy.*"
+- assertVisible: ".*Vendor Agreement.*"
 - takeScreenshot: evidence/android/08-legal-consent
 
 # ── Create the account ──────────────────────────────────────────────────────
 - tapOn:
     id: "vendor-create-account"
+# Registration is three round trips: Firebase Auth creates the user, the
+# onUserCreate trigger writes users/{uid}, then completeRegistration runs. On a
+# software-GPU emulator with cold Cloud Functions that is far slower than the
+# browser, so the wait is generous rather than tuned to a fast machine.
 - extendedWaitUntil:
     visible: "Storefront setup"
-    timeout: 45000
+    timeout: 150000
 - takeScreenshot: evidence/android/09-dashboard
 
 # ── Criterion 6: nothing on this dashboard belongs to another vendor ────────
