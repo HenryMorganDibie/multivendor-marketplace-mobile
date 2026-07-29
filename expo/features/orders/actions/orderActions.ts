@@ -3,7 +3,7 @@ import type { Currency } from '@/utils/formatPrice';
 import { validatePartialPaymentAmount, calculatePaymentUpdate } from '@/utils/paymentHelpers';
 
 export const DECLINE_REASONS = [
-  { code: 'out_of_stock', label: 'Item out of stock' },
+  { code: 'out_of_stock', label: 'Item unavailable' },
   { code: 'capacity_full', label: 'At capacity, cannot fulfill' },
   { code: 'hours_conflict', label: 'Outside operating hours' },
   { code: 'order_too_large', label: 'Order too large to fulfill' },

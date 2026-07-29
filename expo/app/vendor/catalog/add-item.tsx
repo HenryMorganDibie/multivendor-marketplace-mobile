@@ -427,8 +427,11 @@ export default function AddItemScreen() {
           <View style={styles.settingsCard}>
             <View style={styles.toggleRow}>
               <View style={styles.toggleLeft}>
-                <Text style={styles.toggleLabel}>Track inventory</Text>
-                <Text style={styles.toggleSubtext}>Monitor stock levels for this item</Text>
+                <Text style={styles.toggleLabel}>Track quantity for this item?</Text>
+                <Text style={styles.toggleSubtext}>
+                  Use inventory tracking only for items with a fixed quantity. Turn this on if
+                  the platform should reduce the available quantity as orders are accepted.
+                </Text>
               </View>
               <Switch
                 value={trackInventory}

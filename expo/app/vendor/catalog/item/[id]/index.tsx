@@ -97,12 +97,12 @@ export default function ItemDetailsScreen() {
 
   const inventoryLabel = (() => {
     if (!item.trackInventory) {
-      if (item.isOutOfStock) return { text: 'Out of stock', color: Colors.error };
+      if (item.isOutOfStock) return { text: 'Unavailable', color: Colors.error };
       return null;
     }
     const qty = item.inventoryQuantity ?? 0;
     const threshold = item.lowStockThreshold ?? 5;
-    if (qty === 0) return { text: 'Out of stock', color: Colors.error };
+    if (qty === 0) return { text: 'Unavailable', color: Colors.error };
     if (qty <= threshold)
       return { text: `Only ${qty} left`, color: '#D97706' };
     return { text: `${qty} in stock`, color: Colors.success };

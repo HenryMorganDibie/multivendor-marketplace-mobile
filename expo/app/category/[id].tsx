@@ -113,7 +113,7 @@ export default function CategoryItemsScreen() {
           <Image source={{ uri: item.image }} style={styles.itemImage} />
           {!item.inStock && (
             <View style={styles.outOfStockBadge}>
-              <Text style={styles.outOfStockText}>Out of stock</Text>
+              <Text style={styles.outOfStockText}>Unavailable</Text>
             </View>
           )}
         </View>

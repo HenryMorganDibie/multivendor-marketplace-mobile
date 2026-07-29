@@ -184,10 +184,12 @@ export default function StorefrontCatalog({
     return (
       <TouchableOpacity
         key={item.id}
-        style={[styles.listItem, !item.inStock && styles.listItemDisabled]}
+        // Deliberately still tappable when unavailable. A customer may want to
+        // read the description, check pricing, favourite it or message the
+        // vendor about it. Only ordering is blocked, not viewing.
+        style={[styles.listItem, !item.inStock && styles.listItemDimmed]}
         onPress={() => onItemPress(item.id)}
-        activeOpacity={item.inStock ? 0.8 : 1}
-        disabled={!item.inStock}
+        activeOpacity={0.8}
         testID={`menu-item-${item.id}`}
       >
         <View style={styles.listItemImageContainer}>
@@ -238,7 +240,7 @@ export default function StorefrontCatalog({
             <View style={styles.listItemActions}>
               {!item.inStock && (
                 <View style={styles.unavailableBadge}>
-                  <Text style={styles.unavailableText}>Out of stock</Text>
+                  <Text style={styles.unavailableText}>Unavailable</Text>
                 </View>
               )}
               {item.inStock && !canAddToCart && (
@@ -1163,8 +1165,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     marginBottom: 2,
   },
-  listItemDisabled: {
-    opacity: 0.6,
+  listItemDimmed: {
+    opacity: 0.75,
   },
   listItemImageContainer: {
     position: 'relative' as const,

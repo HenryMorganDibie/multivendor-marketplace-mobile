@@ -54,7 +54,7 @@ function getItemTag(item: CatalogItem): ItemTag | null {
 }
 
 function getTagLabel(tag: ItemTag, item: CatalogItem): string {
-  if (tag === 'out_of_stock') return 'Out of stock';
+  if (tag === 'out_of_stock') return 'Unavailable';
   if (tag === 'low_stock') {
     if (item.trackInventory && item.inventoryQuantity !== undefined) {
       return `Only ${item.inventoryQuantity} left`;
@@ -106,7 +106,7 @@ export default function VendorCatalogScreen() {
         formatPriceWithCommas(item.salePrice ?? item.basePrice, currencySymbol),
         String(item.salePrice ?? item.basePrice),
         item.isHidden ? 'hidden' : 'visible',
-        item.isOutOfStock ? 'out of stock' : 'in stock',
+        item.isOutOfStock ? 'unavailable' : 'available',
         item.isFeatured ? 'featured bestseller' : '',
         tag ? getTagLabel(tag, item) : '',
       ];

@@ -136,7 +136,7 @@ export default function StorefrontPreviewScreen() {
             <View style={styles.listItemActions}>
               {!item.inStock ? (
                 <View style={styles.unavailableBadge}>
-                  <Text style={styles.unavailableText}>Out of stock</Text>
+                  <Text style={styles.unavailableText}>Unavailable</Text>
                 </View>
               ) : (
                 <View style={[styles.listAddButton, styles.listAddButtonDisabled]}>
