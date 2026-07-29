@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { SOCIAL_AUTH_ENABLED } from '@/constants/authProviders';
 import { Image } from 'react-native';
 
 function isEmail(value: string): boolean {
@@ -136,6 +137,13 @@ export default function LoginScreen() {
               <Text style={styles.subtitle}>Log in to your the platform account</Text>
             </View>
 
+            {/* Hidden until the providers are actually implemented, see
+                constants/authProviders.ts. These were wired to a placeholder
+                that faked a sign-in, so they are gated rather than deleted:
+                the markup is correct and returns as-is once the real
+                credentials flow is in place. */}
+            {SOCIAL_AUTH_ENABLED ? (
+              <>
             <TouchableOpacity
               style={styles.appleButton}
               activeOpacity={0.8}
@@ -175,6 +183,8 @@ export default function LoginScreen() {
               <Text style={styles.dividerText}>OR</Text>
               <View style={styles.dividerLine} />
             </View>
+              </>
+            ) : null}
 
             <View style={styles.form}>
               <View style={styles.inputSection}>

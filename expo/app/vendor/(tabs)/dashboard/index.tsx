@@ -37,7 +37,8 @@ import { useVerification, type VerificationStatus } from '@/contexts/Verificatio
 import { formatCompactCurrency, formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
 import { mockVendor } from '@/mocks/vendorData';
 import { useTodaysNote } from '@/contexts/TodaysNoteContext';
-import { mockOrders } from '@/mocks/ordersData';
+import { useOrders } from '@/contexts/OrdersContext';
+import type { Order } from '@/mocks/ordersData';
 import TodaysNoteModal from '@/components/TodaysNoteModal';
 import VendorSetupChecklist from '@/components/VendorSetupChecklist';
 import { useVendorOnboarding } from '@/contexts/VendorOnboardingContext';
@@ -715,16 +716,18 @@ export default function VendorDashboardScreen() {
   };
 
 
-  const pendingOrders = mockOrders.filter(o => o.status === 'requested');
-  const pendingPaymentOrders = mockOrders.filter(o => o.paymentStatus === 'payment_pending');
+  const { orders: vendorOrders } = useOrders();
 
-  const todayOrders = mockOrders.filter(o => {
+  const pendingOrders = vendorOrders.filter(o => o.status === 'requested');
+  const pendingPaymentOrders = vendorOrders.filter(o => o.paymentStatus === 'payment_pending');
+
+  const todayOrders = vendorOrders.filter(o => {
     const orderDate = new Date(o.orderDate);
     const today = new Date();
     return orderDate.toDateString() === today.toDateString();
   });
 
-  const completedOrders = mockOrders.filter(o => o.status === 'completed');
+  const completedOrders = vendorOrders.filter(o => o.status === 'completed');
 
   // Revenue = money the vendor has CONFIRMED receiving. Orders contribute
   // their total when completed; standalone invoices contribute their
@@ -734,7 +737,7 @@ export default function VendorDashboardScreen() {
   // BACKEND_INTEGRATION_GUIDE.md "Invoice payment double-counting".
   const { invoices } = useInvoices();
   const linkedOrderIds = useMemo(
-    () => new Set(mockOrders.map((o) => o.id)),
+    () => new Set(vendorOrders.map((o) => o.id)),
     [],
   );
   const todayStr = new Date().toDateString();
@@ -754,7 +757,7 @@ export default function VendorDashboardScreen() {
   const orderRevenueTotal = completedOrders.reduce((sum, o) => sum + o.total, 0);
   const totalRevenue = orderRevenueTotal + invoiceRevenueAll;
 
-  const _totalOrders = mockOrders.length;
+  const _totalOrders = vendorOrders.length;
 
   const todayRevenue =
     todayOrders
@@ -785,7 +788,7 @@ export default function VendorDashboardScreen() {
     const terminalStatuses = ['completed', 'cancelled', 'rejected', 'expired'];
     const today = new Date();
     const todayStr = today.toDateString();
-    return mockOrders
+    return vendorOrders
       .filter(o => {
         if (terminalStatuses.includes(o.status)) return false;
         const scheduled = o.scheduledDate ? new Date(o.scheduledDate) : new Date(o.orderDate);
@@ -816,7 +819,7 @@ export default function VendorDashboardScreen() {
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    return mockOrders
+    return vendorOrders
       .filter(o => {
         if (terminalStatuses.includes(o.status)) return false;
         const scheduled = o.scheduledDate ? new Date(o.scheduledDate) : new Date(o.orderDate);
@@ -834,7 +837,7 @@ export default function VendorDashboardScreen() {
       .slice(0, 3);
   }, []);
 
-  const navigateToOrder = useCallback((order: typeof mockOrders[0]) => {
+  const navigateToOrder = useCallback((order: Order) => {
     if (order.orderSource === 'external') {
       router.push({
         pathname: '/vendor/orders/external/[orderId]' as any,

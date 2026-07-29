@@ -1,6 +1,7 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { mockOrders, type Order, type OrderStatus, type OrderEvent, type OrderSnapshot, type PaymentProof } from '@/mocks/ordersData';
+import { useAuth } from '@/contexts/AuthContext';
 
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   requested: ['accepted', 'rejected', 'cancelled', 'expired'],
@@ -16,8 +17,42 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 
 const TERMINAL_STATUSES: OrderStatus[] = ['completed', 'rejected', 'cancelled', 'expired'];
 
+/**
+ * Orders are still seeded demo data rather than Firestore, and those orders all
+ * belong to the built-in demo vendors. Handing them to whoever is signed in
+ * meant a vendor who registered a minute ago opened their dashboard to other
+ * people's orders, other people's customers and revenue they had never earned.
+ *
+ * The seed is therefore scoped to the accounts it was written for. Nothing ever
+ * signs in *as* 'v1' (that id exists only inside the mock data), so the local
+ * test logins are mapped onto it, otherwise the demo orders would be
+ * unreachable for everyone. A real Firebase uid matches nothing and starts
+ * empty, which is both accurate for a new vendor and what the Firestore
+ * listener will produce once orders are wired.
+ */
+const DEMO_ORDER_ACCOUNTS: Record<string, string> = {
+  '2': 'v1', // vendor@test.com
+  v1: 'v1',
+};
+
+function seedOrdersFor(accountId: string | undefined): Order[] {
+  if (!accountId) return [];
+  const demoVendorId = DEMO_ORDER_ACCOUNTS[accountId];
+  return demoVendorId ? mockOrders.filter((o) => o.vendorId === demoVendorId) : [];
+}
+
 export const [OrdersProvider, useOrders] = createContextHook(() => {
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const { user } = useAuth();
+  const accountId = user?.id;
+
+  const [orders, setOrders] = useState<Order[]>(() => seedOrdersFor(accountId));
+
+  // Auth resolves after the first render, and the signed-in account changes
+  // without this provider unmounting, so the seed is re-evaluated on identity
+  // change rather than only at init.
+  useEffect(() => {
+    setOrders(seedOrdersFor(accountId));
+  }, [accountId]);
   const [orderPendingChanges, setOrderPendingChangesState] = useState<Record<string, boolean>>({});
 
   const getOrder = useCallback((id: string): Order | undefined => {
