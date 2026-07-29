@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ShoppingBag, Store } from 'lucide-react-native';
+import { ShoppingBag, Store, Check } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 
 type RoleOption = 'customer' | 'vendor' | null;
@@ -86,7 +86,7 @@ export default function CreateAccountScreen() {
               <View style={styles.optionTextWrap}>
                 <Text style={styles.optionTitle}>Customer</Text>
                 <Text style={styles.optionDescription}>
-                  Shop from verified vendors and manage your purchases
+                  Discover vendors, place orders and manage your purchases.
                 </Text>
               </View>
             </TouchableOpacity>
@@ -113,7 +113,7 @@ export default function CreateAccountScreen() {
               <View style={styles.optionTextWrap}>
                 <Text style={styles.optionTitle}>Vendor</Text>
                 <Text style={styles.optionDescription}>
-                  Sell products, chat with customers, and manage orders
+                  Showcase your business, manage orders and chat with customers.
                 </Text>
               </View>
             </TouchableOpacity>
