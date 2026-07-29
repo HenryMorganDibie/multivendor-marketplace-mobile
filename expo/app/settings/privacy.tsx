@@ -26,7 +26,7 @@ export default function PrivacyScreen() {
   };
 
   const handleOpenTerms = () => {
-    console.log('Opening Terms of Service');
+    console.log('Opening Terms of Use');
     Linking.openURL('https://the platform.com/terms');
   };
 
@@ -103,7 +103,7 @@ export default function PrivacyScreen() {
               onPress={handleOpenTerms}
               activeOpacity={0.7}
             >
-              <Text style={styles.linkLabel}>Terms of Service</Text>
+              <Text style={styles.linkLabel}>Terms of Use</Text>
               <ExternalLink size={18} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>

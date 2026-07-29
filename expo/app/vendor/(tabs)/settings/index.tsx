@@ -266,7 +266,7 @@ export default function VendorSettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>LEGAL</Text>
           <View style={styles.glassCard}>
-            {renderSettingsRow('Terms of Service & Privacy Policy', () => handleItemPress('terms'), true)}
+            {renderSettingsRow('Terms of Use & Privacy Policy', () => handleItemPress('terms'), true)}
           </View>
         </View>
 

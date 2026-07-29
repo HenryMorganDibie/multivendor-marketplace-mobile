@@ -35,7 +35,7 @@ interface PublicSiteContentResponse {
 /** Route slug → backend section id, plus the title shown in the header. The
  * backend rejects unknown section ids, so this map is also the allowlist. */
 const LEGAL_SECTIONS: Record<string, { sectionId: string; title: string }> = {
-  terms: { sectionId: 'terms-of-service', title: 'Terms of Service' },
+  terms: { sectionId: 'terms-of-service', title: 'Terms of Use' },
   privacy: { sectionId: 'privacy-policy', title: 'Privacy Policy' },
   'vendor-agreement': { sectionId: 'vendor-terms', title: 'Vendor Agreement' },
   'customer-terms': { sectionId: 'customer-terms', title: 'Customer Terms' },

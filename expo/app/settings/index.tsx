@@ -206,7 +206,7 @@ export default function SettingsScreen() {
           <SettingsRow
             icon={<FileText size={16} color={Colors.textSecondary} strokeWidth={2} />}
             iconBg={Colors.surface}
-            label="Terms of Service & Privacy Policy"
+            label="Terms of Use & Privacy Policy"
             onPress={() => router.push('/settings/privacy' as any)}
             showDivider={false}
           />
