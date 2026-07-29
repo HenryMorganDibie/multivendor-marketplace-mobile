@@ -10,6 +10,10 @@
       "ios": {
         "simulator": true,
         "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_USE_FIREBASE_EMULATOR": "true",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "demo-platform"
       }
     },
     "android-development": {
@@ -17,6 +21,10 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_USE_FIREBASE_EMULATOR": "true",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "demo-platform"
       }
     },
     "android-preview": {
@@ -28,6 +36,17 @@
     "production": {
       "autoIncrement": true,
       "channel": "production"
+    },
+    "ios-simulator-standalone": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": true,
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_USE_FIREBASE_EMULATOR": "true",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "demo-platform"
+      }
     }
   },
   "submit": {

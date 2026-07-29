@@ -82,8 +82,37 @@ toolkit and nothing imports `MapView` or `react-native-maps` anywhere.
 **3. Duplicate copies of `expo-constants` and `expo-font`** from an inconsistent
 `node_modules` tree. Cleared with a clean reinstall.
 
+**4. No Firebase configuration reached the build.** `.env` is gitignored, and
+EAS honours `.gitignore` when deciding what to upload, so the file never
+reached the build server. Without `EXPO_PUBLIC_USE_FIREBASE_EMULATOR` the app
+takes its production branch and calls `initializeApp` with an undefined
+`apiKey`, which throws on the first auth call, before any screen renders.
+
+This cannot happen on web, where Metro reads `.env` straight off the disk it is
+running on. Fixed by setting the values in each build profile's `env` block in
+`eas.json`, which is committed, rather than relying on a file that is
+deliberately not.
+
 `npx expo-doctor` now reports **18/18 checks passed**, from two failing checks
 before this work.
+
+## A note on reaching the backend from a native build
+
+`lib/firebase.ts` already selects the emulator host per platform:
+
+```ts
+const emulatorHost = Platform.OS === "android" ? "10.0.2.2" : "127.0.0.1";
+```
+
+`10.0.2.2` is how the Android emulator reaches the host machine's loopback, and
+the iOS Simulator shares the host's network stack, so `127.0.0.1` is correct
+there. Both therefore reach a Firebase emulator running on the same machine.
+
+A **physical device** reaches neither, because its own loopback is not the
+development machine. Testing end-to-end flows on real hardware needs the
+development machine's LAN address, or a deployed backend. A simulator or
+emulator build handed to someone else will render the interface but cannot
+complete a registration against a backend running on a different computer.
 
 ## First build results
 
