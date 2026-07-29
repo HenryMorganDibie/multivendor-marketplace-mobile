@@ -5,16 +5,36 @@ const NEW_ITEM_DAYS = 14;
 const POPULAR_TOP_PERCENTILE = 0.8;
 const TRENDING_DAYS = 14;
 
+/**
+ * What a vendor may put on their own item.
+ *
+ * "Best Seller" was here and has been removed. The other three are the vendor
+ * saying something about their own product, which is theirs to say. "Best
+ * Seller" is a claim about sales that nobody checks, so a brand-new item with
+ * no orders could carry it, and a customer reading it has no way to tell.
+ *
+ * Sales are already described honestly by the Popular system tag, which is
+ * computed from real order counts in computeSystemTags below and cannot be set
+ * by hand. That leaves nothing for a self-applied version to add.
+ *
+ * 'best_seller' stays in the HighlightLabel type and in
+ * getHighlightLabelDisplay so items already carrying it keep rendering. It just
+ * cannot be chosen again.
+ */
 export const HIGHLIGHT_LABEL_OPTIONS: { value: HighlightLabel; label: string; emoji: string }[] = [
   { value: 'chefs_pick', label: "Chef's Pick", emoji: '👨‍🍳' },
   { value: 'spicy', label: 'Spicy', emoji: '🌶️' },
   { value: 'limited', label: 'Limited', emoji: '⏳' },
-  { value: 'best_seller', label: 'Best Seller', emoji: '🏆' },
 ];
+
+const RETIRED_HIGHLIGHT_LABELS: Record<string, { label: string; emoji: string }> = {
+  // No longer selectable, but still rendered for items that already carry it.
+  best_seller: { label: 'Best Seller', emoji: '🏆' },
+};
 
 export function getHighlightLabelDisplay(label: HighlightLabel): { label: string; emoji: string } {
   const found = HIGHLIGHT_LABEL_OPTIONS.find((o) => o.value === label);
-  return found ?? { label: 'Label', emoji: '•' };
+  return found ?? RETIRED_HIGHLIGHT_LABELS[label] ?? { label: 'Label', emoji: '•' };
 }
 
 export function isNewItem(createdAt?: string): boolean {
