@@ -1,8 +1,35 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useCallback, useMemo, useEffect } from 'react';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { mockOrders, type Order, type OrderStatus, type OrderEvent, type OrderSnapshot, type PaymentProof } from '@/mocks/ordersData';
 import { useAuth } from '@/contexts/AuthContext';
+import { auth, db, callable } from '@/lib/firebase';
+import { mapOrderDoc } from '@/lib/orders/mapOrderDoc';
 
+/**
+ * The transitions this app will attempt.
+ *
+ * These are wider than the backend's, and deliberately left that way rather
+ * than narrowed to match, because the two tables answer different questions.
+ * This one decides which buttons a screen offers; the server decides what is
+ * actually allowed, per role, and refuses anything else.
+ *
+ * The gaps are worth knowing, because a button that leads to a server refusal
+ * is a bug the user experiences:
+ *
+ *   'confirmed' and 'awaiting_customer_update' have no vendor transition on the
+ *   backend at all. Its vendor path is requested → accepted → in_progress →
+ *   completed. Offering a vendor a "confirm" action would call updateOrderStatus
+ *   and be refused with "Vendors cannot transition from accepted to confirmed".
+ *
+ *   'cancelled' is a customer action from requested or accepted, never a vendor
+ *   one. A vendor cancelling is a rejection.
+ *
+ * Narrowing this table is not a one-line change: several screens branch on these
+ * states, and cutting them here would silently remove actions from those screens
+ * rather than fix them. Recorded here so the next person to touch order status
+ * knows the app is the permissive side, not the authority.
+ */
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   requested: ['accepted', 'rejected', 'cancelled', 'expired'],
   accepted: ['confirmed', 'cancelled'],
@@ -49,10 +76,59 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
 
   // Auth resolves after the first render, and the signed-in account changes
   // without this provider unmounting, so the seed is re-evaluated on identity
-  // change rather than only at init.
+  // change rather than only at init. This only ever produces anything for the
+  // built-in demo logins; a real Firebase account gets an empty list here and
+  // is then filled by the listener below.
   useEffect(() => {
     setOrders(seedOrdersFor(accountId));
   }, [accountId]);
+
+  /**
+   * Live orders for whoever is signed in.
+   *
+   * Two different queries, because the rules allow two different reads: a
+   * customer may read orders where customerId is their uid, a vendor may read
+   * orders where vendorId matches their claim. Querying the wrong field returns
+   * a permission error rather than an empty list, so the role has to be decided
+   * before the query is built.
+   *
+   * On failure the list is emptied rather than left showing the seed. A vendor
+   * acting on an order that does not exist is worse than a vendor seeing none.
+   */
+  useEffect(() => {
+    let unsubscribeOrders: (() => void) | null = null;
+
+    const unsubscribeAuth = auth.onIdTokenChanged(async (fbUser) => {
+      unsubscribeOrders?.();
+      unsubscribeOrders = null;
+
+      if (!fbUser) return;
+      const token = await fbUser.getIdTokenResult();
+      const role = token.claims.role as string | undefined;
+      const vendorId = token.claims.vendorId as string | undefined;
+
+      const ordersQuery =
+        role === 'vendor' && vendorId
+          ? query(collection(db, 'orders'), where('vendorId', '==', vendorId))
+          : query(collection(db, 'orders'), where('customerId', '==', fbUser.uid));
+
+      unsubscribeOrders = onSnapshot(
+        ordersQuery,
+        (snap) => {
+          setOrders(snap.docs.map((d) => mapOrderDoc(d.id, d.data())));
+        },
+        (err) => {
+          console.error('[Orders] Live subscription failed:', err);
+          setOrders([]);
+        },
+      );
+    });
+
+    return () => {
+      unsubscribeOrders?.();
+      unsubscribeAuth();
+    };
+  }, []);
   const [orderPendingChanges, setOrderPendingChangesState] = useState<Record<string, boolean>>({});
 
   const getOrder = useCallback((id: string): Order | undefined => {
@@ -68,6 +144,24 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     return allowed.includes(to);
   }, []);
 
+  /**
+   * Moves an order to a new status.
+   *
+   * The backend is the authority here. updateOrderStatus on the server checks
+   * the transition against its own state machine, checks the caller actually
+   * owns the order, writes the status inside a transaction, and applies the side
+   * effects: releasing reserved stock on a cancellation, counting the sale and
+   * generating a receipt on completion. None of that can be done from the app.
+   *
+   * The local update below stays as an optimistic one. The Firestore listener
+   * will overwrite it with the real document a moment later, so this exists only
+   * so the row does not sit still for a round trip. If the call fails, the
+   * listener's next snapshot puts the old status back.
+   *
+   * The signature stays synchronous and boolean-returning because eighteen
+   * screens call it that way. It reports whether the transition was *accepted*
+   * for sending, not whether the server has finished applying it.
+   */
   const updateOrderStatus = useCallback((
     orderId: string,
     newStatus: OrderStatus,
@@ -127,6 +221,22 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
       })
     );
 
+    // Demo logins exist only in local seed data and have no backend order to
+    // update, so the optimistic write is the whole story for them.
+    if (!DEMO_ORDER_ACCOUNTS[accountId ?? '']) {
+      const send = callable<
+        { orderId: string; newStatus: string; reason?: string },
+        { success: true }
+      >('updateOrderStatus');
+      void send({ orderId, newStatus, reason: reason ?? reasonText })
+        .catch((err) => {
+          // Deliberately not reverting by hand. The listener is the source of
+          // truth and its next snapshot restores whatever the server actually
+          // holds, which is more reliable than guessing the prior state here.
+          console.error('[Orders] Status update rejected by the backend:', err);
+        });
+    }
+
     console.log(`[OrdersContext] Status updated: ${orderId} → ${newStatus}`);
     return true;
   }, [orders, isValidTransition]);
@@ -165,10 +275,56 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     return true;
   }, [orders]);
 
+  /**
+   * Places a real order.
+   *
+   * createOrder on the server does the work that cannot be trusted to a client:
+   * it reprices every line against the live catalogue, refuses items that are
+   * hidden or still under moderation, reserves stock inside a transaction, and
+   * allocates the public order number. A client-side total is a suggestion; the
+   * server's is the price.
+   *
+   * The optimistic row is inserted first so the screen moves immediately, then
+   * replaced by the real document when the listener fires. It carries the
+   * client-side id, which the server will not reuse, so the temporary row is
+   * removed rather than left as a duplicate alongside the real one.
+   */
   const addOrder = useCallback((order: Order) => {
-    console.log(`[OrdersContext] Adding new order: ${order.id}`);
     setOrders((prev) => [order, ...prev]);
-  }, []);
+
+    if (DEMO_ORDER_ACCOUNTS[accountId ?? '']) return;
+
+    // Two steps, because the backend deliberately splits them. repriceCart
+    // prices the basket against the live catalogue and persists it, returning a
+    // cartId; createOrderFromCart then turns that priced cart into an order.
+    // The order is never built from client-supplied prices, which is the point:
+    // a total that arrived from a device is a suggestion, not a price.
+    const reprice = callable<
+      Record<string, unknown>,
+      { success: true; cartId: string; total: number }
+    >('repriceCart');
+    const create = callable<
+      { cartId: string },
+      { success: true; orderId: string; publicOrderId: string }
+    >('createOrderFromCart');
+
+    void reprice({
+      vendorId: order.vendorId,
+      items: order.items.map((i) => ({ itemId: i.id, quantity: i.quantity })),
+      fulfillmentType: order.fulfillmentType === 'Pickup' ? 'pickup' : 'delivery',
+      orderNote: order.orderNote,
+    })
+      .then((priced) => create({ cartId: priced.data.cartId }))
+      .then(() => {
+        // The listener now holds the authoritative row under the server's id.
+        // Dropping the placeholder avoids the same order appearing twice.
+        setOrders((prev) => prev.filter((o) => o.id !== order.id));
+      })
+      .catch((err) => {
+        console.error('[Orders] createOrder rejected:', err);
+        setOrders((prev) => prev.filter((o) => o.id !== order.id));
+      });
+  }, [accountId]);
 
   const markCustomerPaid = useCallback((orderId: string, proofs?: PaymentProof[]): boolean => {
     const order = orders.find((o) => o.id === orderId);
@@ -224,7 +380,20 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
         };
       })
     );
-    console.log(`[OrdersContext] Payment proof added: ${orderId}`);
+
+    // The vendor has to see the proof to review it, so it cannot stay on the
+    // customer's device. submitPaymentProof records it against the order and
+    // notifies the vendor.
+    if (!DEMO_ORDER_ACCOUNTS[accountId ?? '']) {
+      const submit = callable<Record<string, unknown>, { success: true }>('submitPaymentProof');
+      void submit({
+        orderId,
+        proofType: proof.type,
+        proofUrl: proof.uri,
+      }).catch((err) => {
+        console.error('[Orders] submitPaymentProof rejected:', err);
+      });
+    }
     return true;
   }, [orders]);
 
