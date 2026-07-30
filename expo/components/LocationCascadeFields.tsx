@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,37 @@ import {
   TextInput,
   FlatList,
 } from 'react-native';
-import { ChevronDown, Search, Check } from 'lucide-react-native';
-import { COUNTRIES } from '@/constants/countries';
+import { ChevronDown, Search, Check, MapPin } from 'lucide-react-native';
 import type { CountryInfo } from '@/constants/countries';
-import { getStatesByCountry, getStateLabel } from '@/constants/states';
+import { getStateLabel } from '@/constants/states';
 import type { StateInfo } from '@/constants/states';
-import { getAreasByRegion } from '@/constants/areas';
 import type { AreaInfo } from '@/constants/areas';
+import { useLocationCatalogue } from '@/hooks/useLocationCatalogue';
+import ListStateView from '@/components/ListStateView';
+
+/**
+ * The lists come from the backend now, not from constants/countries.ts and
+ * constants/areas.ts. Those held 17 countries and 134 areas, against 196
+ * countries in the catalogue, so a vendor almost anywhere could not register.
+ *
+ * The backend shapes are mapped onto the local CountryInfo/StateInfo/AreaInfo
+ * types rather than replacing them, so every selection handler and modal below
+ * keeps working unchanged. countryCode maps to code, stateId to regionId.
+ */
+
+/**
+ * Placeholder rows while a list loads. Shaped like the real rows so the sheet
+ * does not jump when the data arrives.
+ */
+function LocationListSkeleton() {
+  return (
+    <View style={styles.skeletonWrap}>
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <View key={i} style={styles.skeletonRow} />
+      ))}
+    </View>
+  );
+}
 
 /**
  * Canonical location shape stored across the app. Matches the backend structure.
@@ -80,17 +104,64 @@ export default function LocationCascadeFields({
   testIDPrefix = 'location',
   countryOnly = false,
 }: LocationCascadeFieldsProps) {
-  const selectedCountry = useMemo<CountryInfo | null>(
-    () => (value?.countryCode ? COUNTRIES.find(c => c.code === value.countryCode) ?? null : null),
-    [value?.countryCode],
+  const catalogue = useLocationCatalogue();
+
+  // Countries load as soon as the field is on screen rather than when the modal
+  // opens, so the chosen country's name can be shown for an already-saved value
+  // without the user having to open the picker first.
+  useEffect(() => {
+    catalogue.ensureCountries();
+  }, [catalogue]);
+
+  // States and areas are fetched only once their parent is chosen. Loading every
+  // area for 196 countries to populate one dropdown would be tens of thousands
+  // of records for a list of a few dozen.
+  useEffect(() => {
+    if (value?.countryCode) catalogue.ensureStates(value.countryCode);
+  }, [value?.countryCode, catalogue]);
+
+  useEffect(() => {
+    if (value?.stateCode) catalogue.ensureAreas(value.stateCode);
+  }, [value?.stateCode, catalogue]);
+
+  const countryState = catalogue.countries;
+  const stateState = catalogue.statesFor(value?.countryCode ?? '');
+  const areaState = catalogue.areasFor(value?.stateCode ?? '');
+
+  // Backend shapes mapped onto the local ones, so nothing downstream changes.
+  const countryList = useMemo<CountryInfo[]>(
+    () => countryState.items.map((c) => ({
+      code: c.countryCode,
+      name: c.name,
+      currencyCode: c.currencyCode ?? '',
+      currencySymbol: '',
+      currencyName: '',
+      flag: c.flagEmoji ?? '',
+    })),
+    [countryState.items],
   );
-  const availableStates = selectedCountry ? getStatesByCountry(selectedCountry.code) : [];
+
+  const stateList = useMemo<StateInfo[]>(
+    () => stateState.items.map((st) => ({ name: st.name, regionId: st.stateId })),
+    [stateState.items],
+  );
+
+  const areaList = useMemo<AreaInfo[]>(
+    () => areaState.items.map((a) => ({ name: a.name, regionId: a.locationId })),
+    [areaState.items],
+  );
+
+  const selectedCountry = useMemo<CountryInfo | null>(
+    () => (value?.countryCode ? countryList.find(c => c.code === value.countryCode) ?? null : null),
+    [value?.countryCode, countryList],
+  );
+  const availableStates = stateList;
   const stateLabel = selectedCountry ? getStateLabel(selectedCountry.code) : 'State / Province';
   const selectedState = useMemo<StateInfo | null>(
     () => (value?.stateCode ? availableStates.find(s => s.regionId === value.stateCode) ?? null : null),
     [value?.stateCode, availableStates],
   );
-  const availableAreas = selectedState ? getAreasByRegion(selectedState.regionId) : [];
+  const availableAreas = areaList;
   const hasAreas = availableAreas.length > 0;
   const selectedArea = useMemo<AreaInfo | null>(
     () => (value?.areaName ? availableAreas.find(a => a.name === value.areaName) ?? null : null),
@@ -105,8 +176,8 @@ export default function LocationCascadeFields({
   const [areaSearch, setAreaSearch] = useState<string>('');
 
   const filteredCountries = countrySearch.trim()
-    ? COUNTRIES.filter(c => c.name.toLowerCase().includes(countrySearch.toLowerCase()))
-    : COUNTRIES;
+    ? countryList.filter(c => c.name.toLowerCase().includes(countrySearch.toLowerCase()))
+    : countryList;
   const filteredStates = stateSearch.trim()
     ? availableStates.filter(s => s.name.toLowerCase().includes(stateSearch.toLowerCase()))
     : availableStates;
@@ -130,14 +201,18 @@ export default function LocationCascadeFields({
 
   const handleSelectState = useCallback((state: StateInfo) => {
     if (!selectedCountry) return;
-    const stateAreas = getAreasByRegion(state.regionId);
+    // The new state's areas have not been fetched yet, so there is nothing to
+    // check a previous area against. Clearing it is correct regardless: an area
+    // from the old state can never be valid under the new one.
     onChange({
       countryCode: selectedCountry.code,
       countryName: selectedCountry.name,
       stateCode: state.regionId,
       stateName: state.name,
-      // When a state has no listed areas, the state itself anchors the area id.
-      areaId: stateAreas.length > 0 ? '' : state.regionId,
+      // Left empty rather than falling back to the state id. Whether this state
+      // has any areas is not known until they load, and the effect above will
+      // fetch them; the area step stays hidden if the answer is none.
+      areaId: '',
       areaName: '',
     });
     setShowStateModal(false);
@@ -262,6 +337,16 @@ export default function LocationCascadeFields({
       )}
 
       {renderModal(showCountryModal, 'Select Country', countrySearch, setCountrySearch, () => { setShowCountryModal(false); setCountrySearch(''); }, (
+<ListStateView
+          isLoading={countryState.loading}
+          isError={!!countryState.error}
+          isEmpty={filteredCountries.length === 0}
+          onRetry={() => catalogue.retryCountries()}
+          emptyIcon={<MapPin size={28} color="#FF8C42" strokeWidth={1.6} />}
+          emptyTitle={countrySearch.trim() ? 'Nothing matched your search' : 'No countries available'}
+          emptyDescription={countrySearch.trim() ? 'Try a different spelling.' : undefined}
+          loadingSkeleton={<LocationListSkeleton />}
+        >
         <FlatList
           data={filteredCountries}
           keyExtractor={(item) => item.code}
@@ -282,9 +367,20 @@ export default function LocationCascadeFields({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.modalList}
         />
+        </ListStateView>
       ))}
 
       {renderModal(showStateModal, `Select ${stateLabel}`, stateSearch, setStateSearch, () => { setShowStateModal(false); setStateSearch(''); }, (
+<ListStateView
+          isLoading={stateState.loading}
+          isError={!!stateState.error}
+          isEmpty={filteredStates.length === 0}
+          onRetry={() => catalogue.retryStates(value?.countryCode ?? '')}
+          emptyIcon={<MapPin size={28} color="#FF8C42" strokeWidth={1.6} />}
+          emptyTitle={stateSearch.trim() ? 'Nothing matched your search' : 'No states listed for this country'}
+          emptyDescription={stateSearch.trim() ? 'Try a different spelling.' : undefined}
+          loadingSkeleton={<LocationListSkeleton />}
+        >
         <FlatList
           data={filteredStates}
           keyExtractor={(item) => item.regionId}
@@ -302,9 +398,20 @@ export default function LocationCascadeFields({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.modalList}
         />
+        </ListStateView>
       ))}
 
       {renderModal(showAreaModal, 'Select Area', areaSearch, setAreaSearch, () => { setShowAreaModal(false); setAreaSearch(''); }, (
+<ListStateView
+          isLoading={areaState.loading}
+          isError={!!areaState.error}
+          isEmpty={filteredAreas.length === 0}
+          onRetry={() => catalogue.retryAreas(value?.stateCode ?? '')}
+          emptyIcon={<MapPin size={28} color="#FF8C42" strokeWidth={1.6} />}
+          emptyTitle={areaSearch.trim() ? 'Nothing matched your search' : 'No areas listed for this state'}
+          emptyDescription={areaSearch.trim() ? 'Try a different spelling.' : undefined}
+          loadingSkeleton={<LocationListSkeleton />}
+        >
         <FlatList
           data={filteredAreas}
           keyExtractor={(item) => item.name}
@@ -322,6 +429,7 @@ export default function LocationCascadeFields({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.modalList}
         />
+        </ListStateView>
       ))}
     </View>
   );
@@ -341,6 +449,16 @@ const styles = StyleSheet.create({
   countryRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, flex: 1 },
   countryFlag: { fontSize: 20 },
   inputError: { borderColor: '#DC2626' },
+  skeletonWrap: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    gap: 12,
+  },
+  skeletonRow: {
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+  },
   errorText: { fontSize: 13, color: '#DC2626', marginTop: 6, paddingHorizontal: 4 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' as const },
   modalContainer: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', paddingTop: 8 },
