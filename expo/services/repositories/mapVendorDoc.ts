@@ -1,0 +1,106 @@
+import type { Vendor } from '@/mocks/vendorData';
+
+/**
+ * Turns a Firestore vendor document into the Vendor shape the app already uses.
+ *
+ * The customer-facing surfaces — home, explore, all-vendors, storefront — read
+ * through this, so the translation lives here rather than in each screen.
+ *
+ * The two shapes disagree in a few places that matter:
+ *
+ *   - the backend keeps location under `location` or `businessLocation`
+ *     depending on when the vendor registered; both are read, newest first
+ *   - `isVerified` on the backend is the verification decision, which is what
+ *     the app's `verified` badge means
+ *   - the backend has no notion of "open now"; opening hours live on the vendor
+ *     document and are evaluated here rather than stored
+ */
+
+type Timestampish = { toDate: () => Date } | { seconds: number } | string | null | undefined;
+
+function toIso(value: Timestampish): string | undefined {
+  if (!value) return undefined;
+  if (typeof value === 'string') return value;
+  if (typeof (value as { toDate?: unknown }).toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  const seconds = (value as { seconds?: number }).seconds;
+  return typeof seconds === 'number' ? new Date(seconds * 1000).toISOString() : undefined;
+}
+
+/**
+ * Whether the vendor is open right now, from their own opening hours.
+ *
+ * Absent hours mean open rather than closed: a vendor who has not filled this
+ * in yet is still trading, and hiding them until they configure a schedule
+ * would punish them for an unfinished profile.
+ */
+function isOpenNow(hours: Record<string, { open?: string; close?: string; closed?: boolean }> | undefined): boolean {
+  if (!hours) return true;
+  const now = new Date();
+  const day = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()];
+  const today = hours[day];
+  if (!today || today.closed) return false;
+  if (!today.open || !today.close) return true;
+
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const [oh, om] = today.open.split(':').map(Number);
+  const [ch, cm] = today.close.split(':').map(Number);
+  const openAt = oh * 60 + (om || 0);
+  const closeAt = ch * 60 + (cm || 0);
+
+  // A closing time earlier than the opening time means it runs past midnight.
+  return closeAt < openAt
+    ? minutes >= openAt || minutes <= closeAt
+    : minutes >= openAt && minutes <= closeAt;
+}
+
+export function mapVendorDoc(id: string, data: Record<string, unknown>): Vendor {
+  // businessLocation is the newer field; location is what older vendors have.
+  const location = (data.businessLocation ?? data.location ?? {}) as Record<string, string>;
+
+  const fulfillmentTypes = Array.isArray(data.fulfillmentTypes)
+    ? (data.fulfillmentTypes as string[])
+    : [];
+
+  return {
+    id,
+    slug: (data.slug as string) ?? (data.username as string) ?? id,
+    username: (data.username as string) ?? '',
+    name: (data.businessName as string) || (data.name as string) || '',
+    category: (data.category as string) ?? '',
+    categoryId: (data.categoryId as string) ?? undefined,
+
+    rating: (data.averageRating as number) ?? 0,
+    reviewCount: (data.ratingCount as number) ?? 0,
+
+    region: location.stateName ?? (data.region as string) ?? '',
+    city: location.areaName ?? (data.city as string) ?? '',
+    area: location.areaName ?? (data.area as string) ?? '',
+    countryCode: (data.countryCode as string) ?? location.countryCode ?? '',
+    country: (data.country as string) ?? location.countryName ?? undefined,
+    state: location.stateName ?? undefined,
+
+    email: (data.email as string) ?? undefined,
+    phone: (data.phoneNumber as string) ?? undefined,
+
+    isVerified: data.isVerified === true,
+    logoImage: (data.logoUrl as string) ?? undefined,
+    bannerImage: (data.coverImageUrl as string) ?? undefined,
+    description: (data.description as string) ?? undefined,
+
+    fulfillmentTypes,
+    // The booleans and the array say the same thing; both are kept because
+    // different screens read different ones.
+    pickup: fulfillmentTypes.includes('pickup'),
+    delivery: fulfillmentTypes.includes('delivery'),
+    shipping: fulfillmentTypes.includes('shipping'),
+
+    isOpenNow: isOpenNow(data.openingHours as Record<string, { open?: string; close?: string; closed?: boolean }> | undefined),
+
+    taxEnabled: data.taxEnabled === true,
+    taxRate: (data.taxRate as number) ?? 0,
+
+    createdAt: toIso(data.createdAt as Timestampish),
+  };
+}
