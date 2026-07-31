@@ -590,6 +590,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           role: 'customer',
           password: 'password',
           status: 'active',
+          // The vendor fixture below has always had this; the customer one did
+          // not, so signing in as customer@test.com looked like a brand-new
+          // account and was sent through Complete your profile and the whole
+          // location flow on every single login.
+          onboardingComplete: true,
         },
         {
           id: '2',
