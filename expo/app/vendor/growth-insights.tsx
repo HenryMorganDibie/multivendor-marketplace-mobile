@@ -374,18 +374,21 @@ function ConversionFunnel({
   ordersPlaced,
   conversionRate,
 }: {
-  visits: number;
+  /** Null when storefront visits are not tracked, which they are not yet. */
+  visits: number | null;
   ordersPlaced: number;
-  conversionRate: number;
+  conversionRate: number | null;
 }) {
   const visitBarAnim = useRef(new Animated.Value(0)).current;
   const orderBarAnim = useRef(new Animated.Value(0)).current;
   const convBarAnim = useRef(new Animated.Value(0)).current;
 
-  const orderRatio = visits > 0 ? ordersPlaced / visits : 0;
-  const convRatio = Math.min(conversionRate / 100, 1);
-  const dropOff1 = visits - ordersPlaced;
-  const dropOff1Pct = visits > 0 ? Math.round(((visits - ordersPlaced) / visits) * 100) : 0;
+  const hasVisitData = visits !== null && conversionRate !== null;
+  const safeVisits = visits ?? 0;
+  const orderRatio = safeVisits > 0 ? ordersPlaced / safeVisits : 0;
+  const convRatio = Math.min((conversionRate ?? 0) / 100, 1);
+  const dropOff1 = safeVisits - ordersPlaced;
+  const dropOff1Pct = safeVisits > 0 ? Math.round(((safeVisits - ordersPlaced) / safeVisits) * 100) : 0;
 
   useEffect(() => {
     Animated.stagger(120, [
@@ -394,6 +397,22 @@ function ConversionFunnel({
       Animated.timing(convBarAnim, { toValue: convRatio, duration: 700, delay: 0, useNativeDriver: false }),
     ]).start();
   }, [visits, ordersPlaced, conversionRate, orderRatio, convRatio, visitBarAnim, orderBarAnim, convBarAnim]);
+
+  // Nothing records a storefront being opened without an order, so a funnel
+  // drawn here would be arithmetic on a number nobody measured. Saying so is
+  // more useful than a chart of zeros, and far more useful than the invented
+  // figure this replaced.
+  if (!hasVisitData) {
+    return (
+      <View style={[styles.storefrontCard, { padding: 16 }]}>
+        <Text style={styles.storefrontLabel}>Storefront visits</Text>
+        <Text style={{ fontSize: 13, color: '#6B7280', lineHeight: 19, marginTop: 6 }}>
+          Visits are not tracked yet, so a conversion rate cannot be shown. You have{' '}
+          {ordersPlaced} order{ordersPlaced === 1 ? '' : 's'} in this period.
+        </Text>
+      </View>
+    );
+  }
 
   const steps = [
     {
@@ -1092,7 +1111,15 @@ function the platformAIInsightsSection({
         IconComponent: AlertTriangle,
       });
     }
-    const planLimit = isLocked ? 0 : plan === 'standard' ? 1 : plan === 'pro' ? 2 : plan === 'pro+' ? 3 : 0;
+    // 1 / 3 / 10 / 25 by plan, which is what the backend enforces. This read
+    // standard→1, pro→2, pro+→3, so Pro and Pro+ vendors were shown a fraction
+    // of the insights they pay for. Flagged as item 4 in the gating audit.
+    const planLimit = isLocked
+      ? 0
+      : plan === 'standard' ? 1
+        : plan === 'pro' ? 10
+          : plan === 'pro+' ? 25
+            : 0;
     combined.push(...insights.slice(0, planLimit));
     combined.sort((a, b) => b.score - a.score);
     return combined;
@@ -2143,18 +2170,27 @@ export default function GrowthInsightsScreen() {
     return { newCustomers, repeatCustomers, repeatRate, total };
   }, [filteredthe platform, filteredExternal]);
 
-  const storefrontMetrics = useMemo(() => {
-    const baseSeed = filteredthe platform.length;
-    const estimatedVisits = baseSeed * 12 + 47;
-    const conversionRate = estimatedVisits > 0
-      ? Math.round((filteredthe platform.length / estimatedVisits) * 100)
-      : 0;
-    return {
-      visits: estimatedVisits,
-      ordersPlaced: filteredthe platform.length,
-      conversionRate,
-    };
-  }, [filteredthe platform]);
+  /**
+   * Storefront visits are not tracked, so they are not reported.
+   *
+   * This used to compute them as `orders * 12 + 47` and derive a conversion
+   * rate from that. A vendor with 4 orders was shown 95 visits and a 4%
+   * conversion rate, all of it arithmetic on a number nobody measured, and a
+   * conversion rate is exactly the sort of figure somebody changes their prices
+   * or photos over.
+   *
+   * Nothing records a storefront being opened without an order, so the honest
+   * answer is that this is unavailable rather than a number. The backend says
+   * the same thing: getBusinessAnalytics returns conversionFunnel and
+   * storefrontPerformance as dataPending for this reason.
+   *
+   * Orders placed is real and stays.
+   */
+  const storefrontMetrics = useMemo(() => ({
+    visits: null,
+    ordersPlaced: filteredthe platform.length,
+    conversionRate: null,
+  }), [filteredthe platform]);
 
   const topSource = useMemo(() => {
     const sorted = allSources.filter(s => s.orders > 0).sort((a, b) => b.orders - a.orders);
@@ -2163,7 +2199,12 @@ export default function GrowthInsightsScreen() {
   }, [allSources]);
 
   const aiInsights = useMemo(() => generateAIInsights({
-    conversionRate: storefrontMetrics.conversionRate,
+    // Null, so any insight built on a conversion rate is skipped rather than
+    // stated. See storefrontMetrics.
+    // 0 rather than undefined: the generator's signature requires a number, and
+    // its conversion insights are guarded on the value being above zero, so 0
+    // means "do not raise one" without a signature change reaching every caller.
+    conversionRate: storefrontMetrics.conversionRate ?? 0,
     repeatRate: customerMetrics.repeatRate,
     topSource,
     totalOrders: platformMetrics.totalOrders,
@@ -2174,7 +2215,8 @@ export default function GrowthInsightsScreen() {
   }), [storefrontMetrics.conversionRate, customerMetrics.repeatRate, topSource, platformMetrics.totalOrders, platformMetrics.totalRevenue, platformMetrics.the platformOrders, platformMetrics.externalOrders, hasAnyData]);
 
   const smartInsights = useMemo(() => generateSmartInsights({
-    conversionRate: storefrontMetrics.conversionRate,
+    // Same as above: 0 means no conversion insight rather than a fabricated one.
+    conversionRate: storefrontMetrics.conversionRate ?? 0,
     repeatRate: customerMetrics.repeatRate,
     topSource,
     totalOrders: platformMetrics.totalOrders,

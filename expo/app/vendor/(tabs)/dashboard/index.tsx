@@ -44,6 +44,7 @@ import VendorSetupChecklist from '@/components/VendorSetupChecklist';
 import { useVendorOnboarding } from '@/contexts/VendorOnboardingContext';
 import { useVendorDashboard } from '@/contexts/VendorDashboardContext';
 import { getMockInsights, ICON_MAP, type InsightData } from '@/mocks/insightsData';
+import { callable } from '@/lib/firebase';
 import { useInvoices } from '@/contexts/InvoiceContext';
 import {
   getInvoiceRevenueForDay,
@@ -62,6 +63,21 @@ const SPARKLINE_WIDTH = 80;
 const SPARKLINE_HEIGHT = 28;
 const REVENUE_SPARKLINE_WIDTH = 72;
 const REVENUE_SPARKLINE_HEIGHT = 32;
+
+/** What getDashboardInsights returns. Null figures mean "no honest value", and
+ *  the carousel hides those cards rather than rendering a zero. */
+export interface DashboardInsights {
+  pendingPaymentCount: number;
+  newCustomersThisWeek: number | null;
+  lowStockCount: number | null;
+  outOfStockCount: number | null;
+  bestSellerName: string | null;
+  bestSellerCount: number | null;
+  avgResponseMinutes: number | null;
+  canViewBestSellerWidget: boolean;
+  canViewRevenueCard: boolean;
+  canViewAdvancedAnalytics: boolean;
+}
 
 function MiniSparkline({ data = ORDERS_SPARKLINE_DATA, width = SPARKLINE_WIDTH, height = SPARKLINE_HEIGHT, color = Colors.primary }: { data?: number[]; width?: number; height?: number; color?: string }) {
   const animProgress = useRef(new Animated.Value(0)).current;
@@ -181,27 +197,42 @@ const rcStyles = StyleSheet.create({
   },
 });
 
-function InsightsSection({ plan, bestSellerName, bestSellerCount, pendingPaymentCount }: {
+function InsightsSection({ plan, bestSellerName, bestSellerCount, pendingPaymentCount, liveInsights }: {
   plan: string;
   bestSellerName: string | null;
   bestSellerCount: number;
   pendingPaymentCount: number;
+  /** Real figures from the backend. Null while loading, or if the call failed. */
+  liveInsights: DashboardInsights | null;
 }) {
   const router = useRouter();
   const isPro = plan === 'pro' || plan === 'pro+';
   const [currentIndex, setCurrentIndex] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
+  /**
+   * The insight carousel, from real figures.
+   *
+   * These three were the literal numbers 3, 2 and 8, hardcoded here, so an
+   * account with no customers at all was told it had gained three this week.
+   *
+   * getDashboardInsights computes them from the vendor's own orders and
+   * catalogue, and returns null for anything it cannot compute honestly rather
+   * than filling it in. Average reply time is null for exactly that reason: the
+   * chat documents do not carry the paired timestamps it would need. The
+   * generator guards every card behind a presence check, so a null figure means
+   * that card does not render, which is correct for a vendor with no data yet.
+   */
   const insights: InsightData[] = useMemo(() => {
     return getMockInsights({
-      pendingPaymentCount,
-      bestSellerName,
-      bestSellerCount,
-      newCustomersThisWeek: 3,
-      lowStockCount: 2,
-      avgResponseMinutes: 8,
+      pendingPaymentCount: liveInsights?.pendingPaymentCount ?? pendingPaymentCount,
+      bestSellerName: liveInsights?.bestSellerName ?? bestSellerName,
+      bestSellerCount: liveInsights?.bestSellerCount ?? bestSellerCount,
+      newCustomersThisWeek: liveInsights?.newCustomersThisWeek ?? undefined,
+      lowStockCount: liveInsights?.lowStockCount ?? undefined,
+      avgResponseMinutes: liveInsights?.avgResponseMinutes ?? undefined,
     });
-  }, [pendingPaymentCount, bestSellerName, bestSellerCount]);
+  }, [liveInsights, pendingPaymentCount, bestSellerName, bestSellerCount]);
 
   const cycleInsight = useCallback(() => {
     Animated.timing(fadeAnim, {
@@ -718,6 +749,37 @@ export default function VendorDashboardScreen() {
 
   const { orders: vendorOrders } = useOrders();
 
+  /**
+   * Real figures for the insight carousel and the KPI widgets.
+   *
+   * Also carries the plan flags, because the dashboard was deciding its own
+   * gating and getting it wrong: the Best Seller and Revenue cards rendered
+   * unconditionally, so Basic vendors saw widgets the backend reserves for
+   * Standard and above. The backend already knows the answer, so it sends it
+   * rather than the client guessing.
+   */
+  const [dashboardInsights, setDashboardInsights] = useState<DashboardInsights | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const fn = callable<Record<string, never>, DashboardInsights & { success: true }>(
+          'getDashboardInsights',
+        );
+        const res = await fn({});
+        if (!cancelled) setDashboardInsights(res.data);
+      } catch (error) {
+        // The carousel guards every card on presence, so leaving this null
+        // simply shows fewer cards. Better than inventing figures, which is
+        // exactly what this replaced.
+        console.error('[Dashboard] Could not load insights:', error);
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, []);
+
   const pendingOrders = vendorOrders.filter(o => o.status === 'requested');
   const pendingPaymentOrders = vendorOrders.filter(o => o.paymentStatus === 'payment_pending');
 
@@ -935,7 +997,16 @@ export default function VendorDashboardScreen() {
           </View>
         </View>
 
+        {/* Best Seller and Today's Revenue are Standard and above. They used
+            to render unconditionally, so a Basic vendor saw two widgets their
+            plan does not include — the client's own gating audit found this and
+            noted the fix was to add a gate, not loosen one. The flags come from
+            the backend, which already decides them, rather than the client
+            re-deriving the rule and getting it wrong a second time. */}
+        {(dashboardInsights?.canViewBestSellerWidget ?? false) ||
+         (dashboardInsights?.canViewRevenueCard ?? false) ? (
         <View style={styles.kpiRow}>
+          {dashboardInsights?.canViewBestSellerWidget ? (
           <View style={[styles.kpiCard, { backgroundColor: '#F0FDF4' }]}>
             <View style={[styles.kpiIconWrap, { backgroundColor: 'rgba(22,163,74,0.12)' }]}>
               <TrendingUp size={18} color="#16A34A" />
@@ -953,7 +1024,9 @@ export default function VendorDashboardScreen() {
               <Text style={styles.kpiSub}>No sales yet</Text>
             )}
           </View>
+          ) : null}
 
+          {dashboardInsights?.canViewRevenueCard ? (
           <View style={[styles.kpiCard, { backgroundColor: '#EFF6FF' }]}>
             <View style={[styles.kpiIconWrap, { backgroundColor: 'rgba(37,99,235,0.1)' }]}>
               <DollarSign size={18} color="#2563EB" />
@@ -965,9 +1038,12 @@ export default function VendorDashboardScreen() {
                 return yet, and a "+123% vs yesterday" next to a real figure
                 would be fabricated. Restored when Phase 5 adds the trend. */}
           </View>
+          ) : null}
         </View>
+        ) : null}
 
         <InsightsSection
+          liveInsights={dashboardInsights}
           plan={plan}
           bestSellerName={bestSeller?.name ?? null}
           bestSellerCount={bestSeller?.count ?? 0}
