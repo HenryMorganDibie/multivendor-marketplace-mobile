@@ -11,8 +11,12 @@ import { catalogService } from '@/services/catalogService';
 
 export async function getVendorByUsername(username: string): Promise<Vendor | null> {
   const normalized = username.trim().toLowerCase().replace(/^@/, '');
-  console.log('[API] getVendorByUsername:', normalized);
-  const vendor = mockVendors.find(v => v.username.toLowerCase() === normalized) ?? null;
+
+  // Through the service stack, which reads Firestore. This is the route a
+  // shared storefront link lands on, so it has to resolve a real vendor: a
+  // customer following a link to a business that only exists in fixture data
+  // sees a storefront nobody can order from.
+  const vendor = (await vendorService.getByUsername(normalized)) ?? null;
   // Direct link access: null if blocked (suspended/deactivated)
   if (vendor && !canAccessViaDirectLink(vendor)) {
     console.log('[API] Vendor blocked:', normalized, '| status:', vendor.vendorStatus);

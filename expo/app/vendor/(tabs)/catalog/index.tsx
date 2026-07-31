@@ -27,6 +27,8 @@ import { Colors } from '@/constants/colors';
 import { getBottomOverlayPadding } from '@/lib/constants/layout';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
 import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
+import { shareStorefront, checkShareable } from '@/lib/storefront/shareStorefront';
 
 type FilterTab = 'all' | 'categories' | 'low_stock' | 'hidden';
 
@@ -66,6 +68,7 @@ function getTagLabel(tag: ItemTag, item: CatalogItem): string {
 
 export default function VendorCatalogScreen() {
   const { categories, getItemsByCategory, items, addCategory, updateItem, deleteItem } = useCatalog();
+  const { vendor } = useVendor();
   const insets = useSafeAreaInsets();
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
