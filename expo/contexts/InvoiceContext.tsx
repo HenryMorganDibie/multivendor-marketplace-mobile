@@ -1,4 +1,9 @@
+import { useState, useEffect } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { auth, db, callable } from '@/lib/firebase';
+import { mapInvoiceDoc, mapInvoiceLedger, type InvoiceLedgerView } from '@/lib/invoices/mapInvoiceDoc';
+import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Currency } from '@/utils/formatPrice';
@@ -456,6 +461,8 @@ type InvoiceContextValue = {
   markInvoiceSharedExternally: (id: string) => Promise<void>;
   recordPayment: (id: string, payment: Omit<InvoicePaymentRecord, 'id' | 'recordedAt'>) => Promise<InvoicePaymentRecord | null>;
   deletePayment: (invoiceId: string, paymentId: string) => Promise<void>;
+  /** Ledger figures per invoice: what is paid, what is left, and the derived status. */
+  ledgerFor: (invoiceId: string) => InvoiceLedgerView | undefined;
 };
 
 const DEFAULT_INVOICE_CONTEXT_VALUE: InvoiceContextValue = {
@@ -472,20 +479,62 @@ const DEFAULT_INVOICE_CONTEXT_VALUE: InvoiceContextValue = {
   markInvoiceSharedExternally: async () => {},
   recordPayment: async () => null,
   deletePayment: async () => {},
+  ledgerFor: () => undefined,
 };
 
 export const [InvoiceProvider, useInvoices] = createContextHook(() => {
   const queryClient = useQueryClient();
+
+  /**
+   * Live invoices for the signed-in vendor, and the ledger figures beside them.
+   *
+   * The seed below only ever applies to the built-in demo logins now. A real
+   * account gets an empty list here and is filled by this listener, which is
+   * accurate: a vendor who has raised no invoices has none.
+   */
+  const [backendInvoices, setBackendInvoices] = useState<Invoice[] | null>(null);
+  const [ledgerByInvoice, setLedgerByInvoice] = useState<Record<string, InvoiceLedgerView>>({});
+
+  useEffect(() => {
+    let unsubscribeInvoices: (() => void) | null = null;
+
+    const unsubscribeAuth = auth.onIdTokenChanged(async (fbUser) => {
+      unsubscribeInvoices?.();
+      unsubscribeInvoices = null;
+
+      if (!fbUser) { setBackendInvoices(null); return; }
+      const token = await fbUser.getIdTokenResult();
+      const vendorId = token.claims.vendorId as string | undefined;
+      if (!vendorId) { setBackendInvoices(null); return; }
+
+      unsubscribeInvoices = onSnapshot(
+        query(collection(db, 'invoices'), where('vendorId', '==', vendorId)),
+        (snap) => {
+          setBackendInvoices(snap.docs.map((d) => mapInvoiceDoc(d.id, d.data())));
+          setLedgerByInvoice(
+            Object.fromEntries(snap.docs.map((d) => [d.id, mapInvoiceLedger(d.data())])),
+          );
+        },
+        (err) => {
+          // An empty list beats stale invoices a vendor might chase payment on.
+          console.error('[Invoices] Live subscription failed:', err);
+          setBackendInvoices([]);
+        },
+      );
+    });
+
+    return () => { unsubscribeInvoices?.(); unsubscribeAuth(); };
+  }, []);
 
   const invoicesQuery = useQuery({
     queryKey: ['invoices'],
     queryFn: async () => {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       let parsed: Invoice[] = stored ? (JSON.parse(stored) as Invoice[]) : [];
-      // First run (or after a storage-key bump): seed the mock demo invoices
-      // so the customer invoice flow is visible without manual creation. Henry
-      // will replace this with real backend invoices; the seed is mock-only.
-      if (!stored) {
+      // Demo logins only. A real account's invoices come from the listener
+      // above; seeding them here would show a vendor invoices that do not
+      // exist, against customers they have never had.
+      if (!stored && DEV_LOCAL_AUTH_ENABLED) {
         parsed = SEED_INVOICES;
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_INVOICES));
       }
@@ -634,10 +683,45 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
    * BACKEND_INTEGRATION_GUIDE.md for the double-counting rules Henry must
    * enforce when invoices are linked to orders.
    */
+  /**
+   * Records money received.
+   *
+   * Goes to the backend, which owns the ledger and derives the invoice's status
+   * from it. The local write below stays for the demo logins, which have no
+   * backend invoice to record against.
+   *
+   * The idempotency key is derived from the invoice, amount and date rather
+   * than being random, so a double tap sends the same key and the server
+   * recognises it as one payment instead of two.
+   */
   const recordPayment = async (
     id: string,
     payment: Omit<InvoicePaymentRecord, 'id' | 'recordedAt'>
   ): Promise<InvoicePaymentRecord | null> => {
+    if (!DEV_LOCAL_AUTH_ENABLED || backendInvoices?.some((inv) => inv.id === id)) {
+      const send = callable<Record<string, unknown>, { success: true; paymentId: string }>('recordPayment');
+      try {
+        const res = await send({
+          invoiceId: id,
+          amountMinorUnits: Math.round(Math.max(0, payment.amount)),
+          method: payment.method ?? 'other',
+          reference: payment.note ?? null,
+          idempotencyKey: `${id}_${payment.amount}_${payment.date}`,
+        });
+        return {
+          id: res.data.paymentId,
+          amount: payment.amount,
+          date: payment.date,
+          method: payment.method,
+          note: payment.note,
+          recordedAt: new Date().toISOString(),
+        };
+      } catch (error) {
+        console.error('[Invoices] recordPayment rejected:', error);
+        return null;
+      }
+    }
+
     const invoices = invoicesQuery.data || [];
     const invoice = invoices.find((inv) => inv.id === id);
     if (!invoice) return null;
@@ -663,8 +747,29 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
     return record;
   };
 
-  /** Delete a single recorded payment (mock). Used by the payment-history list. */
+  /**
+   * Undoes a recorded payment.
+   *
+   * Named delete for the screens that already call it, but nothing is deleted:
+   * the backend writes a reversal row pointing at the original, and both stay
+   * readable. Deleting financial history would remove the evidence of what was
+   * believed at the time, which is the thing an audit needs most.
+   */
   const deletePayment = async (invoiceId: string, paymentId: string): Promise<void> => {
+    if (!DEV_LOCAL_AUTH_ENABLED || backendInvoices?.some((inv) => inv.id === invoiceId)) {
+      const reverse = callable<Record<string, unknown>, { success: true }>('reversePayment');
+      try {
+        await reverse({
+          paymentId,
+          reason: 'Removed by the vendor from payment history',
+          idempotencyKey: `rev_${paymentId}`,
+        });
+      } catch (error) {
+        console.error('[Invoices] reversePayment rejected:', error);
+      }
+      return;
+    }
+
     const invoices = invoicesQuery.data || [];
     const invoice = invoices.find((inv) => inv.id === invoiceId);
     if (!invoice) return;
@@ -682,8 +787,13 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
   };
 
   return {
-    invoices: invoicesQuery.data || [],
-    isLoading: invoicesQuery.isLoading,
+    // Backend invoices win when they exist. The local list is the demo logins'
+    // and a fallback while the listener is still resolving, so a real vendor
+    // never sees fixture invoices against customers they have not had.
+    invoices: backendInvoices ?? invoicesQuery.data ?? [],
+    isLoading: backendInvoices === null && invoicesQuery.isLoading,
+    /** Ledger figures per invoice: what is paid, what is left, and the derived status. */
+    ledgerFor: (invoiceId: string): InvoiceLedgerView | undefined => ledgerByInvoice[invoiceId],
     createInvoice,
     updateInvoice,
     deleteInvoice,
