@@ -532,7 +532,12 @@ function buildOrderSnapshot(order: Order): OrderSnapshot {
     })),
     notes: order.orderNote,
     subtotal_at_order: order.subtotal,
-    currency: 'NGN',
+    // The order's own currency, not a fixed one. The backend sets this from the
+    // vendor's country when the cart is priced, so a vendor outside Nigeria had
+    // their receipt snapshot stamped NGN over whatever they actually charged.
+    // Falling back to NGN only when an order genuinely carries none, which is
+    // the seeded demo data.
+    currency: order.currency ?? 'NGN',
     fulfillmentType: order.fulfillmentType,
     scheduledDate: order.scheduledDate,
     scheduledTime: order.scheduledTime,

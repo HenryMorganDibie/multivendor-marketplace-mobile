@@ -2,9 +2,10 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useSegments } from 'expo-router';
-import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth as firebaseAuth, db as firestore, callable } from '@/lib/firebase';
+import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 import { VendorPlan } from './VendorPlanContext';
 
 type UserRole = 'customer' | 'vendor';
@@ -161,6 +162,67 @@ interface AccountRecord {
   isDiscoverable?: boolean;
 }
 
+
+/**
+ * Builds a session from the only two sources that are authoritative: the
+ * token's custom claims and the users/{uid} document. Both are written by the
+ * backend and neither can be altered from a device.
+ *
+ * Returns a reason rather than throwing, because every failure here is a login
+ * the user should be told about, not a crash.
+ */
+type RebuiltSession = { ok: true; user: User } | { ok: false; error: string };
+
+const BLOCKED_STATUSES: AccountStatus[] = ['pending_deletion', 'deactivated', 'frozen', 'banned'];
+
+/**
+ * The built-in test logins. These exist only in the local mock store and have
+ * no Firebase account, so the revalidation below must not sign them out for
+ * failing a check that was never going to pass.
+ */
+const DEMO_ACCOUNT_IDS = new Set(['1', '2', '3']);
+
+async function buildSessionFromBackend(uid: string, identifier: string): Promise<RebuiltSession> {
+  const current = firebaseAuth.currentUser;
+  if (!current) return { ok: false, error: 'Could not verify your session. Please try again.' };
+
+  // Claims carry the role the backend assigned. A device cannot set these.
+  const token = await current.getIdTokenResult(true);
+  const claimRole = token.claims.role as UserRole | undefined;
+
+  const snap = await getDoc(doc(firestore, 'users', uid));
+  if (!snap.exists()) {
+    // Authenticated but with no profile: registration never finished. Sending
+    // them into the app would be the half-made account problem again.
+    return { ok: false, error: 'Your account setup is incomplete. Please register again or contact support.' };
+  }
+
+  const data = snap.data() as Record<string, unknown>;
+  const status = ((data.accountStatus as AccountStatus) ?? 'active');
+
+  if (BLOCKED_STATUSES.includes(status)) {
+    return { ok: false, error: 'This account is currently unavailable. Please contact support.' };
+  }
+
+  const onboarding = (data.onboarding ?? {}) as { completed?: boolean };
+
+  return {
+    ok: true,
+    user: {
+      id: uid,
+      identifier,
+      email: (data.email as string) ?? identifier,
+      // The claim wins over the document: it is what every backend call is
+      // actually authorised against.
+      role: claimRole ?? ((data.role as UserRole) ?? 'customer'),
+      status,
+      onboardingComplete: onboarding.completed === true,
+      authProvider: 'email' as AuthProvider,
+      vendorId: (data.vendorId as string) ?? undefined,
+    } as User,
+  };
+}
+
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
@@ -195,6 +257,22 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       
       if (stored) {
         const user: User = JSON.parse(stored);
+
+        /**
+         * The stored copy is a cache, not a credential.
+         *
+         * It used to be trusted outright at launch, so the app started
+         * authenticated on the strength of a JSON file the device owns. An
+         * account banned, frozen or deleted since the last launch carried on
+         * working, and anything able to edit that file could change its own
+         * role.
+         *
+         * So it is shown immediately, because making everyone wait on the
+         * network to see their own app is worse, and then checked against
+         * Firebase and the users document as soon as that resolves. The
+         * onIdTokenChanged listener below does the checking; this only decides
+         * what to show while it runs.
+         */
         setAuthState({
           user,
           isLoading: false,
@@ -223,6 +301,80 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   useEffect(() => {
     void loadStoredAuth();
   }, [loadStoredAuth]);
+
+  /**
+   * Revalidates the cached session against Firebase and the users document.
+   *
+   * The stored copy above is shown immediately so the app is usable at once,
+   * but it is a file on the device and proves nothing. This is the check.
+   *
+   * Three outcomes end the session rather than continuing it: Firebase no
+   * longer recognises the user, their users document has gone, or their account
+   * status has become one that blocks access. An account banned, frozen or
+   * deleted since the last launch used to keep working indefinitely, because
+   * nothing ever looked again.
+   *
+   * Role comes from the token claim rather than the cached value, so a device
+   * that edited its own stored role is corrected on the next launch.
+   */
+  useEffect(() => {
+    const unsubscribe = firebaseAuth.onIdTokenChanged(async (fbUser) => {
+      if (!fbUser) {
+        // Signed out elsewhere, token revoked, or account deleted. Any cached
+        // session is now meaningless.
+        const cached = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
+        if (cached && !DEMO_ACCOUNT_IDS.has((JSON.parse(cached) as User).id)) {
+          await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+          setAuthState({ user: null, isLoading: false, isAuthenticated: false, hasSeenOnboarding: true });
+        }
+        return;
+      }
+
+      try {
+        const token = await fbUser.getIdTokenResult();
+        const snap = await getDoc(doc(firestore, 'users', fbUser.uid));
+
+        if (!snap.exists()) {
+          await signOut(firebaseAuth).catch(() => undefined);
+          await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+          setAuthState({ user: null, isLoading: false, isAuthenticated: false, hasSeenOnboarding: true });
+          return;
+        }
+
+        const data = snap.data() as Record<string, unknown>;
+        const status = (data.accountStatus as AccountStatus) ?? 'active';
+
+        if (BLOCKED_STATUSES.includes(status)) {
+          await signOut(firebaseAuth).catch(() => undefined);
+          await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+          setAuthState({ user: null, isLoading: false, isAuthenticated: false, hasSeenOnboarding: true });
+          return;
+        }
+
+        const onboarding = (data.onboarding ?? {}) as { completed?: boolean };
+        const refreshed = {
+          id: fbUser.uid,
+          identifier: fbUser.email ?? '',
+          email: (data.email as string) ?? fbUser.email ?? '',
+          role: (token.claims.role as UserRole) ?? ((data.role as UserRole) ?? 'customer'),
+          status,
+          onboardingComplete: onboarding.completed === true,
+          authProvider: 'email' as AuthProvider,
+          vendorId: (data.vendorId as string) ?? undefined,
+        } as User;
+
+        await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(refreshed));
+        setAuthState({ user: refreshed, isLoading: false, isAuthenticated: true, hasSeenOnboarding: true });
+      } catch (error) {
+        // A network failure must not log anyone out: being offline is not the
+        // same as being unauthorised, and the cached session stands until the
+        // check can actually run.
+        console.error('[AUTH] Could not revalidate the session:', error);
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   const lastRedirectRef = useRef<string | null>(null);
   const segmentsKey = useMemo(() => segments.join('/'), [segments]);
@@ -460,7 +612,23 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     await AsyncStorage.setItem(ACCOUNTS_DB_KEY, JSON.stringify(accounts));
   }, []);
 
+  /**
+   * The local development login.
+   *
+   * Compares a plaintext password against an on-device store and accepts a
+   * fixed OTP of 123456. Both are fine for demos and for reviewing screens
+   * without a backend, and both would be serious in a shipped build: the OTP
+   * accepts any phone number, and the device holds credentials it can read and
+   * edit.
+   *
+   * Refused outright outside development. Not gated at the call site, because
+   * there are several and one of them would eventually be missed.
+   */
   const mockAuthenticateUser = useCallback(async (credentials: LoginCredentials): Promise<LoginResponse> => {
+    if (!DEV_LOCAL_AUTH_ENABLED) {
+      return { success: false, error: 'Incorrect email or password. Please try again.' };
+    }
+
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     const accounts = await getAccountsDb();
@@ -482,6 +650,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       };
     }
 
+    // Development only, and unreachable above unless DEV_LOCAL_AUTH_ENABLED.
     if (credentials.otp && credentials.otp !== '123456') {
       return {
         success: false,
@@ -557,23 +726,33 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       const response = await mockAuthenticateUser(credentials);
 
       if (!response.success) {
-        // Authenticated with Firebase but no local profile yet (e.g. first
-        // sign-in on this device). Build a minimal local session from the
-        // Firebase account rather than refusing a valid login.
+        /**
+         * Signed in to Firebase, but this device has no local profile — a second
+         * device, or cleared storage.
+         *
+         * This used to invent one: role 'vendor', status 'active',
+         * onboardingComplete true, all hardcoded, and it returned before the
+         * blocked-status check below. So a customer signing in on a new phone
+         * became a vendor, and a banned, frozen or deactivated account became an
+         * active one. The session was built from nothing but the fact that a
+         * password matched.
+         *
+         * The account's real state lives in users/{uid} and the token's claims,
+         * both written by the backend and neither editable from a device. That
+         * is what the session is built from now. If the document cannot be read,
+         * the login fails and the Firebase session is closed rather than left
+         * open behind a refusal.
+         */
         if (firebaseUid) {
-          const minimalUser = {
-            id: firebaseUid,
-            identifier: credentials.emailOrPhone.trim(),
-            email: credentials.emailOrPhone.trim(),
-            role: 'vendor' as UserRole,
-            status: 'active' as AccountStatus,
-            onboardingComplete: true,
-            authProvider: 'email' as AuthProvider,
-          } as User;
-          await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(minimalUser));
+          const rebuilt = await buildSessionFromBackend(firebaseUid, credentials.emailOrPhone.trim());
+          if (!rebuilt.ok) {
+            await signOut(firebaseAuth).catch(() => undefined);
+            return { success: false, error: rebuilt.error };
+          }
+          await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(rebuilt.user));
           await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
-          setAuthState({ user: minimalUser, isLoading: false, isAuthenticated: true, hasSeenOnboarding: true });
-          return { success: true, user: minimalUser };
+          setAuthState({ user: rebuilt.user, isLoading: false, isAuthenticated: true, hasSeenOnboarding: true });
+          return { success: true, user: rebuilt.user };
         }
         return response;
       }
@@ -611,6 +790,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const logout = useCallback(async () => {
     try {
+      // Ending the Firebase session is the part that actually logs someone out.
+      // Clearing local storage alone left the Firebase session open: the next
+      // person to open the app was still authenticated, still held valid claims,
+      // and every callable and Firestore read would still have accepted them.
+      // Signing out first means that even if the storage clear below fails, the
+      // credentials are already dead.
+      await signOut(firebaseAuth).catch((error) => {
+        console.error('[AUTH] Firebase sign-out failed:', error);
+      });
       await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
       setAuthState({
         user: null,
