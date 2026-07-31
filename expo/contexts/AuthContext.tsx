@@ -1200,7 +1200,22 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
    * profile resolve as onboardingCompleted; new or partial profiles route to
    * Complete Profile via the auth guard.
    */
+  /**
+   * Placeholder social sign-in. Not a real one.
+   *
+   * It waits 900ms, invents a local account and grants an authenticated
+   * session, without ever contacting Firebase. Whoever calls it is signed in
+   * as a customer that exists only on this device.
+   *
+   * The buttons are already hidden behind SOCIAL_AUTH_ENABLED, so nothing
+   * reaches this today. It is refused outside development anyway: a function
+   * that hands out sessions for nothing should not be one hidden button away
+   * from working, and the two flags will not always be changed together.
+   */
   const socialLogin = useCallback(async (provider: 'google' | 'apple', prefill?: SocialPrefill): Promise<LoginResponse> => {
+    if (!DEV_LOCAL_AUTH_ENABLED) {
+      return { success: false, error: 'This sign-in method is not available yet.' };
+    }
     try {
       await new Promise(resolve => setTimeout(resolve, 900));
 
