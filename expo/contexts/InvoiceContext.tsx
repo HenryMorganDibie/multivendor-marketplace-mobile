@@ -453,6 +453,8 @@ type InvoiceContextValue = {
   invoices: Invoice[];
   isLoading: boolean;
   createInvoice: (invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>) => Promise<Invoice>;
+  /** Copies an invoice into a fresh draft server-side. Returns the new id. */
+  duplicateInvoiceById: (id: string) => Promise<string | null>;
   updateInvoice: (id: string, updates: Partial<Invoice>) => Promise<void>;
   deleteInvoice: (id: string) => Promise<void>;
   getInvoiceById: (id: string) => Invoice | undefined;
@@ -468,6 +470,7 @@ type InvoiceContextValue = {
 const DEFAULT_INVOICE_CONTEXT_VALUE: InvoiceContextValue = {
   invoices: [],
   isLoading: true,
+  duplicateInvoiceById: async () => null,
   createInvoice: async () => {
     throw new Error('InvoiceProvider is not mounted yet.');
   },
@@ -627,6 +630,13 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
           unitPrice: item.unitPrice,
         })),
         notes: invoiceData.notes ?? null,
+        // The Create Invoice screen's "the platform customer" mode already collects
+        // these from the vendor's real chats. Sending them keeps the binding;
+        // omitting them, as this first did, threw away the customer the vendor
+        // had explicitly chosen and made the invoice indistinguishable from one
+        // typed by hand.
+        customerId: invoiceData.customerId ?? null,
+        conversationId: invoiceData.conversationId ?? invoiceData.chatId ?? null,
       });
 
       // Returned for the caller that navigates straight to the new invoice. The
@@ -660,6 +670,28 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
     return newInvoice;
   };
 
+  /**
+   * duplicateInvoice — copy an invoice into a fresh draft.
+   *
+   * The backend callable has been complete since Phase 3, gated by
+   * canDuplicateInvoice and consuming its own quota. The mobile menu hid the
+   * action behind a "post-MVP" comment, so a finished, plan-gated feature was
+   * unreachable while sitting in the agreed scope.
+   *
+   * The plan check is left to the backend rather than re-derived here. A client
+   * deciding its own gates is what made Basic vendors see Standard widgets on
+   * the dashboard; the server already knows and refuses with a message worth
+   * showing.
+   */
+  const duplicateInvoiceById = async (id: string): Promise<string | null> => {
+    const duplicate = callable<
+      { invoiceId: string },
+      { success: true; invoiceId: string; invoiceNumber: string }
+    >('duplicateInvoice');
+    const res = await duplicate({ invoiceId: id });
+    return res.data.invoiceId;
+  };
+
   const updateInvoice = async (id: string, updates: Partial<Invoice>) => {
     const invoices = invoicesQuery.data || [];
     const updated = invoices.map((inv) =>
@@ -669,6 +701,24 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
   };
 
   const deleteInvoice = async (id: string) => {
+    /**
+     * This filtered the local list while the screen renders the backend list,
+     * so for a real vendor Delete Draft did nothing at all — it neither removed
+     * the invoice server-side nor took the row off the screen. It read as a
+     * broken button because it was one.
+     *
+     * The backend refuses to delete anything with history: an invoice that has
+     * been sent, viewed or had any payment recorded against it must be
+     * cancelled instead, and says so. Only a draft nobody ever saw is
+     * removable, which is what this action has always claimed to do.
+     */
+    if (!DEV_LOCAL_AUTH_ENABLED || backendInvoices?.some((inv) => inv.id === id)) {
+      const remove = callable<{ invoiceId: string }, { success: true }>('deleteInvoice');
+      await remove({ invoiceId: id });
+      // No local write: the listener removes the row when Firestore confirms.
+      return;
+    }
+
     const invoices = invoicesQuery.data || [];
     await saveInvoicesMutation.mutateAsync(
       invoices.filter((inv) => inv.id !== id)
@@ -847,6 +897,7 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
     createInvoice,
     updateInvoice,
     deleteInvoice,
+    duplicateInvoiceById,
     getInvoiceById,
     getInvoiceByShareCode,
     sendInvoiceInChat,

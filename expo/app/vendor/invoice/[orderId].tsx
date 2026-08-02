@@ -100,6 +100,7 @@ export default function VendorInvoiceDetailScreen() {
     recordPayment,
     deletePayment,
     deleteInvoice,
+    duplicateInvoiceById,
     markInvoiceSharedExternally,
   } = useInvoices();
   const { effectiveBranding } = useInvoiceBranding();
@@ -327,6 +328,27 @@ export default function VendorInvoiceDetailScreen() {
       return;
     }
     router.push(`/vendor/settings/create-invoice?invoiceId=${invoice.id}` as any);
+  };
+
+  /**
+   * Duplicate opens the copy for editing, because the reason to duplicate is
+   * almost always "same customer, same items, different month" — landing on a
+   * read-only copy would just mean tapping Edit immediately.
+   *
+   * The plan refusal comes from the server. Its message names the limit, so it
+   * is shown as-is rather than replaced with a generic one.
+   */
+  const handleDuplicate = async () => {
+    setShowMenu(false);
+    try {
+      const newId = await duplicateInvoiceById(invoice.id);
+      if (newId) router.replace(`/vendor/invoice/${newId}` as any);
+    } catch (error: any) {
+      Alert.alert(
+        'Could not duplicate',
+        error?.message ?? 'Something went wrong duplicating this invoice.',
+      );
+    }
   };
 
   const handleDeleteDraft = () => {
@@ -736,7 +758,13 @@ export default function VendorInvoiceDetailScreen() {
           Partially paid:  View payment history / Share / PDF (Record payment bottom bar)
           Paid:            View payment history / Share / PDF
           Void:            Share / PDF
-          Duplicate Invoice is a post-MVP feature and is never shown. */}
+
+          Duplicate is shown on every issued invoice. It was hidden behind a
+          "post-MVP" note while its backend callable was finished, quota-gated
+          and part of the agreed scope, so a working feature was unreachable.
+          The plan check stays on the server: it already knows and refuses with
+          a message worth showing, and a client deciding its own gates is what
+          put Standard-only widgets in front of Basic vendors. */}
       <Modal
         visible={showMenu}
         transparent
@@ -765,6 +793,8 @@ export default function VendorInvoiceDetailScreen() {
                 <MenuRow icon={<Share2 size={18} color={Colors.text} />} label="Share invoice" onPress={handleShare} />
                 <MenuDivider />
                 <MenuRow icon={<Download size={18} color={Colors.text} />} label="Download PDF" onPress={handleDownload} />
+                <MenuDivider />
+                <MenuRow icon={<Copy size={18} color={Colors.text} />} label="Duplicate invoice" onPress={handleDuplicate} />
               </>
             ) : isPaid ? (
               <>
@@ -773,6 +803,8 @@ export default function VendorInvoiceDetailScreen() {
                 <MenuRow icon={<Share2 size={18} color={Colors.text} />} label="Share invoice" onPress={handleShare} />
                 <MenuDivider />
                 <MenuRow icon={<Download size={18} color={Colors.text} />} label="Download PDF" onPress={handleDownload} />
+                <MenuDivider />
+                <MenuRow icon={<Copy size={18} color={Colors.text} />} label="Duplicate invoice" onPress={handleDuplicate} />
               </>
             ) : (
               <>
@@ -788,6 +820,8 @@ export default function VendorInvoiceDetailScreen() {
                 <MenuRow icon={<Share2 size={18} color={Colors.text} />} label="Share invoice" onPress={handleShare} />
                 <MenuDivider />
                 <MenuRow icon={<Download size={18} color={Colors.text} />} label="Download PDF" onPress={handleDownload} />
+                <MenuDivider />
+                <MenuRow icon={<Copy size={18} color={Colors.text} />} label="Duplicate invoice" onPress={handleDuplicate} />
               </>
             )}
           </View>
