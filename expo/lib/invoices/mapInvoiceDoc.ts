@@ -56,7 +56,15 @@ export function mapInvoiceDoc(id: string, data: Record<string, unknown>): Invoic
     customerId: (data.customerId as string) ?? undefined,
     chatId: (data.chatId as string) ?? undefined,
 
-    lineItems: lineItems.map((li, i) => ({
+    // `items`, not `lineItems`. The Invoice interface the screens are written
+    // against calls this `items`, and every screen reads invoice.items.map(...).
+    // This produced `lineItems`, so a backend invoice arrived with items
+    // undefined and opening one threw on .map — not an empty list, a crash. The
+    // `as unknown as Invoice` cast at the end of this function is why the
+    // compiler never said anything, which is the cost of that cast.
+    //
+    // The stored field is `description`; the interface calls it `name`.
+    items: lineItems.map((li, i) => ({
       id: (li.id as string) ?? `li-${i}`,
       name: (li.description as string) ?? (li.name as string) ?? '',
       quantity: (li.quantity as number) ?? 1,

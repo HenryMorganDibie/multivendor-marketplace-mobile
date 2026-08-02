@@ -591,6 +591,56 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
   const createInvoice = async (
     invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>
   ): Promise<Invoice> => {
+    /**
+     * Real vendors create invoices on the server.
+     *
+     * This used to write to AsyncStorage with a locally generated id and never
+     * call the backend at all, while the read path and recordPayment were
+     * already wired. So a vendor's invoice existed only on their device: it
+     * never reached Firestore, never appeared on another device, and could not
+     * be paid against, because recordPayment resolves the invoice server-side
+     * and would not find it.
+     *
+     * Same guard recordPayment uses. In a release build DEV_LOCAL_AUTH_ENABLED
+     * is false so this is always the server. In development it is the server
+     * whenever a real vendor session has resolved, and the local path below
+     * stays for the demo logins that have no backend account.
+     *
+     * The invoice number, share token and currency are all decided by the
+     * server. Currency in particular: the app used to send a hardcoded 'NGN',
+     * which gave a vendor in the United States naira invoices.
+     */
+    if (!DEV_LOCAL_AUTH_ENABLED || backendInvoices !== null) {
+      const create = callable<
+        Record<string, unknown>,
+        { success: true; invoiceId: string; invoiceNumber: string }
+      >('createInvoice');
+
+      const res = await create({
+        customerName: invoiceData.customerName,
+        customerPhone: invoiceData.customerPhone ?? null,
+        customerEmail: invoiceData.customerEmail ?? null,
+        // The stored field is `description`; the app's interface calls it `name`.
+        lineItems: (invoiceData.items ?? []).map((item) => ({
+          description: item.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+        notes: invoiceData.notes ?? null,
+      });
+
+      // Returned for the caller that navigates straight to the new invoice. The
+      // canonical copy arrives through the Firestore listener a moment later and
+      // replaces this one, so nothing here is written to local storage — doing
+      // that would leave a duplicate behind under a different id.
+      return {
+        ...invoiceData,
+        id: res.data.invoiceId,
+        invoiceNumber: res.data.invoiceNumber,
+        createdAt: new Date().toISOString(),
+      } as Invoice;
+    }
+
     const invoices = invoicesQuery.data || [];
     const now = new Date().toISOString();
     const newInvoice: Invoice = {
