@@ -18,7 +18,7 @@ import {
   getEffectiveInvoiceBranding,
   type InvoiceBrandingSettings,
 } from '@/constants/documentBranding';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import { formatInvoiceCustomerName } from '@/utils/internalCustomerName';
 import { Colors } from '@/constants/colors';
 
@@ -108,6 +108,10 @@ export default function PublicInvoiceScreen() {
   const isInAppCustomerView = viewer === 'customer';
   const { getInvoiceByShareCode } = useInvoices();
   const { plan } = useVendorPlan();
+  // The signed-in vendor, used for the contact block when the invoice does not
+  // carry its own. A customer viewing a shared link sees the vendor details
+  // stored on the invoice, not this.
+  const { vendor } = useVendor();
   const invoice = getInvoiceByShareCode(shareCode ?? '');
 
   const [savedSettings, setSavedSettings] = useState<InvoiceBrandingSettings>(
@@ -230,7 +234,7 @@ export default function PublicInvoiceScreen() {
 
   const invoiceData: InvoiceRendererData = {
     invoiceNumber: invoice.invoiceNumber,
-    vendorName: mockVendor.name,
+    vendorName: vendor.name,
     customerName: displayCustomerName,
     statusLabel: statusDisplay.label,
     statusColor: statusDisplay.color,
@@ -259,10 +263,10 @@ export default function PublicInvoiceScreen() {
       invoice.fulfilmentMethod === 'delivery' && invoice.fulfilmentDetails?.deliveryFee
         ? invoice.fulfilmentDetails.deliveryFee
         : 0,
-    vendorPhone: mockVendor.phone,
-    vendorEmail: mockVendor.email,
-    vendorAddress: mockVendor.fullAddress,
-    vendorWebsite: mockVendor.contactLinks?.website,
+    vendorPhone: vendor.phone,
+    vendorEmail: vendor.email,
+    vendorAddress: vendor.fullAddress,
+    vendorWebsite: vendor.contactLinks?.website,
   };
 
   const rendererBranding = {

@@ -19,7 +19,7 @@ import type { InboxSnapshot } from '@/mocks/inboxData';
 import { formatInvoiceCustomerName, formatInternalCustomerFromFull } from '@/utils/internalCustomerName';
 import { ChatTypeBadge } from '@/components/ChatTypeBadge';
 import { formatPrice, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import {
   INVOICE_TEXT_LIMITS,
   formatInvoiceCharacterCount,
@@ -31,6 +31,9 @@ import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
 import { Colors } from '@/constants/colors';
 
 export default function CreateInvoiceScreen() {
+  // The signed-in vendor, not the demo fixture. This screen showed the demo
+  // business name and currency to real vendors.
+  const { vendor } = useVendor();
   const routerNav = useRouter();
   const { invoiceId } = useLocalSearchParams<{ invoiceId?: string }>();
   const { createInvoice, updateInvoice, getInvoiceById, sendInvoiceInChat, markInvoiceSharedExternally } = useInvoices();
@@ -91,7 +94,7 @@ export default function CreateInvoiceScreen() {
   // We show these beside the affected field instead of a generic popup.
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [validationAttempted, setValidationAttempted] = useState<boolean>(false);
-  const [currency] = useState<Currency>((mockVendor.currency as Currency) || getCurrencyFromCountryCode(mockVendor.countryCode));
+  const [currency] = useState<Currency>((vendor.currency as Currency) || getCurrencyFromCountryCode(vendor.countryCode));
 
   useEffect(() => {
     if (!editingInvoice || prefilled) return;
@@ -567,7 +570,7 @@ export default function CreateInvoiceScreen() {
       }
       const shareUrl = inv.shareCode ? getInvoiceShareUrl(inv.shareCode) : undefined;
       const message =
-        `Invoice ${inv.invoiceNumber} from ${mockVendor.name}\n` +
+        `Invoice ${inv.invoiceNumber} from ${vendor.name}\n` +
         `Total: ${formatPrice(inv.total, currency)}` +
         (shareUrl ? `\n\nView invoice: ${shareUrl}` : '');
       if (Platform.OS === 'web') {

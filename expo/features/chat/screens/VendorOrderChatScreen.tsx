@@ -36,7 +36,7 @@ import { useInvoices } from '@/contexts/InvoiceContext';
 import type { InvoicePaymentStatus } from '@/contexts/InvoiceContext';
 import { Colors } from '@/constants/colors';
 import { ChatMessage } from '@/mocks/chatData';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import { getActivePaymentMethods, type PaymentMethod } from '@/services/paymentRequestService';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
 import { formatVendorOrderId } from '@/utils/formatOrderId';
@@ -61,6 +61,9 @@ type Props = {
 export const VendorOrderChatScreen = ({ orderId }: Props) => {
   const vm = useVendorOrderChat(orderId);
   const { toastVisible, showToast } = useToast();
+  // The signed-in vendor. This screen showed the demo business name to real
+  // vendors in their own order chats.
+  const { vendor } = useVendor();
   const { createInvoice } = useInvoices();
   const [localInvoiceMessages, setLocalInvoiceMessages] = useState<ChatMessage[]>([]);
   const [showInvoicePreviewModal, setShowInvoicePreviewModal] = useState(false);
@@ -163,7 +166,7 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
   const handleCopyPaymentInstructions = useCallback(async () => {
     if (!vm.existingPaymentRequest?.paymentRequestData) return;
     const pd = vm.existingPaymentRequest.paymentRequestData;
-    let instructions = `Amount: ${formatPriceWithCommas(pd.amount, (mockVendor.currency as Currency) || 'NGN')}\nMethod: ${pd.paymentMethod}`;
+    let instructions = `Amount: ${formatPriceWithCommas(pd.amount, (vendor.currency as Currency) || 'NGN')}\nMethod: ${pd.paymentMethod}`;
     if (pd.bankName) instructions += `\nBank: ${pd.bankName}`;
     if (pd.accountName) instructions += `\nAccount Name: ${pd.accountName}`;
     if (pd.accountNumber) instructions += `\nAccount Number: ${pd.accountNumber}`;
@@ -232,7 +235,7 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
       const tax = invoicePreviewOrder.tax || 0;
       const discount = invoicePreviewOrder.discount || 0;
       const total = invoicePreviewOrder.total || (subtotal + tax - discount);
-      const currency = (mockVendor.currency || 'NGN') as Currency;
+      const currency = (vendor.currency || 'NGN') as Currency;
       console.log('[INVOICE] Creating invoice for orderId:', invoicePreviewOrder.id);
       const invoice = await createInvoice({
         orderId: invoicePreviewOrder.id,
@@ -260,7 +263,7 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
           customerName: formatCustomerNameFromFull(invoicePreviewOrder.customerName || 'Customer'),
           itemCount: orderItems.length,
           paymentStatus: invoicePreviewPaymentStatus,
-          vendorName: mockVendor.name,
+          vendorName: vendor.name,
           currency,
         },
       };
@@ -402,7 +405,7 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
             <View style={styles.customOrderPreviewInfo}>
               <Text style={styles.customOrderPreviewTitle}>Custom Order Proposal</Text>
               <Text style={styles.customOrderPreviewItems}>{itemCount} {itemCount === 1 ? 'item' : 'items'}</Text>
-              <Text style={styles.customOrderPreviewTotal}>{formatPriceWithCommas(proposal.total, (mockVendor.currency as Currency) || 'NGN')}</Text>
+              <Text style={styles.customOrderPreviewTotal}>{formatPriceWithCommas(proposal.total, (vendor.currency as Currency) || 'NGN')}</Text>
             </View>
           </View>
           <TouchableOpacity style={styles.customOrderPreviewButton} onPress={handleViewCustomOrder} activeOpacity={0.7}>
@@ -424,7 +427,7 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
           </View>
           <View style={styles.catalogItemCardInfo}>
             <Text style={styles.catalogItemCardName}>Puff Puff (20 pcs)</Text>
-            <Text style={styles.catalogItemCardPrice}>{formatPriceWithCommas(1500, (mockVendor.currency as Currency) || 'NGN')}</Text>
+            <Text style={styles.catalogItemCardPrice}>{formatPriceWithCommas(1500, (vendor.currency as Currency) || 'NGN')}</Text>
           </View>
         </View>
         <TouchableOpacity style={styles.catalogItemCardButton} onPress={() => router.push('/vendor/catalog/item/demo-1' as any)} activeOpacity={0.7}>
@@ -582,7 +585,7 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
                           <View style={styles.catalogItemInfo}>
                             <Text style={styles.catalogItemName}>{item.name}</Text>
                             {item.description && <Text style={styles.catalogItemDescription} numberOfLines={1}>{item.description}</Text>}
-                            <Text style={styles.catalogItemPrice}>{formatPriceWithCommas(displayPrice, (mockVendor.currency as Currency) || 'NGN')}</Text>
+                            <Text style={styles.catalogItemPrice}>{formatPriceWithCommas(displayPrice, (vendor.currency as Currency) || 'NGN')}</Text>
                           </View>
                         </View>
                         <View style={[styles.catalogCheckbox, isSelected && styles.catalogCheckboxSelected]}>
@@ -756,7 +759,7 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
                         <Text style={styles.orderHistoryDate}>{formatDate(historyOrder.orderDate)}</Text>
                       </View>
                       <View style={styles.orderHistoryRight}>
-                        <Text style={styles.orderHistoryAmount}>{formatPriceWithCommas(historyOrder.total, (mockVendor.currency as Currency) || 'NGN')}</Text>
+                        <Text style={styles.orderHistoryAmount}>{formatPriceWithCommas(historyOrder.total, (vendor.currency as Currency) || 'NGN')}</Text>
                         <StatusBadge status={historyOrder.status} label={formatOrderStatus(historyOrder.status)} />
                       </View>
                     </View>
@@ -881,7 +884,7 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
                 </View>
                 <View style={styles.existingPaymentAmountCard}>
                   <Text style={styles.existingPaymentAmountLabel}>AMOUNT REQUESTED</Text>
-                  <Text style={styles.existingPaymentAmountValue}>{formatPriceWithCommas(vm.existingPaymentRequest.paymentRequestData.amount, (mockVendor.currency as Currency) || 'NGN')}</Text>
+                  <Text style={styles.existingPaymentAmountValue}>{formatPriceWithCommas(vm.existingPaymentRequest.paymentRequestData.amount, (vendor.currency as Currency) || 'NGN')}</Text>
                   <Text style={styles.existingPaymentMethodText}>{vm.existingPaymentRequest.paymentRequestData.paymentMethod}</Text>
                 </View>
                 {vm.existingPaymentRequest.paymentRequestData.bankName && (
@@ -1003,7 +1006,7 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
                         </Text>
                       </View>
                     </View>
-                    <Text style={styles.orderSelectionTotal}>{formatPriceWithCommas(orderItem.total, (mockVendor.currency as Currency) || 'NGN')}</Text>
+                    <Text style={styles.orderSelectionTotal}>{formatPriceWithCommas(orderItem.total, (vendor.currency as Currency) || 'NGN')}</Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -1051,7 +1054,7 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
                       >
                         <Text style={styles.invPreviewItemName}>{item.name} ×{item.quantity}</Text>
                         <Text style={styles.invPreviewItemPrice}>
-                          {formatPriceWithCommas(item.price * item.quantity, (mockVendor.currency as Currency) || 'NGN')}
+                          {formatPriceWithCommas(item.price * item.quantity, (vendor.currency as Currency) || 'NGN')}
                         </Text>
                       </View>
                     ))}
@@ -1063,7 +1066,7 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
                     <View style={styles.invPreviewTotalRow}>
                       <Text style={styles.invPreviewTotalLabel}>Subtotal</Text>
                       <Text style={styles.invPreviewTotalValue}>
-                        {formatPriceWithCommas(invoicePreviewOrder.subtotal, (mockVendor.currency as Currency) || 'NGN')}
+                        {formatPriceWithCommas(invoicePreviewOrder.subtotal, (vendor.currency as Currency) || 'NGN')}
                       </Text>
                     </View>
                   )}
@@ -1071,7 +1074,7 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
                     <View style={styles.invPreviewTotalRow}>
                       <Text style={styles.invPreviewTotalLabel}>Tax</Text>
                       <Text style={styles.invPreviewTotalValue}>
-                        {formatPriceWithCommas(invoicePreviewOrder.tax, (mockVendor.currency as Currency) || 'NGN')}
+                        {formatPriceWithCommas(invoicePreviewOrder.tax, (vendor.currency as Currency) || 'NGN')}
                       </Text>
                     </View>
                   )}
@@ -1079,14 +1082,14 @@ export const VendorOrderChatScreen = ({ orderId }: Props) => {
                     <View style={styles.invPreviewTotalRow}>
                       <Text style={styles.invPreviewTotalLabel}>Discount</Text>
                       <Text style={[styles.invPreviewTotalValue, { color: Colors.success }]}>
-                        -{formatPriceWithCommas(invoicePreviewOrder.discount, (mockVendor.currency as Currency) || 'NGN')}
+                        -{formatPriceWithCommas(invoicePreviewOrder.discount, (vendor.currency as Currency) || 'NGN')}
                       </Text>
                     </View>
                   )}
                   <View style={styles.invPreviewGrandRow}>
                     <Text style={styles.invPreviewGrandLabel}>Total</Text>
                     <Text style={styles.invPreviewGrandValue}>
-                      {formatPriceWithCommas(invoicePreviewOrder.total, (mockVendor.currency as Currency) || 'NGN')}
+                      {formatPriceWithCommas(invoicePreviewOrder.total, (vendor.currency as Currency) || 'NGN')}
                     </Text>
                   </View>
                 </View>

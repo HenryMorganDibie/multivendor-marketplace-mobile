@@ -832,10 +832,12 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
 
     try {
       const fetchPublic = callable<
-        { shareCode: string },
+        { shareToken: string },
         { success: true; invoice: Record<string, unknown> }
       >('getPublicInvoice');
-      const res = await fetchPublic({ shareCode });
+      // The callable's parameter is shareToken; the app calls the same value a
+      // shareCode. Same string, two names, so it is passed through as-is.
+      const res = await fetchPublic({ shareToken: shareCode });
       const raw = res.data.invoice;
       return mapInvoiceDoc((raw.invoiceId as string) ?? shareCode, raw);
     } catch (error) {

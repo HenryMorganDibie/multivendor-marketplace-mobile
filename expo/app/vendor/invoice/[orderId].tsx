@@ -59,7 +59,7 @@ import {
 import type { Invoice, InvoiceStatus } from '@/contexts/InvoiceContext';
 import { useInvoiceBranding } from '@/contexts/InvoiceBrandingContext';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import { formatInvoiceCustomerName } from '@/utils/internalCustomerName';
 import { formatPriceWithCommas as formatPrice, type Currency } from '@/utils/formatPrice';
 import InvoiceRenderer, { type InvoiceRendererData } from '@/components/InvoiceRenderer';
@@ -79,7 +79,7 @@ import { Colors } from '@/constants/colors';
  *
  * The vendor never sees a generic data card in place of the branded invoice.
  * VENDOR placeholder is never used — the actual vendor business name is
- * resolved via mockVendor.name (Henry: vendor.displayName → vendor.businessName
+ * resolved via vendor.name (Henry: vendor.displayName → vendor.businessName
  * → "Business" fallback).
  *
  * MVP status rules (derived, not manually toggled except Record Payment):
@@ -103,6 +103,10 @@ export default function VendorInvoiceDetailScreen() {
     duplicateInvoiceById,
     markInvoiceSharedExternally,
   } = useInvoices();
+  // The signed-in vendor. The contact block, share text and PDF header all
+  // read from here; they used the demo fixture, so a real vendor's invoice
+  // carried somebody else's business name, phone and address.
+  const { vendor } = useVendor();
   const { effectiveBranding } = useInvoiceBranding();
   const { plan } = useVendorPlan();
 
@@ -194,8 +198,8 @@ export default function VendorInvoiceDetailScreen() {
   const displayCustomerName = formatInvoiceCustomerName(invoice.customerName, invoice.customerSource);
 
   // Vendor name fallback: displayName → businessName → "Business".
-  // Never "VENDOR". Mock uses mockVendor.name ("Spicy Restaurant").
-  const vendorName = mockVendor.name || mockVendor.fullName || 'Business';
+  // Never "VENDOR". Mock uses vendor.name ("Spicy Restaurant").
+  const vendorName = vendor.name || vendor.fullName || 'Business';
 
   const issueDateStr = invoice.issueDate
     ? new Date(invoice.issueDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -279,10 +283,10 @@ export default function VendorInvoiceDetailScreen() {
       const html = generateInvoiceHTML({
         invoiceNumber: invoice.invoiceNumber,
         vendorName,
-        vendorPhone: mockVendor.phone,
-        vendorEmail: mockVendor.email,
-        vendorAddress: mockVendor.fullAddress,
-        vendorWebsite: mockVendor.contactLinks?.website,
+        vendorPhone: vendor.phone,
+        vendorEmail: vendor.email,
+        vendorAddress: vendor.fullAddress,
+        vendorWebsite: vendor.contactLinks?.website,
         customerName: displayCustomerName,
         customerPhone: invoice.customerSource === 'external' ? invoice.customerPhone : undefined,
         customerEmail: invoice.customerSource === 'external' ? invoice.customerEmail : undefined,
@@ -538,10 +542,10 @@ export default function VendorInvoiceDetailScreen() {
       invoice.fulfilmentMethod === 'delivery' && invoice.fulfilmentDetails?.deliveryFee
         ? invoice.fulfilmentDetails.deliveryFee
         : 0,
-    vendorPhone: mockVendor.phone,
-    vendorEmail: mockVendor.email,
-    vendorAddress: mockVendor.fullAddress,
-    vendorWebsite: mockVendor.contactLinks?.website,
+    vendorPhone: vendor.phone,
+    vendorEmail: vendor.email,
+    vendorAddress: vendor.fullAddress,
+    vendorWebsite: vendor.contactLinks?.website,
   };
 
   const rendererBranding = {

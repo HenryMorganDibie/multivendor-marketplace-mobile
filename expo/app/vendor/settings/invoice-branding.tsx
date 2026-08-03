@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { uploadInvoiceLogo } from '@/lib/invoices/uploadInvoiceLogo';
 import {
   Upload,
   Image as ImageIcon,
@@ -107,6 +108,9 @@ export default function InvoiceBrandingScreen() {
   // no hex input, no "Hide" button. `showAllColors` expands the curated set
   // from the initial 6 to the full ~36 via "View more colors".
   const [showAllColors, setShowAllColors] = useState<boolean>(false);
+  // Blocks Save while the logo is still going up, so a storage path is never
+  // saved as a half-uploaded object or a local file:// uri.
+  const [uploadingLogo, setUploadingLogo] = useState<boolean>(false);
 
   // Re-sync draft when the persisted settings load/change externally.
   useEffect(() => {
@@ -175,7 +179,21 @@ export default function InvoiceBrandingScreen() {
         quality: 0.85,
       });
       if (result.canceled || !result.assets?.length) return;
-      setDraft((d) => ({ ...d, logoUri: result.assets[0].uri }));
+      // Shown immediately from the local uri so the preview is instant, then
+      // uploaded. The saved value is the storage path, because a local file://
+      // uri means nothing to the PDF renderer and the backend rejects it.
+      const localUri = result.assets[0].uri;
+      setDraft((d) => ({ ...d, logoUri: localUri }));
+      try {
+        setUploadingLogo(true);
+        const path = await uploadInvoiceLogo(localUri);
+        setDraft((d) => ({ ...d, logoUri: path }));
+      } catch (error: any) {
+        setDraft((d) => ({ ...d, logoUri: null }));
+        Alert.alert('Logo upload failed', error?.message ?? 'Please try again.');
+      } finally {
+        setUploadingLogo(false);
+      }
     } catch (e) {
       console.error('[InvoiceBranding] logo upload failed', e);
       Alert.alert('Upload failed', 'Could not pick that image. Please try again.');

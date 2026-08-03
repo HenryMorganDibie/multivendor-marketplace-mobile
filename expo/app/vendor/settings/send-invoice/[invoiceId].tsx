@@ -17,12 +17,15 @@ import type { InboxSnapshot } from '@/mocks/inboxData';
 import { formatVendorDisplayName } from '@/utils/vendorDisplayHelpers';
 import { formatInvoiceCustomerName } from '@/utils/internalCustomerName';
 import { formatPrice } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import ConversationPickerModal from '@/components/ConversationPickerModal';
 import { Colors } from '@/constants/colors';
 
 export default function SendInvoiceScreen() {
+  // The signed-in vendor, not the demo fixture. This screen showed the demo
+  // business name and currency to real vendors.
+  const { vendor } = useVendor();
   const { invoiceId } = useLocalSearchParams();
   const { getInvoiceById, sendInvoiceInChat, markInvoiceSharedExternally } = useInvoices();
   const { addMessageToChat } = useChats();
@@ -95,7 +98,7 @@ export default function SendInvoiceScreen() {
   const handleShareExternally = async () => {
     const shareUrl = invoice.shareCode ? getInvoiceShareUrl(invoice.shareCode) : undefined;
     const message =
-      `Invoice ${invoice.invoiceNumber} from ${mockVendor.name}\n` +
+      `Invoice ${invoice.invoiceNumber} from ${vendor.name}\n` +
       `Total: ${formatPrice(invoice.total, invoice.currency)}` +
       (shareUrl ? `\n\nView invoice: ${shareUrl}` : '');
 

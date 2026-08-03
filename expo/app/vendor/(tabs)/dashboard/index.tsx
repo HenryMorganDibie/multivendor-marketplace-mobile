@@ -35,7 +35,6 @@ import { getBottomOverlayPadding } from '@/lib/constants/layout';
 import { useVendor } from '@/contexts/VendorContext';
 import { useVerification, type VerificationStatus } from '@/contexts/VerificationContext';
 import { formatCompactCurrency, formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
 import { useTodaysNote } from '@/contexts/TodaysNoteContext';
 import { useOrders } from '@/contexts/OrdersContext';
 import type { Order } from '@/mocks/ordersData';
@@ -680,7 +679,7 @@ export default function VendorDashboardScreen() {
   const [verificationBannerDismissed, setVerificationBannerDismissed] = useState(false);
   const { plan, usernameSelectionPending } = useVendorPlan();
   const { unreadHighPriorityCount, hasUnreadMediumPriority } = useVendorNotifications();
-  const { vendor: _vendor, updateVendor: _updateVendor } = useVendor();
+  const { vendor, updateVendor: _updateVendor } = useVendor();
   const { note: todaysNote } = useTodaysNote();
   const { verificationData } = useVerification();
   const { isPublished: isStorefrontPublished } = useVendorOnboarding();
@@ -695,8 +694,8 @@ export default function VendorDashboardScreen() {
     bestSeller: liveBestSeller,
   } = useVendorDashboard();
 
-  const dashboardCurrency = ((mockVendor.currency as Currency) ||
-    getCurrencyFromCountryCode(mockVendor.countryCode)) as Currency;
+  const dashboardCurrency = ((vendor.currency as Currency) ||
+    getCurrencyFromCountryCode(vendor.countryCode)) as Currency;
 
   const verificationStatus = verificationData.status;
   // Verification is deliberately shown in ONE place at a time. While a vendor
@@ -1055,7 +1054,7 @@ export default function VendorDashboardScreen() {
             <View style={styles.perfLabelWrap}>
               <Text style={styles.perfLabel} numberOfLines={2}>{"Today's\nRevenue"}</Text>
             </View>
-            <Text style={styles.perfValue}>{formatCompactCurrency(todayRevenue, (mockVendor.currency as Currency) || getCurrencyFromCountryCode(mockVendor.countryCode))}</Text>
+            <Text style={styles.perfValue}>{formatCompactCurrency(todayRevenue, (vendor.currency as Currency) || getCurrencyFromCountryCode(vendor.countryCode))}</Text>
           </View>
           <View style={styles.perfDivider} />
           <View style={styles.perfCard}>
@@ -1124,7 +1123,7 @@ export default function VendorDashboardScreen() {
                       </View>
                       <View style={styles.listRowRight}>
                         <Text style={styles.listRowMeta}>
-                          {order.items.reduce((sum, i) => sum + i.quantity, 0)} items • {formatCompactCurrency(order.total, (mockVendor.currency as Currency) || getCurrencyFromCountryCode(mockVendor.countryCode))}
+                          {order.items.reduce((sum, i) => sum + i.quantity, 0)} items • {formatCompactCurrency(order.total, (vendor.currency as Currency) || getCurrencyFromCountryCode(vendor.countryCode))}
                         </Text>
                         <ChevronIcon />
                       </View>
