@@ -32,6 +32,9 @@ export interface VendorDashboardData {
   ordersToday: number;
   pendingOrders: number;
   todayRevenue: number;
+  /** Lifetime revenue and what is still owed, both ledger-derived. */
+  totalRevenue: number;
+  outstandingRevenue: number;
   upcomingOrders: number;
   todaysSchedule: DashboardScheduleEntry[];
   revenueCard?: { total: number; orderCount: number; range: string };
@@ -89,6 +92,8 @@ export const [VendorDashboardProvider, useVendorDashboard] = createContextHook((
       ordersToday: data?.ordersToday ?? 0,
       pendingOrders: data?.pendingOrders ?? 0,
       todayRevenue: data?.todayRevenue ?? 0,
+      totalRevenue: data?.totalRevenue ?? 0,
+      outstandingRevenue: data?.outstandingRevenue ?? 0,
       upcomingOrders: data?.upcomingOrders ?? 0,
       todaysSchedule: data?.todaysSchedule ?? [],
       revenueCard: data?.revenueCard,

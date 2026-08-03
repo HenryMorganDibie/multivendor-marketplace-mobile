@@ -45,10 +45,6 @@ import { useVendorDashboard } from '@/contexts/VendorDashboardContext';
 import { buildInsightCards, ICON_MAP, type InsightData } from '@/lib/insights/buildInsightCards';
 import { callable } from '@/lib/firebase';
 import { useInvoices } from '@/contexts/InvoiceContext';
-import {
-  getInvoiceRevenueForDay,
-  getInvoiceRevenueForRange,
-} from '@/utils/invoiceRevenue';
 import { formatInvoiceCustomerName } from '@/utils/internalCustomerName';
 
 type TimeRange = 'today' | 'week' | 'month' | 'year';
@@ -691,6 +687,8 @@ export default function VendorDashboardScreen() {
     ordersToday: liveOrdersToday,
     pendingOrders: livePendingOrders,
     todayRevenue: liveTodayRevenue,
+    totalRevenue: liveTotalRevenue,
+    outstandingRevenue: liveOutstandingRevenue,
     bestSeller: liveBestSeller,
   } = useVendorDashboard();
 
@@ -797,33 +795,26 @@ export default function VendorDashboardScreen() {
   // once via the order and again via the invoice — see
   // BACKEND_INTEGRATION_GUIDE.md "Invoice payment double-counting".
   const { invoices } = useInvoices();
-  const linkedOrderIds = useMemo(
-    () => new Set(vendorOrders.map((o) => o.id)),
-    [],
-  );
-  const todayStr = new Date().toDateString();
-  const invoiceRevenueToday = useMemo(
-    () => getInvoiceRevenueForDay(invoices, todayStr, linkedOrderIds),
-    [invoices, todayStr, linkedOrderIds],
-  );
-
-  // Total revenue: completed orders + standalone invoice payments (all-time).
-  // Uses the range helper with a wide window so every recorded payment is
-  // captured regardless of when it was received.
-  const invoiceRevenueAll = useMemo(
-    () => getInvoiceRevenueForRange(invoices, new Date(0), new Date(), linkedOrderIds),
-    [invoices, linkedOrderIds],
-  );
-
-  const orderRevenueTotal = completedOrders.reduce((sum, o) => sum + o.total, 0);
-  const totalRevenue = orderRevenueTotal + invoiceRevenueAll;
+  /**
+   * Revenue comes from the backend, which reads the payment ledger.
+   *
+   * This screen used to compute its own: completed orders plus standalone
+   * invoice payments, with a set of linked order ids to avoid counting an
+   * order and its invoice twice. That is the two-lists-and-an-ignore-rule
+   * workaround the ledger was built to replace, still running here.
+   *
+   * It was also displayed alongside the backend's figure — the KPI tile showed
+   * one number and the performance row showed another, both labelled today's
+   * revenue, on the same screen. They disagreed because they were counting
+   * different things: completed work versus money received.
+   *
+   * The backend now sends today, lifetime and outstanding together, all from
+   * the ledger, so there is one answer and nothing left to recompute.
+   */
+  const totalRevenue = liveTotalRevenue;
+  const todayRevenue = liveTodayRevenue;
 
   const _totalOrders = vendorOrders.length;
-
-  const todayRevenue =
-    todayOrders
-      .filter(o => o.status === 'completed')
-      .reduce((sum, o) => sum + o.total, 0) + invoiceRevenueToday;
 
   const todayOrdersCount = todayOrders.length;
 
