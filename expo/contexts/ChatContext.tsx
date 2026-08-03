@@ -2,6 +2,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Chat, ChatMessage, ChatType, OrderContextData, normalizeChatType, toPushChatType } from '@/mocks/chatData';
 import { MOCK_CUSTOMER_ID, MOCK_VENDOR_ID } from '@/mocks/inboxData';
+import { useBackendChats } from '@/lib/chat/useBackendChats';
 import { chatService } from '@/services/chatService';
 import { useVendorPushNotifications } from './VendorPushNotificationContext';
 import { useBlockedUsers } from './BlockedUsersContext';
@@ -37,6 +38,11 @@ const mockCurrentUser = {
  * `onSnapshot` listener; the public ChatContext API stays the same.
  */
 export const [ChatProvider, useChats] = createContextHook(() => {
+  // Fills chatService's store with the signed-in user's real threads. The
+  // migration note above describes exactly this swap; the public API below is
+  // unchanged, so no screen needed rewriting to get real conversations.
+  useBackendChats();
+
   const [, setTick] = useState<number>(() => chatService.getGlobalVersion());
   useEffect(() => {
     const unsubscribe = chatService.subscribeAll(() => {

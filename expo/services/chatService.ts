@@ -1,4 +1,6 @@
 import { Chat, ChatMessage, ChatType, LegacyChatType, mockChats, normalizeChatType } from '@/mocks/chatData';
+import { auth, callable } from '@/lib/firebase';
+import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 
 export interface CreateChatParams {
   vendorId: string;
@@ -126,6 +128,31 @@ export const chatService = {
   },
 
   /**
+   * Replace the store with threads from the backend.
+   *
+   * The migration note above describes swapping this store for a Firestore
+   * listener. This is that swap, done by hydrating the existing array rather
+   * than replacing the module's binding: every screen and lookup holds a
+   * reference to this same array, so reassigning it would leave them all
+   * pointing at the old contents.
+   *
+   * Called only when a real session has resolved. The demo logins keep the
+   * fixture threads, which is the whole reason they exist.
+   */
+  hydrateFromBackend(next: Chat[]): void {
+    chats.length = 0;
+    chats.push(...next);
+    globalVersion += 1;
+    // One notification per thread, so a screen already mounted on a specific
+    // chat re-renders rather than only list-level consumers.
+    for (const c of next) {
+      versionsByChat.set(c.id, (versionsByChat.get(c.id) ?? 0) + 1);
+      listenersByChat.get(c.id)?.forEach(fn => fn(c));
+    }
+    allListeners.forEach(fn => fn('*'));
+  },
+
+  /**
    * Subscribe to ANY chat-store write. Used by ChatContext to drive a
    * single tick-based re-render across the app without holding a separate
    * useState<Chat[]> copy.
@@ -245,6 +272,45 @@ export const chatService = {
     const chat = chats.find(c => c.id === params.chatId);
     if (!chat) {
       throw new Error(`Chat not found: ${params.chatId}`);
+    }
+
+    /**
+     * A real session sends through the backend, which is the only path that
+     * puts the message in the other person's conversation. Pushing into the
+     * local array alone meant the vendor saw their own reply and the customer
+     * never received it.
+     *
+     * Nothing is written locally on that path: the message listener brings the
+     * server's copy back, with the id and timestamp the server assigned.
+     * Appending here as well would show the message twice until the snapshot
+     * arrived and replaced it.
+     *
+     * Only the three client-creatable kinds go through here. Invoices,
+     * receipts, order context and change requests are assembled server-side by
+     * the functions that own them — sendInvoiceInChat posts an invoice card —
+     * because a client that could write those could fabricate a demand for
+     * money.
+     */
+    if (!DEV_LOCAL_AUTH_ENABLED || auth.currentUser) {
+      const send = callable<Record<string, unknown>, { success: true; messageId: string }>(
+        'sendChatMessage',
+      );
+      const res = await send({
+        chatId: params.chatId,
+        type: params.type,
+        content: params.content,
+        contactCardData: params.contactCardData ?? null,
+        catalogItemData: params.catalogItemData ?? null,
+      });
+
+      return {
+        id: res.data.messageId,
+        type: params.type,
+        content: params.content,
+        sender: params.sender,
+        timestamp: new Date().toISOString(),
+        status: 'sent',
+      };
     }
 
     const newMessage: ChatMessage = {
