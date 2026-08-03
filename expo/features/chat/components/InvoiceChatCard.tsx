@@ -16,7 +16,7 @@ import { Colors } from '@/constants/colors';
 import { formatPriceWithCommas as formatPrice, type Currency } from '@/utils/formatPrice';
 import { formatTime } from '@/features/chat/selectors/chatSelectors';
 import { useInvoices } from '@/contexts/InvoiceContext';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import type { InvoiceData } from '@/mocks/chatData';
 import * as Print from 'expo-print';
 import { Alert } from '@/utils/alert';
@@ -127,6 +127,10 @@ const PAYMENT_METHODS: { id: InvoicePaymentMethod; label: string }[] = [
 
 export const InvoiceChatCard = React.memo(function InvoiceChatCard({ data, timestamp, role = 'vendor' }: Props) {
   const { getInvoiceById, recordPayment } = useInvoices();
+  // The real signed-in vendor. This card used mockVendor for the business name
+  // and currency, so a card in a live chat showed the demo business to whoever
+  // was reading it.
+  const { vendor } = useVendor();
   const [showRecordPayment, setShowRecordPayment] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -136,7 +140,7 @@ export const InvoiceChatCard = React.memo(function InvoiceChatCard({ data, times
   const [isDownloading, setIsDownloading] = useState(false);
 
   const invoice = getInvoiceById(data.invoiceId);
-  const currency = (data.currency ?? invoice?.currency ?? mockVendor.currency ?? 'NGN') as Currency;
+  const currency = (data.currency ?? invoice?.currency ?? vendor.currency ?? 'NGN') as Currency;
   const amountPaid = invoice ? getAmountPaid(invoice.payments) : 0;
   const balanceDue = invoice ? getBalanceDue(invoice.total, invoice.payments) : (data.amountDue ?? 0);
   const currentStatus = invoice?.paymentStatus ?? data.paymentStatus ?? 'unpaid';
@@ -145,7 +149,7 @@ export const InvoiceChatCard = React.memo(function InvoiceChatCard({ data, times
 
   const itemCount = data.itemCount ?? invoice?.items?.length ?? 0;
   const customerName = data.customerName ?? invoice?.customerName ?? '';
-  const vendorName = data.vendorName ?? mockVendor.name;
+  const vendorName = data.vendorName ?? vendor.name;
 
   const dateStr = (() => {
     try {

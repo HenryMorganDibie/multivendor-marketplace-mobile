@@ -31,7 +31,7 @@ import { useInvoices } from '@/contexts/InvoiceContext';
 import type { Invoice, InvoiceStatus, InvoiceCustomerSource } from '@/contexts/InvoiceContext';
 import { formatPrice, type Currency } from '@/utils/formatPrice';
 import { formatInvoiceCustomerName } from '@/utils/internalCustomerName';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import { Alert } from '@/utils/alert';
 import { Colors } from '@/constants/colors';
 
@@ -255,6 +255,10 @@ function SwipeableInvoiceCard({
   onPress,
   onDeleteDraft,
 }: SwipeableInvoiceCardProps) {
+  // The signed-in vendor, for the currency fallback below. Read here rather
+  // than passed down: the row is rendered in a list and threading it through
+  // props would mean touching every call site for one field.
+  const { vendor } = useVendor();
   const translateX = useRef(new Animated.Value(0)).current;
   const isOpen = useRef(false);
 
@@ -320,7 +324,7 @@ function SwipeableInvoiceCard({
   // customers use the vendor-typed display name verbatim. Never the full surname.
   const customerLabel = formatInvoiceCustomerName(invoice.customerName, invoice.customerSource);
   const sourceLabel: string = invoice.customerSource === 'external' ? 'External' : 'Internal';
-  const vendorCurrency = (invoice.currency as Currency) || (mockVendor.currency as Currency) || 'NGN';
+  const vendorCurrency = (invoice.currency as Currency) || (vendor.currency as Currency) || 'NGN';
   const paidAmount = getAmountPaid(invoice);
   const balanceAmount = getBalanceDue(invoice);
   const showPartialLine = isPartiallyPaid(invoice) && paidAmount > 0;
@@ -435,6 +439,8 @@ function FilterSection({
 
 export default function InvoicesScreen() {
   const { invoices, deleteInvoice } = useInvoices();
+  // Currency falls back to the signed-in vendor's, not the demo one's.
+  const { vendor } = useVendor();
 
   const [activePill, setActivePill] = useState<StatusPillKey>('all');
   const [showSearch, setShowSearch] = useState<boolean>(false);

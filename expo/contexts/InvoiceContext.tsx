@@ -459,6 +459,12 @@ type InvoiceContextValue = {
   deleteInvoice: (id: string) => Promise<void>;
   getInvoiceById: (id: string) => Invoice | undefined;
   getInvoiceByShareCode: (shareCode: string) => Invoice | undefined;
+  /** Resolves a shared link server-side for someone who does not own it. */
+  fetchPublicInvoice: (shareCode: string) => Promise<Invoice | undefined>;
+  /** Cancels an invoice server-side. The only status transition the backend takes. */
+  cancelInvoice: (id: string) => Promise<void>;
+  /** Server-rendered PDF, plan-gated by canDownloadInvoicePdf. */
+  downloadInvoicePdf: (id: string) => Promise<{ pdfBase64: string; fileName: string } | null>;
   sendInvoiceInChat: (id: string, chatId: string, customerId?: string) => Promise<void>;
   markInvoiceSharedExternally: (id: string) => Promise<void>;
   recordPayment: (id: string, payment: Omit<InvoicePaymentRecord, 'id' | 'recordedAt'>) => Promise<InvoicePaymentRecord | null>;
@@ -478,6 +484,9 @@ const DEFAULT_INVOICE_CONTEXT_VALUE: InvoiceContextValue = {
   deleteInvoice: async () => {},
   getInvoiceById: () => undefined,
   getInvoiceByShareCode: () => undefined,
+  fetchPublicInvoice: async () => undefined,
+  cancelInvoice: async () => {},
+  downloadInvoicePdf: async () => null,
   sendInvoiceInChat: async () => {},
   markInvoiceSharedExternally: async () => {},
   recordPayment: async () => null,
@@ -798,7 +807,44 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
 
   /** Resolve an invoice from its public share code (the platform.app/i/{shareCode}). */
   const getInvoiceByShareCode = (shareCode: string): Invoice | undefined =>
-    (invoicesQuery.data || []).find((inv) => inv.shareCode === shareCode);
+    (backendInvoices ?? invoicesQuery.data ?? []).find((inv) => inv.shareCode === shareCode);
+
+  /**
+   * fetchPublicInvoice — resolve a shared link for someone who does not own it.
+   *
+   * The public page looked the share code up in the device's own list, which
+   * can only ever succeed for the vendor who created the invoice on that
+   * device. For the customer the link is actually for — a different person on a
+   * different phone — there was nothing to find, so the page was empty. It also
+   * searched the local AsyncStorage list rather than the backend one, so it
+   * failed for the vendor too once their invoices came from Firestore.
+   *
+   * getPublicInvoice has been deployed since Phase 3 and nothing called it. It
+   * resolves by share token server-side and strips the token from what it
+   * returns, so possessing a link never leaks the means to guess another.
+   *
+   * The local lookup is still tried first: the vendor previewing their own
+   * invoice should not need a round trip.
+   */
+  const fetchPublicInvoice = async (shareCode: string): Promise<Invoice | undefined> => {
+    const local = getInvoiceByShareCode(shareCode);
+    if (local) return local;
+
+    try {
+      const fetchPublic = callable<
+        { shareCode: string },
+        { success: true; invoice: Record<string, unknown> }
+      >('getPublicInvoice');
+      const res = await fetchPublic({ shareCode });
+      const raw = res.data.invoice;
+      return mapInvoiceDoc((raw.invoiceId as string) ?? shareCode, raw);
+    } catch (error) {
+      // A revoked or expired link is a normal outcome, not a fault. The page
+      // shows its own not-found state rather than an error.
+      console.warn('[Invoices] Public invoice not available:', error);
+      return undefined;
+    }
+  };
 
   /**
    * Mark an invoice as sent inside a the platform chat thread.
@@ -968,6 +1014,9 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
     duplicateInvoiceById,
     getInvoiceById,
     getInvoiceByShareCode,
+    fetchPublicInvoice,
+    cancelInvoice,
+    downloadInvoicePdf,
     sendInvoiceInChat,
     markInvoiceSharedExternally,
     recordPayment,
