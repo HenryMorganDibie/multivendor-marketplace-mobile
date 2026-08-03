@@ -693,11 +693,79 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
   };
 
   const updateInvoice = async (id: string, updates: Partial<Invoice>) => {
+    /**
+     * Edits went to AsyncStorage while the screen renders the backend list, so
+     * for a real vendor "Edit draft" had no visible effect at all.
+     *
+     * Only the fields the backend accepts are sent. It decides what may change
+     * based on what has happened to the invoice: money is editable only while
+     * the customer has never been sent a figure, nothing is editable once a
+     * payment exists, and currency is never editable because it follows the
+     * vendor's country. Local-only fields on the app's richer Invoice shape are
+     * intentionally not forwarded.
+     */
+    if (!DEV_LOCAL_AUTH_ENABLED || backendInvoices?.some((inv) => inv.id === id)) {
+      const edit = callable<Record<string, unknown>, { success: true }>('updateInvoice');
+      const payload: Record<string, unknown> = { invoiceId: id };
+
+      if (updates.customerName !== undefined) payload.customerName = updates.customerName;
+      if (updates.customerPhone !== undefined) payload.customerPhone = updates.customerPhone ?? null;
+      if (updates.customerEmail !== undefined) payload.customerEmail = updates.customerEmail ?? null;
+      if (updates.notes !== undefined) payload.notes = updates.notes ?? null;
+      if (updates.dueDate !== undefined) payload.dueDate = updates.dueDate ?? null;
+      if (updates.items !== undefined) {
+        payload.lineItems = (updates.items ?? []).map((item) => ({
+          description: item.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        }));
+      }
+
+      // Nothing but the id: a caller changing only local display state has
+      // nothing for the server, and a no-op write would still bump updatedAt.
+      if (Object.keys(payload).length === 1) return;
+
+      await edit(payload);
+      return;
+    }
+
     const invoices = invoicesQuery.data || [];
     const updated = invoices.map((inv) =>
       inv.id === id ? { ...inv, ...updates, updatedAt: new Date().toISOString() } : inv
     );
     await saveInvoicesMutation.mutateAsync(updated);
+  };
+
+  /**
+   * cancelInvoice — the only status transition the backend still accepts.
+   *
+   * updateInvoiceStatus has been deployed since Phase 3 and nothing called it,
+   * so cancelling was local-only and invisible to the server. It refuses `paid`
+   * outright: settlement is decided by the ledger, not by writing a status.
+   */
+  const cancelInvoice = async (id: string) => {
+    const setStatus = callable<{ invoiceId: string; status: string }, { success: true }>(
+      'updateInvoiceStatus',
+    );
+    await setStatus({ invoiceId: id, status: 'cancelled' });
+  };
+
+  /**
+   * downloadInvoicePdf — returns base64 for the caller to share or save.
+   *
+   * Plan-gated server-side by canDownloadInvoicePdf, and gated there rather
+   * than here on purpose. A paid invoice renders with the branding frozen when
+   * it settled, so a receipt keeps the look it had at the time.
+   */
+  const downloadInvoicePdf = async (
+    id: string,
+  ): Promise<{ pdfBase64: string; fileName: string } | null> => {
+    const download = callable<
+      { invoiceId: string },
+      { success: true; pdfBase64: string; fileName: string }
+    >('downloadInvoicePdf');
+    const res = await download({ invoiceId: id });
+    return { pdfBase64: res.data.pdfBase64, fileName: res.data.fileName };
   };
 
   const deleteInvoice = async (id: string) => {
