@@ -42,7 +42,7 @@ import TodaysNoteModal from '@/components/TodaysNoteModal';
 import VendorSetupChecklist from '@/components/VendorSetupChecklist';
 import { useVendorOnboarding } from '@/contexts/VendorOnboardingContext';
 import { useVendorDashboard } from '@/contexts/VendorDashboardContext';
-import { getMockInsights, ICON_MAP, type InsightData } from '@/mocks/insightsData';
+import { buildInsightCards, ICON_MAP, type InsightData } from '@/lib/insights/buildInsightCards';
 import { callable } from '@/lib/firebase';
 import { useInvoices } from '@/contexts/InvoiceContext';
 import {
@@ -223,7 +223,7 @@ function InsightsSection({ plan, bestSellerName, bestSellerCount, pendingPayment
    * that card does not render, which is correct for a vendor with no data yet.
    */
   const insights: InsightData[] = useMemo(() => {
-    return getMockInsights({
+    return buildInsightCards({
       pendingPaymentCount: liveInsights?.pendingPaymentCount ?? pendingPaymentCount,
       bestSellerName: liveInsights?.bestSellerName ?? bestSellerName,
       bestSellerCount: liveInsights?.bestSellerCount ?? bestSellerCount,

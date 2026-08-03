@@ -1,3 +1,21 @@
+/**
+ * Builds the dashboard insight cards.
+ *
+ * This lived in mocks/insightsData.ts as getMockInsights, which was a
+ * misleading name: it invents nothing. It takes figures the backend computed —
+ * pending payments, genuinely new customers, low stock, the real best seller —
+ * and turns them into cards. Presentation logic, not fixtures.
+ *
+ * Sitting under mocks/ meant the dashboard imported from a mocks path while
+ * reading entirely real data, so an audit for remaining mock imports flagged a
+ * file that had none. Moved and renamed; the behaviour is unchanged.
+ *
+ * Every card is still guarded on presence. A figure the backend could not
+ * compute honestly arrives as null or undefined and its card does not render,
+ * which is correct for a vendor with no data yet and better than a confident
+ * wrong number.
+ */
+
 import React from 'react';
 import {
   CreditCard,
@@ -23,7 +41,7 @@ export interface InsightData {
   meta?: Record<string, string | number | boolean>;
 }
 
-export function getMockInsights(context: {
+export function buildInsightCards(context: {
   pendingPaymentCount: number;
   bestSellerName: string | null;
   bestSellerCount?: number;

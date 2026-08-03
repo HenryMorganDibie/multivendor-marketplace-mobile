@@ -20,9 +20,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { ChevronLeft, Send, Plus, ArrowUp, User, X, Award, ShoppingBag, DollarSign, MapPin, MessageSquare, ClipboardList, FileText, Receipt, Copy, Package, ChevronRight, Check, AlertCircle, Search, Pencil, Flag, Star, Images, ChevronUp, ChevronDown } from 'lucide-react-native';
 import { PaymentRequestCard } from '@/components/PaymentRequestCard';
-import { getChatByOrderId, ChatMessage, ContactCardData } from '@/mocks/chatData';
-import { mockOrders } from '@/mocks/ordersData';
+import type { ChatMessage, ContactCardData } from '@/mocks/chatData';
+
 import { useOrders } from '@/contexts/OrdersContext';
+import { useChats } from '@/contexts/ChatContext';
+import { useVendor } from '@/contexts/VendorContext';
 import { useChangeRequests } from '@/contexts/ChangeRequestsContext';
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
 import { useVendorCustomerNotes } from '@/contexts/VendorCustomerNotesContext';
@@ -35,7 +37,7 @@ import type { InvoiceStatus } from '@/contexts/InvoiceContext';
 import { useVendorDrafts } from '@/contexts/VendorDraftContext';
 import { useInbox } from '@/contexts/InboxContext';
 import { useChatRead } from '@/contexts/ChatReadContext';
-import { MOCK_VENDOR_ID } from '@/mocks/inboxData';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { formatVendorOrderId } from '@/utils/formatOrderId';
@@ -45,7 +47,7 @@ import { CHAT_BANNERS, CHAT_INPUT_PLACEHOLDERS } from '@/constants/chatStrings';
 import { useSecureContactView } from '@/hooks/useSecureContactView';
 import { validateChatMessage } from '@/utils/chatValidation';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+
 
 const formatScheduledDate = (dateStr: string): string => {
   try {
@@ -152,12 +154,17 @@ export default function VendorOrderChatScreen() {
   const { getDraft, saveDraft, clearDraft } = useVendorDrafts();
   const { vendorInbox, updateInboxAfterMessage } = useInbox();
 
-  const { getOrder, vendorConfirmPayment, vendorMarkNotPaid, updateOrderStatus } = useOrders();
+  const { orders, getOrder, vendorConfirmPayment, vendorMarkNotPaid, updateOrderStatus } = useOrders();
+  // Real conversations and the signed-in vendor. This screen resolved its chat
+  // from the fixture store and its orders from the mock array, so a real vendor
+  // opened somebody else's conversation about somebody else's order.
+  const { chats } = useChats();
+  const { vendor } = useVendor();
   const { requests: changeRequests } = useChangeRequests();
 
-  const chat = getChatByOrderId(orderId as string);
+  const chat = chats.find((c) => c.orderId === orderId);
   const orderFromContext = getOrder(orderId as string);
-  const order = orderFromContext || mockOrders.find(o => o.id === orderId);
+  const order = orderFromContext || orders.find(o => o.id === orderId);
   const isCompleted = order?.status === 'completed';
   const isRejected = false;
 
@@ -179,7 +186,7 @@ export default function VendorOrderChatScreen() {
 
   const activeOrders = useMemo(() => {
     if (!order || !order.customerId) return [];
-    const filtered = mockOrders.filter(
+    const filtered = orders.filter(
       (o) => 
         o.customerId === order.customerId && 
         o.vendorId === order.vendorId && 
@@ -197,7 +204,7 @@ export default function VendorOrderChatScreen() {
 
   const pinnedOrders = useMemo(() => {
     if (!order?.customerId || !order?.vendorId) return [];
-    const all = mockOrders
+    const all = orders
       .filter(o =>
         o.customerId === order.customerId &&
         o.vendorId === order.vendorId &&
@@ -359,7 +366,7 @@ export default function VendorOrderChatScreen() {
         updateInboxAfterMessage({
           conversationId: conv.conversationId,
           lastMessageText: messageContent,
-          lastSenderId: MOCK_VENDOR_ID,
+          lastSenderId: vendor.id,
           senderRole: 'vendor',
         });
         console.log('[VENDOR ORDER CHAT] Inbox snapshot updated:', conv.conversationId);
@@ -441,7 +448,7 @@ export default function VendorOrderChatScreen() {
   const handleCopyPaymentInstructions = async () => {
     if (!existingPaymentRequest?.paymentRequestData) return;
     const pd = existingPaymentRequest.paymentRequestData;
-    let instructions = `Amount: ${formatPriceWithCommas(pd.amount, (mockVendor.currency as Currency) || 'NGN')}\nMethod: ${pd.paymentMethod}`;
+    let instructions = `Amount: ${formatPriceWithCommas(pd.amount, (vendor.currency as Currency) || 'NGN')}\nMethod: ${pd.paymentMethod}`;
     if (pd.bankName) instructions += `\nBank: ${pd.bankName}`;
     if (pd.accountName) instructions += `\nAccount Name: ${pd.accountName}`;
     if (pd.accountNumber) instructions += `\nAccount Number: ${pd.accountNumber}`;
@@ -754,7 +761,7 @@ export default function VendorOrderChatScreen() {
 
   const getCustomerOrderHistory = () => {
     if (!order) return [];
-    return mockOrders.filter(
+    return orders.filter(
       (o) => o.customerName === order.customerName && o.vendorId === vendorId
     );
   };
@@ -840,7 +847,7 @@ export default function VendorOrderChatScreen() {
     }
   };
 
-  const renderPinnedCard = (o: (typeof mockOrders)[0], isScrollItem?: boolean) => {
+  const renderPinnedCard = (o: (typeof orders)[0], isScrollItem?: boolean) => {
     const itemCount = o.items.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0);
     const displayOrderId = (o.publicOrderId || o.id).toUpperCase();
     let fulfillmentLine = o.fulfillmentType || 'Pickup';
@@ -878,7 +885,7 @@ export default function VendorOrderChatScreen() {
             </Text>
             <Text style={styles.pinnedOrderDot}>·</Text>
             <Text style={styles.pinnedOrderTotal}>
-              {formatPriceWithCommas(o.total, (mockVendor.currency as Currency) || 'NGN')}
+              {formatPriceWithCommas(o.total, (vendor.currency as Currency) || 'NGN')}
             </Text>
           </View>
           {hasPaymentPending ? (
@@ -947,7 +954,7 @@ export default function VendorOrderChatScreen() {
             <View style={styles.customOrderPreviewInfo}>
               <Text style={styles.customOrderPreviewTitle}>Custom Order Proposal</Text>
               <Text style={styles.customOrderPreviewItems}>{itemCount} {itemCount === 1 ? 'item' : 'items'}</Text>
-              <Text style={styles.customOrderPreviewTotal}>{formatPriceWithCommas(proposal.total, (mockVendor.currency as Currency) || 'NGN')}</Text>
+              <Text style={styles.customOrderPreviewTotal}>{formatPriceWithCommas(proposal.total, (vendor.currency as Currency) || 'NGN')}</Text>
             </View>
           </View>
           <TouchableOpacity
@@ -1006,7 +1013,7 @@ export default function VendorOrderChatScreen() {
                     {item.description}
                   </Text>
                 )}
-                <Text style={styles.catalogItemCardPrice}>{formatPriceWithCommas(Number(displayPrice) || 0, (mockVendor.currency as Currency) || 'NGN')}</Text>
+                <Text style={styles.catalogItemCardPrice}>{formatPriceWithCommas(Number(displayPrice) || 0, (vendor.currency as Currency) || 'NGN')}</Text>
               </View>
             </View>
             <TouchableOpacity
@@ -1052,7 +1059,7 @@ export default function VendorOrderChatScreen() {
       const liveStatus: InvoiceStatus = invoiceRecord?.status ?? ((data.status as InvoiceStatus) || 'sent_in_chat');
       const invoiceNumberDisplay = invoiceRecord?.invoiceNumber ?? data.invoiceNumber ?? 'Invoice';
       const customerDisplayName = invoiceRecord?.customerName ?? data.customerName ?? 'Customer';
-      const amountDisplay = formatPriceWithCommas(invoiceRecord?.total ?? data.amountDue, ((data.currency ?? mockVendor.currency) as Currency) || 'NGN');
+      const amountDisplay = formatPriceWithCommas(invoiceRecord?.total ?? data.amountDue, ((data.currency ?? vendor.currency) as Currency) || 'NGN');
       const statusLabel = getInvoiceStatusDisplayLabel(liveStatus);
       const statusColor = liveStatus === 'paid' ? Colors.success
         : liveStatus === 'cancelled' || liveStatus === 'expired' ? Colors.error
@@ -1153,7 +1160,7 @@ export default function VendorOrderChatScreen() {
 
             <View style={styles.paymentRequestInfoSection}>
               <Text style={styles.paymentRequestInfoLabel}>Amount paid</Text>
-              <Text style={styles.paymentRequestInfoValue}>{formatPriceWithCommas(data.amountPaid, (mockVendor.currency as Currency) || 'NGN')}</Text>
+              <Text style={styles.paymentRequestInfoValue}>{formatPriceWithCommas(data.amountPaid, (vendor.currency as Currency) || 'NGN')}</Text>
             </View>
 
             <Text style={styles.paymentRequestCardTimestamp}>{formatTime(message.timestamp)}</Text>
@@ -1838,7 +1845,7 @@ export default function VendorOrderChatScreen() {
                                 {item.description}
                               </Text>
                             )}
-                            <Text style={styles.catalogItemPrice}>{formatPriceWithCommas(displayPrice, (mockVendor.currency as Currency) || 'NGN')}</Text>
+                            <Text style={styles.catalogItemPrice}>{formatPriceWithCommas(displayPrice, (vendor.currency as Currency) || 'NGN')}</Text>
                           </View>
                         </View>
                         <View style={[
@@ -2144,7 +2151,7 @@ export default function VendorOrderChatScreen() {
                       </View>
                       <View style={styles.cpOrderRight}>
                         <Text style={styles.cpOrderAmount}>
-                          {formatPriceWithCommas(histOrder.total, (mockVendor.currency as Currency) || 'NGN')}
+                          {formatPriceWithCommas(histOrder.total, (vendor.currency as Currency) || 'NGN')}
                         </Text>
                         <View style={[styles.cpStatusPill, { backgroundColor: pillBg }]}>
                           <Text style={[styles.cpStatusText, { color: pillColor }]}>{formatOrderStatus(s)}</Text>
@@ -2408,7 +2415,7 @@ export default function VendorOrderChatScreen() {
                 <View style={styles.existingPaymentAmountCard}>
                   <Text style={styles.existingPaymentAmountLabel}>AMOUNT REQUESTED</Text>
                   <Text style={styles.existingPaymentAmountValue}>
-                    {formatPriceWithCommas(existingPaymentRequest.paymentRequestData.amount, (mockVendor.currency as Currency) || 'NGN')}
+                    {formatPriceWithCommas(existingPaymentRequest.paymentRequestData.amount, (vendor.currency as Currency) || 'NGN')}
                   </Text>
                   <Text style={styles.existingPaymentMethodText}>
                     {existingPaymentRequest.paymentRequestData.paymentMethod}
@@ -2537,7 +2544,7 @@ export default function VendorOrderChatScreen() {
                       </View>
                     </View>
                     <Text style={styles.orderSelectionTotal}>
-                      {formatPriceWithCommas(orderItem.total, (mockVendor.currency as Currency) || 'NGN')}
+                      {formatPriceWithCommas(orderItem.total, (vendor.currency as Currency) || 'NGN')}
                     </Text>
                   </View>
                 </TouchableOpacity>
