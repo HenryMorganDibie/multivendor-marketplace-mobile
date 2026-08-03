@@ -854,6 +854,29 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
    * only; re-sends keep the original issue date.
    */
   const sendInvoiceInChat = async (id: string, chatId: string, customerId?: string) => {
+    /**
+     * This only ever rewrote local status fields. It never put anything in the
+     * conversation, so "sent in chat" described a state on one device while the
+     * customer's chat stayed empty — the invoice was marked delivered and never
+     * delivered.
+     *
+     * sendInvoiceInChat posts the card server-side. It assembles the card from
+     * the stored invoice rather than from anything sent here, since a client
+     * able to name its own amount or invoice number could post a convincing
+     * demand for money into someone's chat. It also binds chatId and
+     * sentInChatAt onto the invoice, which is what makes the delivery status
+     * derive as sent and what makes "Open chat" work at all.
+     */
+    if (!DEV_LOCAL_AUTH_ENABLED || backendInvoices?.some((inv) => inv.id === id)) {
+      const send = callable<
+        { invoiceId: string; chatId: string },
+        { success: true; alreadySent: boolean }
+      >('sendInvoiceInChat');
+      await send({ invoiceId: id, chatId });
+      // No local write: the listener brings back the bound invoice.
+      return;
+    }
+
     const invoices = invoicesQuery.data || [];
     const existing = invoices.find((inv) => inv.id === id);
     const wasDraft = existing?.status === 'draft';
