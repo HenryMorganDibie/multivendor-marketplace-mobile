@@ -139,16 +139,32 @@ export const InvoiceChatCard = React.memo(function InvoiceChatCard({ data, times
   const [isRecording, setIsRecording] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  /**
+   * The live invoice wins over the card's snapshot.
+   *
+   * `data` is the figures as they stood when the card was posted into the chat.
+   * Every field below read that first, so an invoice the vendor revised — a
+   * customer asking for three instead of two — kept showing the original amount
+   * in the conversation while the invoice itself had changed. The customer was
+   * looking at a stale demand for money and had no way to know.
+   *
+   * The snapshot is still the fallback: a card can outlive access to the
+   * invoice, and showing what was sent beats showing nothing.
+   */
   const invoice = getInvoiceById(data.invoiceId);
-  const currency = (data.currency ?? invoice?.currency ?? vendor.currency ?? 'NGN') as Currency;
+  const currency = (invoice?.currency ?? data.currency ?? vendor.currency ?? 'NGN') as Currency;
   const amountPaid = invoice ? getAmountPaid(invoice.payments) : 0;
   const balanceDue = invoice ? getBalanceDue(invoice.total, invoice.payments) : (data.amountDue ?? 0);
   const currentStatus = invoice?.paymentStatus ?? data.paymentStatus ?? 'unpaid';
   const statusConfig = STATUS_CONFIG[currentStatus] ?? STATUS_CONFIG.unpaid;
   const isPaid = currentStatus === 'paid';
 
-  const itemCount = data.itemCount ?? invoice?.items?.length ?? 0;
-  const customerName = data.customerName ?? invoice?.customerName ?? '';
+  // Revised after it was sent: the customer is told rather than left to notice
+  // the number moved.
+  const wasRevised = Boolean((invoice as { revisionCount?: number } | undefined)?.revisionCount);
+
+  const itemCount = invoice?.items?.length ?? data.itemCount ?? 0;
+  const customerName = invoice?.customerName ?? data.customerName ?? '';
   const vendorName = data.vendorName ?? vendor.name;
 
   const dateStr = (() => {
@@ -244,7 +260,9 @@ export const InvoiceChatCard = React.memo(function InvoiceChatCard({ data, times
     <>
       <View style={styles.card}>
         <View style={styles.header}>
-          <Text style={styles.headerLabel}>Invoice</Text>
+          <Text style={styles.headerLabel}>
+            {wasRevised ? 'Invoice · Updated' : 'Invoice'}
+          </Text>
           <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
             <Text style={[styles.statusText, { color: statusConfig.color }]}>
               {statusConfig.label.toUpperCase()}
