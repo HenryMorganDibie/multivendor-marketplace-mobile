@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -28,12 +28,13 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeBack } from '@/utils/useSafeBack';
 import { useCart } from '@/contexts/CartContext';
 import { useChats } from '@/contexts/ChatContext';
-import { mockVendor, mockMenuItems } from '@/mocks/vendorData';
+import { mockMenuItems } from '@/mocks/vendorData';
+import { useVendorFilter } from '@/contexts/VendorFilterContext';
 import { getMenuItemDisplayPrice, hasItemSalePrice } from '@/utils/itemPricing';
 import { generatethe platformOrderId } from '@/utils/orderIdGenerator';
 import { useAuditLog } from '@/contexts/AuditLogContext';
 import { useVendorRelationships } from '@/contexts/VendorRelationshipContext';
-import { useOrders } from '@/contexts/OrdersContext';
+import { useOrders, type PricedCart } from '@/contexts/OrdersContext';
 import { ContactCardPickerModal } from '@/components/ContactCardPickerModal';
 import { ContactCard } from '@/contexts/ContactCardsContext';
 import { formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
@@ -48,7 +49,20 @@ export default function ReviewOrderScreen() {
   const { getOrCreateOrderChat } = useChats();
   const { logEvent } = useAuditLog();
   const { addRelationship } = useVendorRelationships();
-  const { addOrder } = useOrders();
+  const { addOrder, priceCart } = useOrders();
+
+  /**
+   * The vendor this basket is actually for.
+   *
+   * Every id below was orderVendorId, so an order placed from any storefront
+   * was attributed to the demo business — and since that id does not exist in
+   * Firestore, the real order the backend tried to create from it could never
+   * resolve a vendor. The id now comes through the navigation params from the
+   * cart, and the display fields are looked up from the live vendor list.
+   */
+  const orderVendorId = (params.vendorId as string) || '';
+  const { allVendors } = useVendorFilter();
+  const orderVendor = allVendors.find((v: any) => v.id === orderVendorId);
   const [isExitModalVisible, setIsExitModalVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAllItems, setShowAllItems] = useState(false);
@@ -57,12 +71,53 @@ export default function ReviewOrderScreen() {
 
   const fulfillmentType = params.fulfillmentType as string;
   const orderNote = params.orderNote as string;
-  const subtotal = Number(params.subtotal);
-  const tax = Number(params.tax);
-  const discount = Number(params.discount);
-  const total = Number(params.total);
   const itemsJson = params.items as string;
   const items = JSON.parse(itemsJson);
+
+  /**
+   * The figures the customer approves are the server's.
+   *
+   * These came in as route params — a subtotal, discount and total the device
+   * worked out. repriceCart was called, but only after submit and with its
+   * result discarded, so if the two disagreed the customer had already agreed
+   * to a price that was never real. A price that changed, an item that went out
+   * of stock, a promotion that expired: all of it surfaced after the fact.
+   *
+   * Pricing happens on arrival now. The server checks the vendor is active and
+   * the country is open, that every item is approved, visible and in stock, and
+   * decides which promotion actually applies. Nothing is submittable until it
+   * answers, so the amount on screen is the amount that will be charged.
+   */
+  const [priced, setPriced] = useState<PricedCart | null>(null);
+  const [pricingError, setPricingError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPricingError(null);
+    priceCart({
+      vendorId: params.vendorId as string,
+      items: items.map((i: any) => ({ itemId: i.id, quantity: i.quantity })),
+      fulfillmentType: fulfillmentType?.toLowerCase() === 'delivery' ? 'delivery' : 'pickup',
+      orderNote,
+    })
+      .then((result) => { if (!cancelled) setPriced(result); })
+      .catch((err: any) => {
+        if (cancelled) return;
+        // The backend's message names the actual reason — an item withdrawn, a
+        // vendor paused, a country closed. It is shown as-is rather than
+        // replaced with something generic the customer cannot act on.
+        setPricingError(err?.message ?? 'We could not confirm this order. Please try again.');
+      });
+    return () => { cancelled = true; };
+  }, [itemsJson, fulfillmentType]);
+
+  // Falls back to the passed-in figures only while the server is still
+  // answering, so the layout does not jump. Nothing can be submitted until
+  // `priced` exists.
+  const subtotal = priced?.subtotal ?? Number(params.subtotal);
+  const tax = priced?.tax ?? Number(params.tax);
+  const discount = priced?.discount ?? Number(params.discount);
+  const total = priced?.total ?? Number(params.total);
   const preferredDate = params.preferredDate as string;
   const preferredTime = params.preferredTime as string;
   const contactCardParam = params.contactCard as string;
@@ -85,7 +140,7 @@ export default function ReviewOrderScreen() {
   const totalSavings = totalItemSavings + discount;
 
   const vendorCurrency: Currency =
-    (mockVendor.currency as Currency) || getCurrencyFromCountryCode(mockVendor.countryCode);
+    ((orderVendor?.currency as Currency) as Currency) || getCurrencyFromCountryCode((orderVendor?.countryCode ?? 'NG'));
   const fmt = (amount: number) => formatPriceWithCommas(amount, vendorCurrency);
 
   const [contactCard, setContactCard] = useState<ContactCard | null>(() => {
@@ -113,8 +168,8 @@ export default function ReviewOrderScreen() {
     setShowContactCardPicker(false);
   };
 
-  const vendorIsOpen = isVendorCurrentlyOpen(mockVendor);
-  const vendorNextOpen = getNextOpenTime(mockVendor);
+  const vendorIsOpen = isVendorCurrentlyOpen(orderVendor as any);
+  const vendorNextOpen = getNextOpenTime(orderVendor as any);
 
   const handleSendOrderRequest = () => {
     if (isSubmitting || hasSubmittedRef.current) {
@@ -125,14 +180,14 @@ export default function ReviewOrderScreen() {
     setIsSubmitting(true);
     hasSubmittedRef.current = true;
     const orderRequestId = `REQ-${Date.now()}`;
-    const publicOrderId = generatethe platformOrderId(mockVendor.slug);
+    const publicOrderId = generatethe platformOrderId((orderVendor?.slug ?? orderVendorId));
 
     const finalNote = [orderNote, customerNote].filter(Boolean).join('\n').trim();
 
     console.log('Order confirmed and sent:', {
       orderRequestId,
       publicOrderId,
-      vendor: mockVendor.name,
+      vendor: (orderVendor?.name ?? ''),
       fulfillmentType,
       items,
       subtotal,
@@ -149,8 +204,8 @@ export default function ReviewOrderScreen() {
 
     if (vendorIsOpen) {
       getOrCreateOrderChat(
-        mockVendor.id,
-        mockVendor.name,
+        orderVendorId,
+        (orderVendor?.name ?? ''),
         orderRequestId,
         publicOrderId,
         'ORDER_REQUESTED'
@@ -159,12 +214,12 @@ export default function ReviewOrderScreen() {
       console.log('[ReviewOrder] Vendor is closed, skipping order chat creation');
     }
 
-    addRelationship(mockVendor.id, 'order_submitted');
+    addRelationship(orderVendorId, 'order_submitted');
 
     void logEvent({
       eventType: 'order_created',
       orderId: orderRequestId,
-      vendorId: mockVendor.id,
+      vendorId: orderVendorId,
       customerId: 'customer_mock',
       newState: 'ORDER_REQUESTED',
       metadata: {
@@ -178,8 +233,8 @@ export default function ReviewOrderScreen() {
     addOrder({
       id: orderRequestId,
       publicOrderId,
-      vendorId: mockVendor.id,
-      vendorName: mockVendor.name,
+      vendorId: orderVendorId,
+      vendorName: (orderVendor?.name ?? ''),
       customerId: 'customer_mock',
       status: 'requested',
       orderDate: new Date().toISOString(),
@@ -216,8 +271,8 @@ export default function ReviewOrderScreen() {
       router.replace({
         pathname: '/order-success' as any,
         params: {
-          vendorName: mockVendor.name,
-          vendorId: mockVendor.id,
+          vendorName: (orderVendor?.name ?? ''),
+          vendorId: orderVendorId,
           orderId: orderRequestId,
           vendorWasClosed: (!vendorIsOpen).toString(),
           vendorNextOpenTime: vendorNextOpen || '',
@@ -248,15 +303,15 @@ export default function ReviewOrderScreen() {
         {/* ── VENDOR BLOCK ── */}
         <View style={styles.vendorBlock}>
           <View style={styles.vendorBlockRow}>
-            {mockVendor.logoImage ? (
-              <Image source={{ uri: mockVendor.logoImage }} style={styles.vendorLogo} contentFit="cover" />
+            {orderVendor?.logoImage ? (
+              <Image source={{ uri: orderVendor?.logoImage }} style={styles.vendorLogo} contentFit="cover" />
             ) : (
               <View style={styles.vendorLogoPlaceholder}>
                 <Store size={20} color={Colors.textMuted} />
               </View>
             )}
             <View style={styles.vendorBlockInfo}>
-              <Text style={styles.vendorBlockName}>{mockVendor.name}</Text>
+              <Text style={styles.vendorBlockName}>{(orderVendor?.name ?? '')}</Text>
               <View style={styles.vendorBlockMeta}>
                 {fulfillmentType === 'Delivery' ? (
                   <Truck size={13} color={Colors.textSecondary} />
@@ -264,7 +319,7 @@ export default function ReviewOrderScreen() {
                   <MapPin size={13} color={Colors.textSecondary} />
                 )}
                 <Text style={styles.vendorBlockMetaText}>
-                  {fulfillmentType} · {mockVendor.area}
+                  {fulfillmentType} · {orderVendor?.area}
                 </Text>
               </View>
             </View>
@@ -452,7 +507,7 @@ export default function ReviewOrderScreen() {
                   <Text style={styles.totalValue}>{fmt(subtotal)}</Text>
                 </View>
               )}
-              {mockVendor.taxEnabled && (
+              {orderVendor?.taxEnabled && (
                 <View style={styles.totalRow}>
                   <Text style={styles.totalLabel}>Tax</Text>
                   <Text style={styles.totalValue}>{fmt(tax)}</Text>
@@ -484,7 +539,7 @@ export default function ReviewOrderScreen() {
         {/* ── DISCLAIMER ── */}
         <View style={styles.disclaimerContainer}>
           <Text style={styles.disclaimerText}>
-            By sending this order request, you agree that the platform only shares your order details with {mockVendor.name}. Payments, delivery, taxes, and fulfillment are handled directly by {mockVendor.name}.
+            By sending this order request, you agree that the platform only shares your order details with {(orderVendor?.name ?? '')}. Payments, delivery, taxes, and fulfillment are handled directly by {(orderVendor?.name ?? '')}.
           </Text>
         </View>
 
@@ -493,14 +548,29 @@ export default function ReviewOrderScreen() {
 
       {/* ── STICKY CTA ── */}
       <SafeAreaView edges={['bottom']} style={styles.stickyFooter}>
+        {/* Nothing is submittable until the server has priced the basket, so a
+            customer can never agree to a figure the device worked out. If
+            pricing failed the reason is shown and the button stays closed —
+            the order would be refused on submit anyway, and refusing here says
+            why while they can still act on it. */}
+        {pricingError ? (
+          <Text style={styles.pricingErrorText}>{pricingError}</Text>
+        ) : null}
         <TouchableOpacity
-          style={[styles.sendButton, isSubmitting && styles.sendButtonDisabled]}
+          style={[
+            styles.sendButton,
+            (isSubmitting || !priced) && styles.sendButtonDisabled,
+          ]}
           onPress={handleSendOrderRequest}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !priced}
           activeOpacity={0.85}
         >
           <Text style={styles.sendButtonText}>
-            {isSubmitting ? 'Sending...' : 'Send order request'}
+            {isSubmitting
+              ? 'Sending...'
+              : !priced
+                ? (pricingError ? 'Unavailable' : 'Confirming price...')
+                : 'Send order request'}
           </Text>
         </TouchableOpacity>
         <Text style={styles.sendHelperText}>
@@ -514,7 +584,7 @@ export default function ReviewOrderScreen() {
           <View style={styles.exitModalCard}>
             <Text style={styles.exitModalTitle}>You're almost there</Text>
             <Text style={styles.exitModalBody}>
-              If you leave now, your order request won't be sent to {mockVendor.name}.
+              If you leave now, your order request won't be sent to {(orderVendor?.name ?? '')}.
             </Text>
             <View style={styles.exitModalActions}>
               <TouchableOpacity
@@ -708,6 +778,14 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   sendButtonDisabled: { backgroundColor: 'rgba(255,140,66,0.35)' },
+  pricingErrorText: {
+    color: '#B3261E',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
   sendButtonText: { fontSize: 16, fontWeight: '600' as const, color: Colors.white },
   sendHelperText: {
     fontSize: 12, color: Colors.textMuted, textAlign: 'center' as const,

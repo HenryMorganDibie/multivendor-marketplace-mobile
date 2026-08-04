@@ -2,6 +2,7 @@ import type { CartItem } from '@/contexts/CartContext';
 import type { ContactCard } from '@/contexts/ContactCardsContext';
 
 export interface ReviewOrderNavigationParams {
+  vendorId: string;
   fulfillmentType: string;
   orderNote: string;
   subtotal: string;
@@ -16,6 +17,8 @@ export interface ReviewOrderNavigationParams {
 }
 
 export interface BuildReviewOrderParamsInput {
+  /** Which vendor this basket belongs to. */
+  vendorId?: string;
   fulfillmentType: string | null;
   orderNote: string;
   subtotal: number;
@@ -46,9 +49,16 @@ export function buildReviewOrderNavigationParams(
     preferredDate,
     preferredTime,
     selectedContactCard,
+    vendorId,
   } = input;
 
   return {
+    // Carried through so the review screen knows which vendor this basket is
+    // for. Without it that screen fell back to the demo vendor, so every order
+    // was attributed to the same fixture business whichever storefront the
+    // customer actually ordered from — and since that id does not exist in
+    // Firestore, the real order could never resolve a vendor either.
+    vendorId: vendorId ?? '',
     fulfillmentType: fulfillmentType ?? '',
     orderNote: orderNote.trim(),
     subtotal: subtotal.toString(),

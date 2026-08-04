@@ -68,6 +68,35 @@ function seedOrdersFor(accountId: string | undefined): Order[] {
   return demoVendorId ? mockOrders.filter((o) => o.vendorId === demoVendorId) : [];
 }
 
+
+/**
+ * What the server says a basket costs.
+ *
+ * Every figure here is decided by the backend against the live catalogue: item
+ * prices as they stand now, stock, and whichever promotion actually qualifies.
+ * A discount named by a device is a request; this is the answer.
+ */
+export interface PricedCart {
+  success: true;
+  cartId: string;
+  subtotal: number;
+  tax: number;
+  discount: number;
+  total: number;
+  quantity: number;
+  items: {
+    itemId: string;
+    name: string;
+    quantity: number;
+    price_at_order: number;
+  }[];
+  appliedPromotion: {
+    promotionId: string;
+    title: string;
+    discountAmount: number;
+  } | null;
+}
+
 export const [OrdersProvider, useOrders] = createContextHook(() => {
   const { user } = useAuth();
   const accountId = user?.id;
@@ -326,6 +355,41 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
       });
   }, [accountId]);
 
+
+  /**
+   * priceCart — what the customer will actually be charged, decided by the
+   * server, before they commit to anything.
+   *
+   * repriceCart was already called, but only on submit and with its result
+   * discarded: the customer approved a total the device had worked out, and the
+   * server priced it afterwards. If the two disagreed — a price changed, an
+   * item went out of stock, a promotion expired — the customer had already
+   * tapped submit on a figure that was never real.
+   *
+   * Calling it before checkout means the amount on screen is the amount the
+   * server will stand behind. It returns the promotion it actually applied
+   * rather than accepting one named by the client, which is the whole point:
+   * a discount a device claims is a request, not a price.
+   *
+   * The cartId comes back so the order is created from the priced cart rather
+   * than repriced a second time, which would let the two calls disagree.
+   */
+  const priceCart = useCallback(async (input: {
+    vendorId: string;
+    items: { itemId: string; quantity: number }[];
+    fulfillmentType: 'pickup' | 'delivery' | 'shipping';
+    orderNote?: string;
+  }): Promise<PricedCart> => {
+    const reprice = callable<Record<string, unknown>, PricedCart>('repriceCart');
+    const res = await reprice({
+      vendorId: input.vendorId,
+      items: input.items,
+      fulfillmentType: input.fulfillmentType,
+      orderNote: input.orderNote ?? null,
+    });
+    return res.data;
+  }, []);
+
   const markCustomerPaid = useCallback((orderId: string, proofs?: PaymentProof[]): boolean => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) {
@@ -510,6 +574,7 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     updateOrderStatus,
     addVendorEvent,
     addOrder,
+    priceCart,
     markCustomerPaid,
     addPaymentProof,
     vendorConfirmPayment,
@@ -519,7 +584,7 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     setOrderPendingChanges,
     hasOrderPendingChanges,
     markOrderRated,
-  }), [orders, getOrder, isValidTransition, updateOrderStatus, addVendorEvent, addOrder, markCustomerPaid, addPaymentProof, vendorConfirmPayment, vendorRequestPaymentProof, vendorMarkNotPaid, setOrderPendingChanges, hasOrderPendingChanges, markOrderRated]);
+  }), [orders, getOrder, isValidTransition, updateOrderStatus, addVendorEvent, addOrder, priceCart, markCustomerPaid, addPaymentProof, vendorConfirmPayment, vendorRequestPaymentProof, vendorMarkNotPaid, setOrderPendingChanges, hasOrderPendingChanges, markOrderRated]);
 });
 
 function buildOrderSnapshot(order: Order): OrderSnapshot {
