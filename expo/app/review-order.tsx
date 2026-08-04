@@ -513,15 +513,31 @@ export default function ReviewOrderScreen() {
                   <Text style={styles.totalValue}>{fmt(tax)}</Text>
                 </View>
               )}
+              {/* The promotion the server actually applied, named by its own
+                  title rather than the code the customer typed. A code is a
+                  request; this is what qualified. If the server applied nothing,
+                  no line shows — which is the honest answer when a promotion has
+                  expired or the basket no longer meets its minimum. */}
               {discount > 0 && (
                 <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Discount{promoCode ? ` (${promoCode})` : ''}</Text>
+                  <Text style={styles.totalLabel}>
+                    {priced?.appliedPromotion?.title
+                      ?? `Discount${promoCode ? ` (${promoCode})` : ''}`}
+                  </Text>
                   <Text style={styles.totalDiscountValue}>−{fmt(discount)}</Text>
+                </View>
+              )}
+              {/* A code was entered and the server did not honour it. Saying so
+                  beats a total that is quietly higher than expected. */}
+              {priced && promoCode && !priced.appliedPromotion && (
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>Promo code {promoCode}</Text>
+                  <Text style={styles.promoRejectedValue}>Not applied</Text>
                 </View>
               )}
               <View style={styles.totalDivider} />
               <View style={styles.totalRow}>
-                <Text style={styles.totalGrandLabel}>Total</Text>
+                <Text style={styles.totalGrandLabel}>Amount to pay vendor</Text>
                 <Text style={styles.totalGrandValue}>{fmt(total)}</Text>
               </View>
               {totalSavings > 0 && (
@@ -778,6 +794,7 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   sendButtonDisabled: { backgroundColor: 'rgba(255,140,66,0.35)' },
+  promoRejectedValue: { fontSize: 13, color: '#9CA3AF', fontStyle: 'italic' },
   pricingErrorText: {
     color: '#B3261E',
     fontSize: 13,
