@@ -21,6 +21,7 @@ import { useVendorPlan } from '@/contexts/VendorPlanContext';
 import LaektivaModal from '@/components/LaektivaModal';
 import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
 import EditScreenHeader from '@/components/EditScreenHeader';
+import { callable } from '@/lib/firebase';
 
 export default function ChangeUsernameScreen() {
   const router = useRouter();
@@ -55,16 +56,36 @@ export default function ChangeUsernameScreen() {
     }
   }, [plan]);
 
+  /**
+   * Availability is decided by the server.
+   *
+   * This checked a fixture array after a fake 500ms delay, so a vendor could be
+   * told a username was free when a real vendor already held it — and only find
+   * out at the point of saving, if at all. A uniqueness check against data the
+   * device happens to have is not a uniqueness check.
+   *
+   * The backend owns the reservation, so it is also the only place that can
+   * answer without a race between two people typing the same name at once.
+   */
   const checkUsernameAvailability = async (usernameToCheck: string): Promise<boolean> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
     const formatted = formatUsername(usernameToCheck);
-    
+
     if (formatted === formatUsername(currentUsername || '')) {
       return false;
     }
-    
-    const exists = mockVendors.some(v => v.username.toLowerCase() === formatted);
-    return !exists;
+
+    try {
+      const check = callable<{ username: string }, { success: true; available: boolean }>(
+        'checkUsernameAvailability',
+      );
+      const res = await check({ username: formatted });
+      return res.data.available;
+    } catch (error) {
+      // Treated as unavailable on failure. Letting someone proceed on an
+      // unanswered check would hand them a name that is taken.
+      console.error('[Username] Availability check failed:', error);
+      return false;
+    }
   };
 
   const handleUsernameChange = async (value: string) => {

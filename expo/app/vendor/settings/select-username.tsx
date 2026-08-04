@@ -19,6 +19,7 @@ import { mockVendors } from '@/mocks/vendorData';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { Colors } from '@/constants/colors';
+import { callable } from '@/lib/firebase';
 
 export default function SelectUsernameScreen() {
   const router = useRouter();
@@ -79,12 +80,29 @@ export default function SelectUsernameScreen() {
     ],
   });
 
+  /**
+   * Availability is decided by the server. This checked a fixture array behind
+   * a fake delay, so a vendor could be told a name was free while a real vendor
+   * already held it — and the backend owns the reservation, so it is also the
+   * only place that can answer without two people claiming the same name at
+   * once.
+   */
   const checkUsernameAvailability = async (usernameToCheck: string): Promise<boolean> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
     const formatted = formatUsername(usernameToCheck);
     if (formatted === formatUsername(systemGeneratedUsername || '')) return false;
-    const exists = mockVendors.some(v => v.username.toLowerCase() === formatted);
-    return !exists;
+
+    try {
+      const check = callable<{ username: string }, { success: true; available: boolean }>(
+        'checkUsernameAvailability',
+      );
+      const res = await check({ username: formatted });
+      return res.data.available;
+    } catch (error) {
+      // Unavailable on failure: proceeding on an unanswered check hands
+      // someone a name that is taken.
+      console.error('[Username] Availability check failed:', error);
+      return false;
+    }
   };
 
   const handleUsernameChange = async (value: string) => {
