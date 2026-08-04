@@ -48,6 +48,7 @@ import { formatCompactCurrency, formatPriceWithCommas, type Currency } from '@/u
 import { formatInvoiceCustomerName } from '@/utils/internalCustomerName';
 import { useInvoices } from '@/contexts/InvoiceContext';
 import { getInvoiceRevenueForRange } from '@/utils/invoiceRevenue';
+import { useBusinessAnalytics, isPending } from '@/lib/analytics/useBusinessAnalytics';
 
 type TimeRange = '1D' | '1W' | '1M' | '3M' | '6M';
 
@@ -2156,7 +2157,33 @@ export default function GrowthInsightsScreen() {
 
   const hasAnyData = platformMetrics.totalOrders > 0;
 
+  /**
+   * Repeat-customer figures come from the backend when it has them.
+   *
+   * Computing this here counts only the orders the device happens to be
+   * holding, so a vendor with more history than one page sees a repeat rate
+   * that is wrong in a way nobody would notice. The server sees every order.
+   *
+   * getBusinessAnalytics has been deployed since Phase 5 and nothing called it.
+   * That is also how this screen came to invent storefront visits: a client
+   * with no visit data is always one step away from making one up.
+   *
+   * The local calculation stays as the fallback — for the demo logins, and for
+   * the moment before the call returns, so the panel does not flash empty.
+   */
+  const { data: serverAnalytics } = useBusinessAnalytics();
+
   const customerMetrics = useMemo(() => {
+    const server = serverAnalytics?.repeatCustomerAnalytics;
+    if (server && !isPending(server)) {
+      return {
+        newCustomers: server.distinctCustomers - server.repeatCustomers,
+        repeatCustomers: server.repeatCustomers,
+        repeatRate: server.repeatRatePercent,
+        total: server.distinctCustomers,
+      };
+    }
+
     const allCustomers = new Map<string, number>();
     [...filteredthe platform, ...filteredExternal].forEach(o => {
       const name = ('customerName' in o ? o.customerName : null) || 'Walk-in';
@@ -2168,7 +2195,7 @@ export default function GrowthInsightsScreen() {
     const total = allCustomers.size;
     const repeatRate = total > 0 ? Math.round((repeatCustomers / total) * 100) : 0;
     return { newCustomers, repeatCustomers, repeatRate, total };
-  }, [filteredthe platform, filteredExternal]);
+  }, [serverAnalytics, filteredthe platform, filteredExternal]);
 
   /**
    * Storefront visits are not tracked, so they are not reported.
