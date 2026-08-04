@@ -14,6 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/contexts/AuthContext';
+import { verifyOtp, sendOtp } from '@/lib/auth/verifyOtp';
+import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 
 const PENDING_VENDOR_REG_KEY = '@the platform_pending_vendor_reg';
 
@@ -90,13 +92,32 @@ export default function VerifyOTPScreen() {
     setError('');
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
       const otpCode = otp.join('');
-      
+
       console.log('[AUTH FLOW] Verifying OTP, context:', context);
-      
-      if (otpCode !== '123456') {
+
+      /**
+       * The server decides whether the code is right.
+       *
+       * This compared against the literal 123456, so any phone number or email
+       * address could be verified by anyone who knew the constant — which is
+       * everyone, since it was in the source. The backend rate limits sends,
+       * expires codes, counts attempts and refuses a reused one, none of which
+       * a client-side equality check can do.
+       *
+       * Its message is shown rather than flattened to "incorrect", because
+       * somebody whose code has expired needs to request another rather than
+       * retyping the same digits.
+       */
+      if (!DEV_LOCAL_AUTH_ENABLED) {
+        const result = await verifyOtp(contact ?? '', otpCode);
+        if (!result.verified) {
+          setError(result.message ?? 'The code you entered is incorrect');
+          setIsVerifying(false);
+          return;
+        }
+      } else if (otpCode !== '123456') {
+        // Development only, for the demo logins that have no backend account.
         if (otpCode === '000000') {
           setError('This code has expired. Request a new one.');
         } else {
@@ -210,9 +231,29 @@ export default function VerifyOTPScreen() {
     setResendTimer(30);
     setError('');
     setOtp(['', '', '', '', '', '']);
-    
+
     console.log('Resending OTP code to:', maskedContact);
-    
+
+    /**
+     * Resend actually sends one now. It previously reset the timer and cleared
+     * the boxes without asking for anything, so a customer whose code never
+     * arrived could tap it forever and wait for a message that was never
+     * requested.
+     *
+     * A failure re-opens the button rather than leaving them on a 30-second
+     * countdown for a send that did not happen.
+     */
+    if (!DEV_LOCAL_AUTH_ENABLED && contact) {
+      try {
+        await sendOtp(contact);
+      } catch (err) {
+        console.error('[AUTH FLOW] Resend failed:', err);
+        setError((err as { message?: string })?.message ?? 'We could not send a new code. Try again.');
+        setCanResend(true);
+        setResendTimer(0);
+      }
+    }
+
     inputRefs.current[0]?.focus();
   };
 

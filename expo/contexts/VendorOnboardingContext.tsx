@@ -111,9 +111,39 @@ export const [VendorOnboardingProvider, useVendorOnboarding] = createContextHook
     [status, incompleteSteps],
   );
 
+  /**
+   * Publishing a storefront, which nothing could do before.
+   *
+   * This context read isPublished and canPublish and offered no way to change
+   * either, while setVendorPublishStatus sat deployed and uncalled. A vendor
+   * could complete every onboarding step, see that they were allowed to
+   * publish, and have no means of doing it.
+   *
+   * The backend re-checks eligibility rather than trusting that the button was
+   * only shown when canPublish was true — a stale screen is exactly when
+   * someone taps it and should be refused.
+   *
+   * Status is refreshed afterwards so isPublished and isDiscoverable reflect
+   * what the server decided. Publishing does not by itself make a vendor
+   * discoverable: that also needs verification and an open country, which the
+   * server resolves and the client should not try to predict.
+   */
+  const setPublished = useCallback(
+    async (isPublished: boolean): Promise<void> => {
+      const setStatus = callable<
+        { isPublished: boolean },
+        { success: true; isPublished: boolean }
+      >('setVendorPublishStatus');
+      await setStatus({ isPublished });
+      await refresh();
+    },
+    [refresh],
+  );
+
   return useMemo(
     () => ({
       status,
+      setPublished,
       steps: status?.steps ?? [],
       incompleteSteps,
       completedCount: status?.completedCount ?? 0,
@@ -132,6 +162,6 @@ export const [VendorOnboardingProvider, useVendorOnboarding] = createContextHook
       error,
       refresh,
     }),
-    [status, incompleteSteps, isSetupComplete, isLoading, error, refresh],
+    [status, setPublished, incompleteSteps, isSetupComplete, isLoading, error, refresh],
   );
 });
