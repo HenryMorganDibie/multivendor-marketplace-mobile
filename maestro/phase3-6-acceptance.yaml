@@ -1,0 +1,280 @@
+# Phase 3–6 acceptance, driven end to end against real the platform-dev data.
+#
+# Covers the client's acceptance list in the order the states actually allow:
+# invoice create, edit, internal chat delivery, external link, payment,
+# reversal, PDF, branding; storefront publish and share; dashboard and insights.
+#
+# The order is not cosmetic. Branding must exist before a PDF can demonstrate
+# it, a payment must exist before it can be reversed, and an invoice must be
+# delivered before an external link means anything. Each section leaves the
+# state the next one needs.
+#
+# Recording:
+#   adb shell screenrecord --time-limit 180 /sdcard/the platform-01.mp4 &
+#   maestro test maestro/phase3-6-acceptance.yaml
+#   adb pull /sdcard/the platform-01.mp4
+#
+# screenrecord caps at three minutes per file, so this takes screenshots at
+# every step as well — those are the durable evidence, and the video is the
+# continuity proof that they came from one session rather than being assembled.
+#
+# Run:  maestro test maestro/phase3-6-acceptance.yaml
+appId: com.the platform.app
+---
+- launchApp:
+    clearState: false
+
+# Emulator resourcing artefact, not an app fault, but it swallows taps.
+- runFlow:
+    when:
+      visible: "System UI isn't responding"
+    commands:
+      - tapOn: "Wait"
+
+- extendedWaitUntil:
+    visible: "Welcome back"
+    timeout: 150000
+- takeScreenshot: evidence/phase3-6/00-launch
+
+# ── Sign in as the vendor ───────────────────────────────────────────────────
+# A real the platform-dev account. The point of this run is that every figure on
+# screen came from the deployed backend, so a demo login would defeat it.
+- tapOn:
+    id: "login-identifier-input"
+- inputText: ${MAESTRO_VENDOR_EMAIL}
+- tapOn:
+    id: "login-password-input"
+- inputText: ${MAESTRO_VENDOR_PASSWORD}
+- tapOn:
+    id: "login-submit-button"
+
+- extendedWaitUntil:
+    visible: "Dashboard"
+    timeout: 90000
+- takeScreenshot: evidence/phase3-6/01-dashboard
+
+# ── Branding first, so the PDF later has something to show ──────────────────
+# Out of the client's listed order deliberately: branding applied after a PDF
+# is rendered proves nothing about that PDF. The logo has to be uploaded and
+# saved before any document is generated.
+- tapOn: "Account"
+- tapOn: "Invoice Branding"
+- extendedWaitUntil:
+    visible: "Invoice Branding"
+    timeout: 30000
+- takeScreenshot: evidence/phase3-6/02-branding-before
+
+# Logo upload reaches Firebase Storage under invoiceBranding/{vendorId}/, which
+# is the only path updateInvoiceBranding accepts. The picker is a system UI, so
+# this waits for the app to come back rather than asserting on it.
+- runFlow:
+    when:
+      visible: "Add your logo to invoices"
+    commands:
+      - tapOn: "Add your logo to invoices"
+      - extendedWaitUntil:
+          visible: "Invoice Branding"
+          timeout: 60000
+
+- takeScreenshot: evidence/phase3-6/03-branding-logo
+- tapOn: "Save"
+- takeScreenshot: evidence/phase3-6/04-branding-saved
+
+# ── Invoice: create ─────────────────────────────────────────────────────────
+- tapOn: "Account"
+- tapOn: "Invoices"
+- extendedWaitUntil:
+    visible: "Invoices"
+    timeout: 30000
+- takeScreenshot: evidence/phase3-6/05-invoice-list
+
+- tapOn:
+    id: "create-invoice-button"
+- extendedWaitUntil:
+    visible: "Create Invoice"
+    timeout: 30000
+
+# the platform customer, so the invoice binds to a real customer and conversation —
+# which is what makes the chat delivery section below possible at all.
+- tapOn: "the platform customer"
+- tapOn: "Select customer"
+- extendedWaitUntil:
+    visible: "Choose"
+    timeout: 30000
+- tapOn:
+    index: 0
+    text: ".*"
+- takeScreenshot: evidence/phase3-6/06-customer-selected
+
+- tapOn:
+    id: "invoice-add-item-button"
+- inputText: "Jollof rice tray"
+- tapOn:
+    id: "invoice-item-price"
+- inputText: "8500"
+- tapOn:
+    id: "invoice-item-save"
+- takeScreenshot: evidence/phase3-6/07-invoice-items
+
+- tapOn: "Save Draft"
+- extendedWaitUntil:
+    visible: "Invoices"
+    timeout: 30000
+- takeScreenshot: evidence/phase3-6/08-invoice-created
+
+# ── Invoice: edit ───────────────────────────────────────────────────────────
+# An unpaid invoice stays editable, including its amounts. That is the point of
+# this step: the ledger is the lock, not delivery.
+- tapOn:
+    index: 0
+    id: "invoice-row"
+- extendedWaitUntil:
+    visible: "Invoice"
+    timeout: 30000
+- takeScreenshot: evidence/phase3-6/09-invoice-detail
+
+- tapOn:
+    id: "invoice-menu-button"
+- tapOn: "Edit draft"
+- tapOn:
+    id: "invoice-item-price"
+- eraseText
+- inputText: "9500"
+- tapOn:
+    id: "invoice-item-save"
+- tapOn: "Save Draft"
+- takeScreenshot: evidence/phase3-6/10-invoice-edited
+
+# ── Invoice: internal chat delivery ─────────────────────────────────────────
+- tapOn:
+    index: 0
+    id: "invoice-row"
+- tapOn: "Send Invoice"
+- extendedWaitUntil:
+    visible: "Sent"
+    timeout: 45000
+- takeScreenshot: evidence/phase3-6/11-invoice-sent-in-chat
+
+# The card is posted server-side by sendInvoiceInChat, assembled from the stored
+# invoice rather than anything the device supplied.
+- tapOn: "Open chat"
+- extendedWaitUntil:
+    visible: "Invoice"
+    timeout: 30000
+- takeScreenshot: evidence/phase3-6/12-invoice-card-in-chat
+- back
+
+# ── Invoice: external link ──────────────────────────────────────────────────
+# Opens the public page at /i/{shareCode}, which resolves through
+# getPublicInvoice with no account and no app.
+- tapOn:
+    id: "invoice-menu-button"
+- tapOn: "Share invoice"
+- extendedWaitUntil:
+    visible: "Copy link"
+    timeout: 30000
+- takeScreenshot: evidence/phase3-6/13-external-link
+- back
+
+# ── Payment, then reversal ──────────────────────────────────────────────────
+# Recorded by hand because dev has no provider checkout configured. The ledger
+# is what is being demonstrated, not a payment gateway.
+- tapOn: "Record payment"
+- tapOn:
+    id: "payment-amount-input"
+- inputText: "9500"
+- tapOn:
+    id: "payment-method-transfer"
+- tapOn:
+    id: "payment-save-button"
+- extendedWaitUntil:
+    visible: "Paid"
+    timeout: 45000
+- takeScreenshot: evidence/phase3-6/14-payment-recorded
+
+# The invoice is now settled and its status was derived from the ledger, never
+# written directly.
+- tapOn:
+    id: "invoice-menu-button"
+- tapOn: "View payment history"
+- takeScreenshot: evidence/phase3-6/15-payment-history
+
+# A correction is a reversal row, not a deletion or an edit, so the history
+# stays intact and the invoice returns to unpaid.
+- tapOn:
+    index: 0
+    id: "payment-row"
+- tapOn: "Reverse payment"
+- tapOn:
+    id: "reversal-confirm-button"
+- extendedWaitUntil:
+    visible: "Unpaid"
+    timeout: 45000
+- takeScreenshot: evidence/phase3-6/16-payment-reversed
+
+# ── PDF, now that branding exists ───────────────────────────────────────────
+- tapOn:
+    id: "invoice-menu-button"
+- tapOn: "Download PDF"
+- extendedWaitUntil:
+    visible: "PDF"
+    timeout: 60000
+- takeScreenshot: evidence/phase3-6/17-invoice-pdf
+
+# ── Storefront: publish and share ───────────────────────────────────────────
+- tapOn: "Account"
+- tapOn: "Storefront"
+- extendedWaitUntil:
+    visible: "Storefront"
+    timeout: 30000
+- takeScreenshot: evidence/phase3-6/18-storefront-before
+
+# setVendorPublishStatus. The backend re-checks eligibility rather than trusting
+# that the button was only shown when publishing was allowed.
+- runFlow:
+    when:
+      visible: "Publish"
+    commands:
+      - tapOn: "Publish"
+      - extendedWaitUntil:
+          visible: "Published"
+          timeout: 45000
+- takeScreenshot: evidence/phase3-6/19-storefront-published
+
+- tapOn: "Share"
+- extendedWaitUntil:
+    visible: "Copy link"
+    timeout: 30000
+- takeScreenshot: evidence/phase3-6/20-storefront-shared
+- back
+
+# ── Dashboard and insights ──────────────────────────────────────────────────
+# Revenue reads the payment ledger. After a payment and its reversal the figure
+# should be back where it started, which is the double-entry behaviour the whole
+# phase exists to provide.
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible: "Dashboard"
+    timeout: 45000
+- takeScreenshot: evidence/phase3-6/21-dashboard-revenue
+
+# The carousel figures are computed from this vendor's own orders and catalogue.
+# Anything not measurable is absent rather than invented — no card is better
+# than a confident wrong number.
+- tapOn:
+    id: "dashboard-insight-card"
+- takeScreenshot: evidence/phase3-6/22-dashboard-insights
+
+- tapOn: "Business Insights"
+- extendedWaitUntil:
+    visible: "Insights"
+    timeout: 45000
+- takeScreenshot: evidence/phase3-6/23-business-insights
+
+# Storefront visits are not tracked, so the funnel says so rather than deriving
+# a conversion rate from a number nobody measured.
+- scrollUntilVisible:
+    element: "Conversion"
+    direction: DOWN
+    timeout: 30000
+- takeScreenshot: evidence/phase3-6/24-conversion-honest
