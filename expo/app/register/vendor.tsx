@@ -18,6 +18,8 @@ import { openLegalDocument } from '@/constants/legalLinks';
 import LocationCascadeFields from '@/components/LocationCascadeFields';
 import type { LocationValue } from '@/components/LocationCascadeFields';
 import { useLocationCatalogue } from '@/hooks/useLocationCatalogue';
+import { checkPassword, PASSWORD_POLICY_SUMMARY } from '@/constants/passwordPolicy';
+import PasswordRequirements from '@/components/PasswordRequirements';
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -116,6 +118,7 @@ export default function VendorSignupScreen() {
   const [email, setEmail] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
 
   const [location, setLocation] = useState<LocationValue | null>(null);
 
@@ -149,7 +152,8 @@ export default function VendorSignupScreen() {
     lastName.trim().length >= 1 &&
     isEmail(email) &&
     isPhone(phone) &&
-    password.length >= 8 &&
+    checkPassword(password).valid &&
+    confirmPassword === password &&
     !!location?.countryCode;
 
   const clearError = (key: string) => {
@@ -242,12 +246,14 @@ export default function VendorSignupScreen() {
     if (lastName.trim().length < 1) newErrors.lastName = 'Enter your last name';
     if (!isEmail(email)) newErrors.email = 'Enter a valid email';
     if (!isPhone(phone)) newErrors.phone = 'Enter a valid phone number';
-    if (password.length < 8) newErrors.password = 'Password must be at least 8 characters';
+    const pw = checkPassword(password);
+    if (!pw.valid) newErrors.password = pw.error ?? 'Please choose a stronger password';
     // Phase 1 progressive onboarding: business name, category, description and
     // the state/area cascade are deliberately NOT required here. They're
     // collected from the dashboard checklist afterwards, and publication is
     // gated on them instead. Country stays, because it drives currency, plan
     // pricing and availability from the moment the account exists.
+    if (confirmPassword !== password) newErrors.confirmPassword = 'Passwords do not match';
     if (!location?.countryCode) newErrors.country = 'Select your country';
 
     const normalizedReferralCode = normalizeReferralCode(referralCode);
@@ -447,7 +453,7 @@ export default function VendorSignupScreen() {
                   onChangeText={(t) => { setPassword(t); clearError('password'); }}
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => setFocusedField('')}
-                  placeholder="Minimum 8 characters"
+                  placeholder={PASSWORD_POLICY_SUMMARY}
                   placeholderTextColor="#9CA3AF"
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
@@ -468,6 +474,34 @@ export default function VendorSignupScreen() {
                 </TouchableOpacity>
               </View>
               {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
+              <PasswordRequirements requirements={checkPassword(password).requirements} />
+            </View>
+
+            {/* Confirming the password matters more here than on a login form:
+                this is the only time it is set, there is no "was that right?"
+                until the person is locked out, and a reset costs them the
+                account until they work out what they typed. It shares the show
+                /hide toggle rather than adding a second one — two independent
+                toggles on adjacent fields invite revealing one and not the
+                other. */}
+            <View style={styles.inputSection} onLayout={(e) => { fieldOffsets.current.confirmPassword = e.nativeEvent.layout.y; }}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={[styles.passwordInput, focusedField === 'confirmPassword' && styles.inputFocused, errors.confirmPassword ? styles.inputError : null]}
+                  value={confirmPassword}
+                  onChangeText={(t) => { setConfirmPassword(t); clearError('confirmPassword'); }}
+                  onFocus={() => setFocusedField('confirmPassword')}
+                  onBlur={() => setFocusedField('')}
+                  placeholder="Re-enter your password"
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  editable={!isLoading}
+                  testID="vendor-confirm-password"
+                />
+              </View>
+              {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
             </View>
 
             <View style={styles.sectionHeaderRow}>

@@ -7,6 +7,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auth as firebaseAuth, db as firestore, callable } from '@/lib/firebase';
 import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 import { VendorPlan } from './VendorPlanContext';
+import { mapRegistrationError, mapLoginError, type AuthErrorField } from '@/lib/auth/authErrors';
 
 type UserRole = 'customer' | 'vendor';
 
@@ -66,6 +67,8 @@ interface LoginResponse {
   success: boolean;
   user?: User;
   error?: string;
+  /** Which input the message belongs to, so the screen can focus it. */
+  errorField?: AuthErrorField;
 }
 
 interface RegistrationCheck {
@@ -719,11 +722,21 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         console.log('[AUTH] Firebase sign-in succeeded:', firebaseUid);
       } catch (firebaseError: unknown) {
         const code = (firebaseError as { code?: string })?.code ?? '';
-        // Fall through to the local store only for "no such account" style
-        // errors, so pre-existing local-only test accounts keep working during
-        // the migration. A wrong password is a definite no.
-        if (/wrong-password|invalid-credential/.test(code)) {
-          return { success: false, error: 'Incorrect email or password. Please try again.' };
+
+        /**
+         * Definite answers stop here; only "we could not tell" falls through to
+         * the local store, which exists so pre-existing test accounts keep
+         * working during the migration.
+         *
+         * A disabled account, a rate limit or an unverified email are all real
+         * answers about a real account. Falling through on those would hand the
+         * person "incorrect email or password", which is both wrong and
+         * unactionable — they would keep retrying a password that is correct
+         * against an account that is locked.
+         */
+        if (/wrong-password|invalid-credential|user-disabled|too-many-requests|email-not-verified/.test(code)) {
+          const mapped = mapLoginError(firebaseError);
+          return { success: false, error: mapped.message, errorField: mapped.field };
         }
         console.log('[AUTH] Firebase sign-in unavailable, falling back to local store:', code);
       }
@@ -914,10 +927,21 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           console.error('[AUTH] Could not clean up partial account:', cleanupError);
         }
 
-        if (/email-already-in-use/.test(message)) {
-          return { success: false, error: 'An account already exists with this email. Please log in.' };
-        }
-        return { success: false, error: 'Could not create your account. Please try again.' };
+        /**
+         * The reason is read from `code` as well as the message.
+         *
+         * This tested the message text only. A FirebaseError carries the
+         * machine-readable reason on `.code`, and the message wording is not
+         * contractual, so a duplicate email fell through to "Could not create
+         * your account. Please try again." — advice that cannot work, on a
+         * screen that gave no hint the email was the problem. Someone
+         * registering a second role with the same address retried it forever.
+         */
+        // The mapping also reports which field is at fault, so the screen can
+        // attach the message to that input and focus it rather than showing a
+        // banner and leaving the person hunting for what to change.
+        const mapped = mapRegistrationError(backendError);
+        return { success: false, error: mapped.message, errorField: mapped.field };
       }
 
       let generatedUsername: string | undefined = backendUsername;

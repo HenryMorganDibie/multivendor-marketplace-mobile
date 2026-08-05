@@ -1,0 +1,6 @@
+# Only the exported web bundle is deployed; vercel.json points at dist-web.
+# Everything else in this directory is source and would make the upload
+# enormous for no benefit.
+*
+!dist-web/**
+!vercel.json

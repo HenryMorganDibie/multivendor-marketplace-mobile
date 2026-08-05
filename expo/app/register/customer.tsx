@@ -18,6 +18,8 @@ import { openLegalDocument } from '@/constants/legalLinks';
 import LocationCascadeFields from '@/components/LocationCascadeFields';
 import type { LocationValue } from '@/components/LocationCascadeFields';
 import { useUserLocation } from '@/contexts/UserLocationContext';
+import { checkPassword, PASSWORD_POLICY_SUMMARY } from '@/constants/passwordPolicy';
+import PasswordRequirements from '@/components/PasswordRequirements';
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -48,6 +50,7 @@ export default function CustomerSignupScreen() {
   const [lastInitial, setLastInitial] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
 
   const [location, setLocation] = useState<LocationValue | null>(null);
   const [showPassword, setShowPassword] = useState<boolean>(false);
@@ -63,7 +66,8 @@ export default function CustomerSignupScreen() {
     firstName.trim().length >= 2 &&
     lastInitial.trim().length >= 1 &&
     isEmail(email) &&
-    password.length >= 8 &&
+    checkPassword(password).valid &&
+    confirmPassword === password &&
     locationComplete;
 
   const clearError = (key: string) => {
@@ -75,7 +79,9 @@ export default function CustomerSignupScreen() {
     if (firstName.trim().length < 2) newErrors.firstName = 'Enter your first name';
     if (lastInitial.trim().length < 1) newErrors.lastInitial = 'Enter your last initial';
     if (!isEmail(email)) newErrors.email = 'Enter a valid email';
-    if (password.length < 8) newErrors.password = 'Password must be at least 8 characters';
+    const pw = checkPassword(password);
+    if (!pw.valid) newErrors.password = pw.error ?? 'Please choose a stronger password';
+    if (confirmPassword !== password) newErrors.confirmPassword = 'Passwords do not match';
     if (!location?.countryCode) newErrors.country = 'Select your country';
     else if (!location?.stateCode) newErrors.state = 'Select your state / province';
     else if (!location?.areaId) newErrors.area = 'Select your area';
@@ -215,7 +221,7 @@ export default function CustomerSignupScreen() {
                   onChangeText={(t) => { setPassword(t); clearError('password'); }}
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => setFocusedField('')}
-                  placeholder="Minimum 8 characters"
+                  placeholder={PASSWORD_POLICY_SUMMARY}
                   placeholderTextColor="#9CA3AF"
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
@@ -236,6 +242,31 @@ export default function CustomerSignupScreen() {
                 </TouchableOpacity>
               </View>
               {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
+              <PasswordRequirements requirements={checkPassword(password).requirements} />
+            </View>
+
+            {/* This is the only moment the password is ever set, so a typo locks
+                the person out until they reset it. Shares the show/hide toggle
+                above rather than adding a second one — two independent toggles
+                on adjacent fields invite revealing one and not the other. */}
+            <View style={styles.inputSection}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={[styles.passwordInput, focusedField === 'confirmPassword' && styles.inputFocused, errors.confirmPassword ? styles.inputError : null]}
+                  value={confirmPassword}
+                  onChangeText={(t) => { setConfirmPassword(t); clearError('confirmPassword'); }}
+                  onFocus={() => setFocusedField('confirmPassword')}
+                  onBlur={() => setFocusedField('')}
+                  placeholder="Re-enter your password"
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  editable={!isLoading}
+                  testID="customer-confirm-password"
+                />
+              </View>
+              {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
             </View>
 
             <View style={styles.sectionHeaderRow}>
