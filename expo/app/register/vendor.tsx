@@ -559,7 +559,23 @@ export default function VendorSignupScreen() {
                 <TextInput
                   style={[styles.passwordInput, focusedField === 'confirmPassword' && styles.inputFocused, errors.confirmPassword ? styles.inputError : null]}
                   value={confirmPassword}
-                  onChangeText={(t) => { setConfirmPassword(t); clearError('confirmPassword'); }}
+                  /**
+                   * The mismatch is reported as it happens, not on submit.
+                   *
+                   * The submit button is disabled until the two match, so
+                   * submitting was never reached and the message never showed:
+                   * the button simply stayed grey with no reason given. Someone
+                   * who mistypes the second field has nothing to tell them
+                   * which field is wrong, or that anything is.
+                   *
+                   * Only once there is something to compare — an empty field is
+                   * unfinished rather than mismatched.
+                   */
+                  onChangeText={(t) => {
+                    setConfirmPassword(t);
+                    if (!t || t === password) clearError('confirmPassword');
+                    else setErrors(p => ({ ...p, confirmPassword: 'Passwords do not match' }));
+                  }}
                   onFocus={() => setFocusedField('confirmPassword')}
                   onBlur={() => setFocusedField('')}
                   placeholder="Re-enter your password"
@@ -728,7 +744,10 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
   scrollContent: { flexGrow: 1, paddingVertical: 16 },
   content: { paddingHorizontal: 24, maxWidth: 480, width: '100%', alignSelf: 'center' as const },
-  brandLogo: { width: 132, height: 36, alignSelf: 'center', marginBottom: 20 },
+  // The asset is square (2000x2000). A wide, short box with resizeMode
+  // "contain" rendered it as a small mark adrift in whitespace, which is why it
+  // looked missing. Square box, sized to read as a brand mark not an icon.
+  brandLogo: { width: 76, height: 76, alignSelf: 'center', marginBottom: 16 },
   header: { marginBottom: 20, marginTop: 8 },
   title: { fontSize: 26, fontWeight: '700' as const, color: '#2B2B2B', marginBottom: 6, letterSpacing: -0.3 },
   subtitle: { fontSize: 15, color: '#6B7280', lineHeight: 22 },

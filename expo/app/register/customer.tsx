@@ -80,11 +80,44 @@ export default function CustomerSignupScreen() {
     if (errors[key]) setErrors(p => ({ ...p, [key]: undefined }));
   };
 
+  /**
+   * Put the server's answer on the field it is actually about.
+   *
+   * Every failure used to be written to `errors.email`, so a weak password or
+   * an unreachable server both appeared under the email address. AuthContext
+   * reports which field is at fault, read from the Firebase error code rather
+   * than its wording; this routes it there and keeps anything form-wide in its
+   * own banner.
+   */
+  const showRegistrationFailure = (message: string, field?: string) => {
+    if (field && field !== 'form') {
+      setFormError('');
+      setErrors({ [field]: message });
+      if (field === 'email') emailRef.current?.focus();
+      if (field === 'password') passwordRef.current?.focus();
+      return;
+    }
+    setErrors({});
+    setFormError(message);
+  };
+
+  /**
+   * Checked when the person leaves the field rather than only on submit, so a
+   * malformed address is caught while they are still looking at it. Empty is
+   * "not filled in yet", which is not something to complain about.
+   */
+  const validateEmailOnBlur = () => {
+    setFocusedField('');
+    const trimmed = email.trim();
+    if (trimmed && !isEmail(trimmed)) setErrors(p => ({ ...p, email: 'Enter a valid email address.' }));
+  };
+
   const handleSubmit = async () => {
+    setFormError('');
     const newErrors: FieldErrors = {};
     if (firstName.trim().length < 2) newErrors.firstName = 'Enter your first name';
     if (lastInitial.trim().length < 1) newErrors.lastInitial = 'Enter your last initial';
-    if (!isEmail(email)) newErrors.email = 'Enter a valid email';
+    if (!isEmail(email)) newErrors.email = 'Enter a valid email address.';
     const pw = checkPassword(password);
     if (!pw.valid) newErrors.password = pw.error ?? 'Please choose a stronger password';
     if (confirmPassword !== password) newErrors.confirmPassword = 'Passwords do not match';
@@ -100,7 +133,10 @@ export default function CustomerSignupScreen() {
       const trimmedEmail = email.trim();
       const check = await checkAccountExists(trimmedEmail);
       if (check.exists) {
-        setErrors({ email: 'An account already exists with this email. Please log in.' });
+        showRegistrationFailure(
+          'An account with this email already exists. Log in or reset your password.',
+          'email',
+        );
         setIsLoading(false);
         return;
       }
@@ -116,7 +152,10 @@ export default function CustomerSignupScreen() {
       });
 
       if (!response.success) {
-        setErrors({ email: response.error || 'Something went wrong. Please try again.' });
+        showRegistrationFailure(
+          response.error || 'Something went wrong on our side. Please try again.',
+          response.errorField,
+        );
         setIsLoading(false);
         return;
       }
@@ -136,7 +175,7 @@ export default function CustomerSignupScreen() {
       router.replace('/customer' as any);
     } catch (err) {
       console.error('[AUTH FLOW] Customer registration error:', err);
-      setErrors({ email: 'Something went wrong. Please try again.' });
+      showRegistrationFailure('Something went wrong on our side. Please try again.');
       setIsLoading(false);
     }
   };
@@ -209,11 +248,12 @@ export default function CustomerSignupScreen() {
             <View style={styles.inputSection}>
               <Text style={styles.label}>Email Address</Text>
               <TextInput
+                ref={emailRef}
                 style={[styles.input, focusedField === 'email' && styles.inputFocused, errors.email ? styles.inputError : null]}
                 value={email}
-                onChangeText={(t) => { setEmail(t); clearError('email'); }}
+                onChangeText={(t) => { setEmail(t); clearError('email'); setFormError(''); }}
                 onFocus={() => setFocusedField('email')}
-                onBlur={() => setFocusedField('')}
+                onBlur={validateEmailOnBlur}
                 placeholder="you@example.com"
                 placeholderTextColor="#9CA3AF"
                 autoCapitalize="none"
@@ -229,9 +269,10 @@ export default function CustomerSignupScreen() {
               <Text style={styles.label}>Password</Text>
               <View style={styles.passwordRow}>
                 <TextInput
+                  ref={passwordRef}
                   style={[styles.passwordInput, focusedField === 'password' && styles.inputFocused, errors.password ? styles.inputError : null]}
                   value={password}
-                  onChangeText={(t) => { setPassword(t); clearError('password'); }}
+                  onChangeText={(t) => { setPassword(t); clearError('password'); setFormError(''); }}
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => setFocusedField('')}
                   placeholder={PASSWORD_POLICY_SUMMARY}
@@ -268,7 +309,17 @@ export default function CustomerSignupScreen() {
                 <TextInput
                   style={[styles.passwordInput, focusedField === 'confirmPassword' && styles.inputFocused, errors.confirmPassword ? styles.inputError : null]}
                   value={confirmPassword}
-                  onChangeText={(t) => { setConfirmPassword(t); clearError('confirmPassword'); }}
+                  /**
+                   * Reported as it happens. The submit button is disabled until
+                   * the two match, so submitting was never reached and the
+                   * message never showed — the button just stayed grey with no
+                   * reason given. Empty is unfinished rather than mismatched.
+                   */
+                  onChangeText={(t) => {
+                    setConfirmPassword(t);
+                    if (!t || t === password) clearError('confirmPassword');
+                    else setErrors(p => ({ ...p, confirmPassword: 'Passwords do not match' }));
+                  }}
                   onFocus={() => setFocusedField('confirmPassword')}
                   onBlur={() => setFocusedField('')}
                   placeholder="Re-enter your password"
@@ -327,6 +378,20 @@ export default function CustomerSignupScreen() {
               .
             </Text>
 
+            {/* Only what no single field can own: a network failure, a rate
+                limit, sign-up being unavailable. Field-level problems stay
+                attached to their input, where the fix is. */}
+            {formError ? (
+              <View
+                style={styles.formErrorBox}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="polite"
+                testID="customer-form-error"
+              >
+                <Text style={styles.formErrorText}>{formError}</Text>
+              </View>
+            ) : null}
+
             <TouchableOpacity
               style={[styles.primaryButton, (!isFormComplete || isLoading) && styles.primaryButtonDisabled]}
               onPress={handleSubmit}
@@ -359,7 +424,10 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
   scrollContent: { flexGrow: 1, paddingVertical: 16 },
   content: { paddingHorizontal: 24, maxWidth: 480, width: '100%', alignSelf: 'center' as const },
-  brandLogo: { width: 132, height: 36, alignSelf: 'center', marginBottom: 20 },
+  // The asset is square (2000x2000). A wide, short box with resizeMode
+  // "contain" rendered it as a small mark adrift in whitespace, which is why it
+  // looked missing. Square box, sized to read as a brand mark not an icon.
+  brandLogo: { width: 76, height: 76, alignSelf: 'center', marginBottom: 16 },
   header: { marginBottom: 24, marginTop: 8 },
   title: { fontSize: 26, fontWeight: '700' as const, color: '#2B2B2B', marginBottom: 6, letterSpacing: -0.3 },
   subtitle: { fontSize: 15, color: '#6B7280', lineHeight: 22 },
@@ -388,6 +456,11 @@ const styles = StyleSheet.create({
   sectionHeaderRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, marginTop: 8, marginBottom: 14 },
   sectionHeaderText: { fontSize: 13, fontWeight: '700' as const, color: '#FF8C42', textTransform: 'uppercase' as const, letterSpacing: 0.5 },
   errorText: { fontSize: 13, color: '#DC2626', marginTop: 6, paddingHorizontal: 4 },
+  formErrorBox: {
+    backgroundColor: '#FEF2F2', borderRadius: 12, padding: 14, marginTop: 4, marginBottom: 12,
+    borderWidth: 1, borderColor: '#FECACA',
+  },
+  formErrorText: { fontSize: 14, color: '#DC2626', lineHeight: 20, textAlign: 'center' as const },
   primaryButton: {
     backgroundColor: '#FF8C42', borderRadius: 14, height: 52, alignItems: 'center' as const,
     justifyContent: 'center' as const, marginTop: 4,

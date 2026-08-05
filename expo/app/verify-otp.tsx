@@ -170,8 +170,21 @@ export default function VerifyOTPScreen() {
           return;
         }
 
-        console.log('[AUTH FLOW] Customer registration successful → redirecting to complete profile');
-        router.replace('/complete-profile' as any);
+        /**
+         * Straight into the app, skipping Complete Profile.
+         *
+         * That screen asks for first name and last initial, and the
+         * registration form has just collected both. Asking again immediately
+         * after signup reads as though the first answers were not saved.
+         *
+         * The screen is deliberately left in place, routed and reachable. It is
+         * the right destination for a social sign-in, where a provider may
+         * return an account with no usable name — that path is behind
+         * SOCIAL_AUTH_ENABLED and currently off. When it is switched on, this is
+         * where it points again.
+         */
+        console.log('[AUTH FLOW] Customer registration successful → home (profile already complete)');
+        router.replace('/customer' as any);
       } else if (context === 'vendor-registration') {
         if (!contact || !password) {
           setError('Missing registration data');

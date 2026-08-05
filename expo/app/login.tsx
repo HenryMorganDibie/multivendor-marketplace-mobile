@@ -11,12 +11,12 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { SOCIAL_AUTH_ENABLED } from '@/constants/authProviders';
-import { Image } from 'react-native';
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -397,6 +397,10 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  // The asset is square (2000x2000). A wide, short box with resizeMode
+  // "contain" rendered it as a small mark adrift in whitespace, which is why it
+  // looked missing. Square box, sized to read as a brand mark not an icon.
+  brandLogo: { width: 76, height: 76, alignSelf: 'center', marginBottom: 16 },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -415,7 +419,6 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center' as const,
   },
-  brandLogo: { width: 132, height: 36, alignSelf: 'center', marginBottom: 20 },
   header: {
     marginBottom: 32,
     alignItems: 'center' as const,

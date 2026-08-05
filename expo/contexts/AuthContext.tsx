@@ -398,7 +398,20 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     // so anyone reading the Terms, Privacy Policy or Vendor Agreement before
     // creating an account is by definition not signed in yet. Without it the
     // guard bounced them to login, which made the consent links look broken.
-    const publicRoutes = ['login', 'create-account', 'register', 'verify-otp', 'onboarding', 'complete-profile', 'vendor-setup-complete', 'legal'];
+    /**
+     * `forgot-password` and `i` were missing.
+     *
+     * Anyone resetting a password is by definition not signed in, so the guard
+     * bounced them straight back to login — the button worked, the screen
+     * mounted, and the guard redirected before it could be seen. It looked like
+     * a dead button because nothing distinguishes "did nothing" from
+     * "immediately undone".
+     *
+     * `i` is the public invoice link. An external customer with a share token
+     * has no account and never will; sending them to a login screen makes the
+     * link useless to exactly the person it was sent to.
+     */
+    const publicRoutes = ['login', 'create-account', 'register', 'verify-otp', 'onboarding', 'complete-profile', 'vendor-setup-complete', 'legal', 'forgot-password', 'i', 'invoice-view'];
     const isPublicRoute = publicRoutes.includes(firstSegment);
 
     if (!authState.isAuthenticated) {
