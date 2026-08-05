@@ -830,7 +830,27 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       await signOut(firebaseAuth).catch((error) => {
         console.error('[AUTH] Firebase sign-out failed:', error);
       });
-      await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+
+      /**
+       * Clearing the cached session must not be able to block logout.
+       *
+       * On web AsyncStorage is localStorage, which can throw (private browsing,
+       * storage restrictions). This had no catch of its own, so a throw here
+       * skipped straight past setAuthState and router.replace into the outer
+       * catch — Firebase's session may have actually ended, but the UI never
+       * updated and the person never left the page. Tapping logout looked like
+       * it did nothing.
+       *
+       * The Firebase sign-out above is what actually ends the session; this is
+       * only tidying a local cache, so its failure is logged and ignored rather
+       * than allowed to stop the rest of logout from happening.
+       */
+      try {
+        await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+      } catch (storageError) {
+        console.error('[AUTH] Could not clear cached session:', storageError);
+      }
+
       setAuthState({
         user: null,
         isLoading: false,
@@ -840,6 +860,16 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       router.replace('/login' as any);
     } catch (error) {
       console.error('Logout error:', error);
+      // Even here, the person tapped logout and expects to leave. Signing out
+      // is best-effort above; make sure they still land on the login screen
+      // rather than being stuck on a page that no longer matches their session.
+      setAuthState({
+        user: null,
+        isLoading: false,
+        isAuthenticated: false,
+        hasSeenOnboarding: true,
+      });
+      router.replace('/login' as any);
     }
   }, [router]);
 
@@ -895,11 +925,20 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         // users/{uid} is created by the onUserCreate auth trigger, which runs
         // asynchronously — completeRegistration rejects until it exists, so
         // wait for it rather than racing it.
-        for (let attempt = 0; attempt < 20; attempt++) {
-          const userDoc = await getDoc(doc(firestore, 'users', credential.user.uid));
-          if (userDoc.exists()) break;
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
+        /**
+         * No longer waited for.
+         *
+         * This polled Firestore for users/{uid} for up to ten seconds because
+         * completeRegistration used to reject when the document was missing. It
+         * does not any more — it writes the document itself when the trigger has
+         * not arrived, so there is nothing to wait for.
+         *
+         * Worse, the wait was a direct Firestore read, which is exactly what
+         * stalls on a network that blocks Firestore's streaming transport. On
+         * such a connection registration sat for ten seconds and then behaved as
+         * though something had gone wrong, while the account creation itself was
+         * perfectly fine.
+         */
 
         const complete = callable<Record<string, unknown>, { success: true; role: string; vendorId?: string; username?: string }>(
           'completeRegistration',

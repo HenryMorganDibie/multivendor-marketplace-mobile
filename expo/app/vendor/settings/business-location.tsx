@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { ChevronRight, Lock, Check, MapPin } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import LaektivaModal from '@/components/LaektivaModal';
 import EditScreenHeader from '@/components/EditScreenHeader';
+import { useVendor } from '@/contexts/VendorContext';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -61,11 +62,38 @@ export default function BusinessLocationScreen() {
   const router = useRouter();
   const [showChangeAreaModal, setShowChangeAreaModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  /**
+   * The vendor's real location, not a placeholder.
+   *
+   * This was hardcoded to Canada/Ontario/Toronto and never read the vendor's
+   * actual record, so every vendor saw the same fake Canadian address on this
+   * screen regardless of what they registered with — a Nigeria/Lagos vendor
+   * saw "Toronto, Ontario, Canada" here after signing up.
+   *
+   * useVendor() is the live Firestore doc; falling back to the hardcoded values
+   * only if the real fields are still empty (e.g. registration in progress),
+   * so the screen never renders truly blank.
+   */
+  const { vendor } = useVendor();
   const [currentLocation, setCurrentLocation] = useState({
-    country: 'Canada',
-    state: 'Ontario',
-    area: 'Toronto',
+    country: vendor.country || 'Canada',
+    state: vendor.state || 'Ontario',
+    area: vendor.area || vendor.city || 'Toronto',
   });
+
+  // The vendor doc arrives from a Firestore listener after this screen's first
+  // render, so the useState initializer above sees stale/fallback data on the
+  // very first frame. This syncs once the real doc lands, so the display never
+  // stays stuck on someone else's placeholder location.
+  useEffect(() => {
+    if (vendor.country || vendor.state || vendor.area || vendor.city) {
+      setCurrentLocation({
+        country: vendor.country || 'Canada',
+        state: vendor.state || 'Ontario',
+        area: vendor.area || vendor.city || 'Toronto',
+      });
+    }
+  }, [vendor.country, vendor.state, vendor.area, vendor.city]);
   const [selectedArea, setSelectedArea] = useState<AreaOption | null>(null);
   const [lastAreaChange, setLastAreaChange] = useState<Date | null>(null);
 

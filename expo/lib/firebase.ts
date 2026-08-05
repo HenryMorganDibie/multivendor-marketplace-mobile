@@ -4,7 +4,7 @@ import { initializeAuth, getAuth, connectAuthEmulator } from "firebase/auth";
 import { getReactNativePersistence } from "firebase/auth";
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { getFirestore, initializeFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
@@ -44,7 +44,33 @@ export const auth = Platform.OS === "web"
 
 export const functions = getFunctions(firebaseApp);
 export const storage = getStorage(firebaseApp);
-export const db = getFirestore(firebaseApp);
+/**
+ * Firestore, with long polling auto-detected.
+ *
+ * Its default transport is a streaming WebChannel connection. Plenty of real
+ * networks refuse to carry it — corporate proxies, some mobile carriers, and
+ * anything doing deep packet inspection — and the failure is silent for ten
+ * seconds and then reads "Could not reach Cloud Firestore backend", with no
+ * indication that the network rather than the app is the problem.
+ *
+ * That is what someone testing on their phone hits while the same build works
+ * on a laptop on a different connection. Everything that reads Firestore
+ * directly stalls: the users/{uid} lookup that registration waits on, the
+ * session rebuild on login, and signing out.
+ *
+ * autoDetectLongPolling keeps the fast transport where it works and falls back
+ * to long polling where it does not, rather than forcing the slower path on
+ * everyone. initializeFirestore has to run before anything calls getFirestore,
+ * which is why it is here and not at first use.
+ */
+export const db = (() => {
+  try {
+    return initializeFirestore(firebaseApp, { experimentalAutoDetectLongPolling: true });
+  } catch {
+    // Already initialised — Fast Refresh re-runs this module in development.
+    return getFirestore(firebaseApp);
+  }
+})();
 
 declare global {
   // eslint-disable-next-line no-var
