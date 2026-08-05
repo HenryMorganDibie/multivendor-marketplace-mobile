@@ -19,6 +19,7 @@ import { openLegalDocument } from '@/constants/legalLinks';
 import LocationCascadeFields from '@/components/LocationCascadeFields';
 import type { LocationValue } from '@/components/LocationCascadeFields';
 import { useUserLocation } from '@/contexts/UserLocationContext';
+import { useLocationCatalogue } from '@/hooks/useLocationCatalogue';
 import { checkPassword, PASSWORD_POLICY_SUMMARY } from '@/constants/passwordPolicy';
 import PasswordRequirements from '@/components/PasswordRequirements';
 
@@ -65,8 +66,33 @@ export default function CustomerSignupScreen() {
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
 
+  /**
+   * State and area are only required when the country actually has them.
+   *
+   * Only 59 of 196 seeded countries currently have any state/area data at
+   * all. This form used to require both unconditionally, so anyone selecting
+   * one of the other 137 countries hit a state picker with nothing in it and
+   * could never enable the Create Account button — signup was structurally
+   * impossible for the country they actually picked, with no error message
+   * explaining why, because nothing had technically failed.
+   *
+   * `loaded && items.length === 0` is a country whose states have genuinely
+   * finished loading and come back empty, not one still in flight — so this
+   * does not prematurely unblock a country that simply hasn't fetched yet.
+   * Vendor registration already treats state/area as optional at signup,
+   * collected later during onboarding instead; this gives customers the same
+   * treatment rather than a second, stricter standard with no data to back it.
+   */
+  const { statesFor } = useLocationCatalogue();
+  const countryHasNoStates =
+    !!location?.countryCode &&
+    statesFor(location.countryCode).loaded &&
+    statesFor(location.countryCode).items.length === 0;
+
   const locationComplete =
-    !!location && !!location.countryCode && !!location.stateCode && !!location.areaId;
+    !!location &&
+    !!location.countryCode &&
+    (countryHasNoStates || (!!location.stateCode && !!location.areaId));
 
   const isFormComplete =
     firstName.trim().length >= 2 &&
@@ -122,8 +148,10 @@ export default function CustomerSignupScreen() {
     if (!pw.valid) newErrors.password = pw.error ?? 'Please choose a stronger password';
     if (confirmPassword !== password) newErrors.confirmPassword = 'Passwords do not match';
     if (!location?.countryCode) newErrors.country = 'Select your country';
-    else if (!location?.stateCode) newErrors.state = 'Select your state / province';
-    else if (!location?.areaId) newErrors.area = 'Select your area';
+    else if (!countryHasNoStates) {
+      if (!location?.stateCode) newErrors.state = 'Select your state / province';
+      else if (!location?.areaId) newErrors.area = 'Select your area';
+    }
 
     setErrors(newErrors);
     if (Object.values(newErrors).some(Boolean)) return;

@@ -38,7 +38,24 @@ export const VendorProvider = ({ children }: { children: React.ReactNode }) => {
       unsubscribeVendor = null;
       if (!fbUser) return;
 
-      const token = await fbUser.getIdTokenResult();
+      /**
+       * Forced refresh, not the cached token.
+       *
+       * getIdTokenResult() without `true` returns Firebase's cached ID token if
+       * it has not yet expired — up to an hour old. If that cached token was
+       * issued before the vendorId claim existed on the account (a stale
+       * session from before registration finished, or from an earlier broken
+       * attempt), `vendorId` reads as missing here and the effect below bails
+       * out at the next line, permanently: no listener ever attaches, `vendor`
+       * never leaves its default, and nothing on screen indicates that.
+       *
+       * The default `vendor` state is the full mock vendor object — a
+       * realistic-looking business, not an empty placeholder — so the visible
+       * result was someone's real screen quietly showing "Spicy Restaurant" in
+       * Lekki as if it were their own account, with no error and no way to
+       * tell it was wrong.
+       */
+      const token = await fbUser.getIdTokenResult(true);
       const vendorId = token.claims.vendorId as string | undefined;
       if (!vendorId) return;
 

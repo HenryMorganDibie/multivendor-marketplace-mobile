@@ -13,6 +13,7 @@ import VendorSettingsProfileCard from '@/components/VendorSettingsProfileCard';
 import LaektivaModal from '@/components/LaektivaModal';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/colors';
+import { useAuth } from '@/contexts/AuthContext';
 import { getBottomOverlayPadding } from '@/lib/constants/layout';
 
 export default function VendorSettingsScreen() {
@@ -85,9 +86,19 @@ export default function VendorSettingsScreen() {
     }
   };
 
-  const handleLogout = () => {
-    console.log('Vendor logged out');
+  /**
+   * This never actually logged anyone out.
+   *
+   * It closed the confirmation modal and wrote a console line — nothing else.
+   * Firebase's session stayed open, AuthContext's state never changed, and
+   * there was no navigation. Every other logout entry point in the app (customer
+   * profile, role-error, vendor pending) correctly calls the real `logout()`
+   * from AuthContext; this screen's button was left as a stub.
+   */
+  const { logout } = useAuth();
+  const handleLogout = async () => {
     setShowLogoutModal(false);
+    await logout();
   };
 
   const renderSettingsRow = (label: string, onPress: () => void, isLast: boolean = false, subtitle?: string, showBadge: boolean = false) => (

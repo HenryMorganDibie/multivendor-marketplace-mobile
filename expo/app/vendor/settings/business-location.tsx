@@ -70,15 +70,19 @@ export default function BusinessLocationScreen() {
    * screen regardless of what they registered with — a Nigeria/Lagos vendor
    * saw "Toronto, Ontario, Canada" here after signing up.
    *
-   * useVendor() is the live Firestore doc; falling back to the hardcoded values
-   * only if the real fields are still empty (e.g. registration in progress),
-   * so the screen never renders truly blank.
+   * The fallback is deliberately blank now, not another hardcoded place. A
+   * fake-but-plausible country is worse than an honest blank one: it looks
+   * like real data and can go unnoticed, where an empty field is visibly
+   * something to fix. Vendor registration only collects country at signup —
+   * state and area are filled in later through onboarding — so a freshly
+   * registered vendor legitimately having no state/area yet is expected, and
+   * should read as "not set", not as a real-looking Canadian city.
    */
   const { vendor } = useVendor();
   const [currentLocation, setCurrentLocation] = useState({
-    country: vendor.country || 'Canada',
-    state: vendor.state || 'Ontario',
-    area: vendor.area || vendor.city || 'Toronto',
+    country: vendor.country || '',
+    state: vendor.state || '',
+    area: vendor.area || vendor.city || '',
   });
 
   // The vendor doc arrives from a Firestore listener after this screen's first
@@ -86,13 +90,11 @@ export default function BusinessLocationScreen() {
   // very first frame. This syncs once the real doc lands, so the display never
   // stays stuck on someone else's placeholder location.
   useEffect(() => {
-    if (vendor.country || vendor.state || vendor.area || vendor.city) {
-      setCurrentLocation({
-        country: vendor.country || 'Canada',
-        state: vendor.state || 'Ontario',
-        area: vendor.area || vendor.city || 'Toronto',
-      });
-    }
+    setCurrentLocation({
+      country: vendor.country || '',
+      state: vendor.state || '',
+      area: vendor.area || vendor.city || '',
+    });
   }, [vendor.country, vendor.state, vendor.area, vendor.city]);
   const [selectedArea, setSelectedArea] = useState<AreaOption | null>(null);
   const [lastAreaChange, setLastAreaChange] = useState<Date | null>(null);
@@ -157,12 +159,12 @@ export default function BusinessLocationScreen() {
               <Text style={styles.locationLabel}>Country</Text>
               <Lock size={13} color={Colors.textMuted} style={styles.lockIcon} />
             </View>
-            <Text style={styles.locationValue}>{currentLocation.country}</Text>
+            <Text style={styles.locationValue}>{currentLocation.country || 'Not set'}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.locationRow}>
             <Text style={styles.locationLabel}>State / Province</Text>
-            <Text style={styles.locationValue}>{currentLocation.state}</Text>
+            <Text style={styles.locationValue}>{currentLocation.state || 'Not set'}</Text>
           </View>
           <View style={styles.divider} />
           <TouchableOpacity
@@ -175,7 +177,7 @@ export default function BusinessLocationScreen() {
               Area
             </Text>
             <View style={styles.areaValueRow}>
-              <Text style={styles.locationValue}>{currentLocation.area}</Text>
+              <Text style={styles.locationValue}>{currentLocation.area || 'Not set'}</Text>
               {canChangeArea() && (
                 <ChevronRight size={16} color={Colors.textMuted} style={styles.chevronIcon} />
               )}
