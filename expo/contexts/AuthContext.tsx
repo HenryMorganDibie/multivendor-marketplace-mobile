@@ -934,22 +934,30 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
         // Don't leave a half-made account behind: an auth user with no vendor
         // record can never log in successfully and blocks the email forever.
+        /**
+         * The half-made account has to go, or the email is locked forever.
+         *
+         * The auth account is created before completeRegistration runs, so a
+         * rejection here leaves an account that can sign in but has no role, no
+         * vendor record and no profile. Retrying then fails with "email already
+         * in use", which is how someone gets permanently unable to register with
+         * their own address — and the second error looks unrelated to the first.
+         *
+         * A cleanup failure is now reported rather than swallowed, because the
+         * consequence is a stuck email that only an admin can clear, and nobody
+         * would know to look.
+         */
         try {
           if (firebaseAuth.currentUser) await deleteUser(firebaseAuth.currentUser);
         } catch (cleanupError) {
           console.error('[AUTH] Could not clean up partial account:', cleanupError);
+          return {
+            success: false,
+            field: 'email',
+            error:
+              'We could not finish creating your account. Please contact the platform Support before trying this email again.',
+          } as never;
         }
-
-        /**
-         * The reason is read from `code` as well as the message.
-         *
-         * This tested the message text only. A FirebaseError carries the
-         * machine-readable reason on `.code`, and the message wording is not
-         * contractual, so a duplicate email fell through to "Could not create
-         * your account. Please try again." — advice that cannot work, on a
-         * screen that gave no hint the email was the problem. Someone
-         * registering a second role with the same address retried it forever.
-         */
         // The mapping also reports which field is at fault, so the screen can
         // attach the message to that input and focus it rather than showing a
         // banner and leaving the person hunting for what to change.

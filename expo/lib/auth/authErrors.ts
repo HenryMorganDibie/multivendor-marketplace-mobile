@@ -84,6 +84,26 @@ export function mapRegistrationError(error: unknown): MappedAuthError {
     };
   }
 
+  /**
+   * A backend validation message is already written for a person, so it is shown
+   * rather than replaced.
+   *
+   * completeRegistration rejects with invalid-argument and text like "A country
+   * is required." Because that code was unmapped it fell through to "Something
+   * went wrong on our side. Please try again." — which is both false and
+   * useless: nothing was wrong on our side, and trying again without changing
+   * anything cannot work. Someone hit exactly that and had no way to know a
+   * field was missing.
+   *
+   * Only these two codes. They are the ones the backend raises deliberately
+   * with a human-readable reason; anything else may carry internal detail that
+   * should not be shown.
+   */
+  if (/invalid-argument|failed-precondition/.test(codeOf(error))) {
+    const backendMessage = messageOf(error).trim();
+    if (backendMessage) return { field: 'form', message: backendMessage };
+  }
+
   // Reserved for genuine server or network faults, which is the only case where
   // trying again is real advice.
   return { field: 'form', message: 'Something went wrong on our side. Please try again.' };
