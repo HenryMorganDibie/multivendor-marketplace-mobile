@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import {
+  Image,
   View,
   Text,
   StyleSheet,
@@ -143,6 +144,8 @@ export default function VendorSignupScreen() {
   const [focusedField, setFocusedField] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errors, setErrors] = useState<FieldErrors>({});
+  /** Failures no single input is responsible for — network, rate limit, outage. */
+  const [formError, setFormError] = useState<string>('');
 
   // Phase 1: the only fields required to create an account. Everything else
   // (business name, category, description, state/area) is collected later
@@ -231,6 +234,15 @@ export default function VendorSignupScreen() {
   const fieldOffsets = useRef<Record<string, number>>({});
   const FIELD_ORDER = ['firstName', 'lastName', 'email', 'phone', 'password', 'country', 'referralCode'] as const;
 
+  const emailRef = useRef<TextInput>(null);
+  const phoneRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const fieldRefs: Record<string, React.RefObject<TextInput | null>> = {
+    email: emailRef,
+    phone: phoneRef,
+    password: passwordRef,
+  };
+
   const scrollToFirstError = (errs: FieldErrors) => {
     const target = FIELD_ORDER.find((k) => errs[k]);
     if (!target) return;
@@ -238,14 +250,56 @@ export default function VendorSignupScreen() {
     if (typeof y !== 'number') return;
     // A little headroom so the label is visible, not just the input.
     scrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
+    fieldRefs[target]?.current?.focus();
+  };
+
+  /**
+   * Put the server's answer on the field it is actually about.
+   *
+   * Every failure used to be written to `errors.email`, so "password is too
+   * weak" and "we could not reach the platform" both appeared under the email
+   * address — which is how the screenshot ended up showing a red line under an
+   * email that was perfectly fine. AuthContext already reports which field is
+   * at fault, read from the Firebase error code; this routes it there and
+   * keeps anything form-wide in its own banner.
+   */
+  const showRegistrationFailure = (message: string, field?: string) => {
+    if (field && field !== 'form') {
+      setFormError('');
+      setErrors({ [field]: message });
+      scrollToFirstError({ [field]: message });
+      return;
+    }
+    setErrors({});
+    setFormError(message);
+    scrollRef.current?.scrollToEnd({ animated: true });
+  };
+
+  /**
+   * Validated when the person leaves the field rather than only on submit, so
+   * a malformed address is caught while they are still looking at it.
+   */
+  const validateOnBlur = (key: 'email' | 'phone') => {
+    setFocusedField('');
+    if (key === 'email') {
+      const trimmed = email.trim();
+      // Empty means "not filled in yet", which is not an error to report.
+      if (trimmed && !isEmail(trimmed)) setErrors(p => ({ ...p, email: 'Enter a valid email address.' }));
+      return;
+    }
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone && !isPhone(trimmedPhone)) {
+      setErrors(p => ({ ...p, phone: 'Enter a valid phone number for the country you selected.' }));
+    }
   };
 
   const handleSubmit = async () => {
+    setFormError('');
     const newErrors: FieldErrors = {};
     if (firstName.trim().length < 2) newErrors.firstName = 'Enter your first name';
     if (lastName.trim().length < 1) newErrors.lastName = 'Enter your last name';
-    if (!isEmail(email)) newErrors.email = 'Enter a valid email';
-    if (!isPhone(phone)) newErrors.phone = 'Enter a valid phone number';
+    if (!isEmail(email)) newErrors.email = 'Enter a valid email address.';
+    if (!isPhone(phone)) newErrors.phone = 'Enter a valid phone number for the country you selected.';
     const pw = checkPassword(password);
     if (!pw.valid) newErrors.password = pw.error ?? 'Please choose a stronger password';
     // Phase 1 progressive onboarding: business name, category, description and
@@ -281,8 +335,10 @@ export default function VendorSignupScreen() {
 
       const check = await checkAccountExists(trimmedEmail);
       if (check.exists) {
-        setErrors({ email: 'An account already exists with this email. Please log in.' });
-        scrollToFirstError({ email: 'x' });
+        showRegistrationFailure(
+          'An account with this email already exists. Log in or reset your password.',
+          'email',
+        );
         setIsLoading(false);
         return;
       }
@@ -316,7 +372,10 @@ export default function VendorSignupScreen() {
       });
 
       if (!response.success) {
-        setErrors({ email: response.error || 'Something went wrong. Please try again.' });
+        showRegistrationFailure(
+          response.error || 'Something went wrong on our side. Please try again.',
+          response.errorField,
+        );
         setIsLoading(false);
         return;
       }
@@ -325,7 +384,7 @@ export default function VendorSignupScreen() {
       router.replace('/vendor/(tabs)/dashboard' as any);
     } catch (err) {
       console.error('[AUTH FLOW] Vendor registration error:', err);
-      setErrors({ email: 'Something went wrong. Please try again.' });
+      showRegistrationFailure('Something went wrong on our side. Please try again.');
       setIsLoading(false);
     }
   };
@@ -344,6 +403,13 @@ export default function VendorSignupScreen() {
         >
           <View style={styles.content}>
             <View style={styles.header}>
+              <Image
+                source={require('@/assets/images/the platform-logo.png')}
+                style={styles.brandLogo}
+                resizeMode="contain"
+                accessibilityRole="image"
+                accessibilityLabel="the platform"
+              />
               <Text style={styles.title}>Create your vendor account</Text>
               <Text style={styles.subtitle}>Start selling on the platform in minutes</Text>
             </View>
@@ -397,11 +463,12 @@ export default function VendorSignupScreen() {
             <View style={styles.inputSection} onLayout={(e) => { fieldOffsets.current.email = e.nativeEvent.layout.y; }}>
               <Text style={styles.label}>Email Address</Text>
               <TextInput
+                ref={emailRef}
                 style={[styles.input, focusedField === 'email' && styles.inputFocused, errors.email ? styles.inputError : null]}
                 value={email}
-                onChangeText={(t) => { setEmail(t); clearError('email'); }}
+                onChangeText={(t) => { setEmail(t); clearError('email'); setFormError(''); }}
                 onFocus={() => setFocusedField('email')}
-                onBlur={() => setFocusedField('')}
+                onBlur={() => validateOnBlur('email')}
                 placeholder="you@example.com"
                 placeholderTextColor="#9CA3AF"
                 autoCapitalize="none"
@@ -416,11 +483,12 @@ export default function VendorSignupScreen() {
             <View style={styles.inputSection} onLayout={(e) => { fieldOffsets.current.phone = e.nativeEvent.layout.y; }}>
               <Text style={styles.label}>Phone Number</Text>
               <TextInput
+                ref={phoneRef}
                 style={[styles.input, focusedField === 'phone' && styles.inputFocused, errors.phone ? styles.inputError : null]}
                 value={phone}
-                onChangeText={(t) => { setPhone(t); clearError('phone'); }}
+                onChangeText={(t) => { setPhone(t); clearError('phone'); setFormError(''); }}
                 onFocus={() => setFocusedField('phone')}
-                onBlur={() => setFocusedField('')}
+                onBlur={() => validateOnBlur('phone')}
                 /**
                  * Follows the country the vendor picked.
                  *
@@ -448,9 +516,10 @@ export default function VendorSignupScreen() {
               <Text style={styles.label}>Password</Text>
               <View style={styles.passwordRow}>
                 <TextInput
+                  ref={passwordRef}
                   style={[styles.passwordInput, focusedField === 'password' && styles.inputFocused, errors.password ? styles.inputError : null]}
                   value={password}
-                  onChangeText={(t) => { setPassword(t); clearError('password'); }}
+                  onChangeText={(t) => { setPassword(t); clearError('password'); setFormError(''); }}
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => setFocusedField('')}
                   placeholder={PASSWORD_POLICY_SUMMARY}
@@ -612,6 +681,20 @@ export default function VendorSignupScreen() {
               .
             </Text>
 
+            {/* Only what no single field can own: a network failure, a rate
+                limit, sign-up being unavailable. Field-level problems stay
+                attached to their input, where the fix is. */}
+            {formError ? (
+              <View
+                style={styles.formErrorBox}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="polite"
+                testID="vendor-form-error"
+              >
+                <Text style={styles.formErrorText}>{formError}</Text>
+              </View>
+            ) : null}
+
             <TouchableOpacity
               style={[styles.primaryButton, (!isFormComplete || isLoading) && styles.primaryButtonDisabled]}
               onPress={handleSubmit}
@@ -645,6 +728,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
   scrollContent: { flexGrow: 1, paddingVertical: 16 },
   content: { paddingHorizontal: 24, maxWidth: 480, width: '100%', alignSelf: 'center' as const },
+  brandLogo: { width: 132, height: 36, alignSelf: 'center', marginBottom: 20 },
   header: { marginBottom: 20, marginTop: 8 },
   title: { fontSize: 26, fontWeight: '700' as const, color: '#2B2B2B', marginBottom: 6, letterSpacing: -0.3 },
   subtitle: { fontSize: 15, color: '#6B7280', lineHeight: 22 },
@@ -673,6 +757,11 @@ const styles = StyleSheet.create({
   sectionHeaderRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, marginTop: 8, marginBottom: 14 },
   sectionHeaderText: { fontSize: 13, fontWeight: '700' as const, color: '#FF8C42', textTransform: 'uppercase' as const, letterSpacing: 0.5 },
   errorText: { fontSize: 13, color: '#DC2626', marginTop: 6, paddingHorizontal: 4 },
+  formErrorBox: {
+    backgroundColor: '#FEF2F2', borderRadius: 12, padding: 14, marginTop: 4, marginBottom: 12,
+    borderWidth: 1, borderColor: '#FECACA',
+  },
+  formErrorText: { fontSize: 14, color: '#DC2626', lineHeight: 20, textAlign: 'center' as const },
   helperText: { fontSize: 12, color: '#6B7280', lineHeight: 17, marginTop: 6, paddingHorizontal: 4 },
   passwordRow: { position: 'relative' as const, justifyContent: 'center' as const },
   // Matches `input` above, plus room for the visibility toggle. It used to have

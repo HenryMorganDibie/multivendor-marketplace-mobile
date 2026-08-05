@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
+  Image,
   View,
   Text,
   StyleSheet,
@@ -58,6 +59,11 @@ export default function CustomerSignupScreen() {
   const [focusedField, setFocusedField] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errors, setErrors] = useState<FieldErrors>({});
+  /** Failures no single input is responsible for — network, rate limit, outage. */
+  const [formError, setFormError] = useState<string>('');
+
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
 
   const locationComplete =
     !!location && !!location.countryCode && !!location.stateCode && !!location.areaId;
@@ -148,6 +154,13 @@ export default function CustomerSignupScreen() {
         >
           <View style={styles.content}>
             <View style={styles.header}>
+              <Image
+                source={require('@/assets/images/the platform-logo.png')}
+                style={styles.brandLogo}
+                resizeMode="contain"
+                accessibilityRole="image"
+                accessibilityLabel="the platform"
+              />
               <Text style={styles.title}>Create your account</Text>
               <Text style={styles.subtitle}>Discover vendors, place orders and manage your purchases.</Text>
             </View>
@@ -346,6 +359,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
   scrollContent: { flexGrow: 1, paddingVertical: 16 },
   content: { paddingHorizontal: 24, maxWidth: 480, width: '100%', alignSelf: 'center' as const },
+  brandLogo: { width: 132, height: 36, alignSelf: 'center', marginBottom: 20 },
   header: { marginBottom: 24, marginTop: 8 },
   title: { fontSize: 26, fontWeight: '700' as const, color: '#2B2B2B', marginBottom: 6, letterSpacing: -0.3 },
   subtitle: { fontSize: 15, color: '#6B7280', lineHeight: 22 },

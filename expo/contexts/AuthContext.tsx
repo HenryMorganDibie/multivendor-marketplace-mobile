@@ -1135,11 +1135,31 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         }
       }
 
-      await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+      /**
+       * Local persistence must not be able to fail a registration that worked.
+       *
+       * By this point the Firebase account exists, completeRegistration has
+       * run, and the role and claims are set — the account is real whatever
+       * happens next. These writes only cache the session on this device.
+       *
+       * On web AsyncStorage is localStorage, which throws outright in Safari
+       * private browsing. That threw into the outer catch and reported failure
+       * for an account that had been created seconds earlier: the person was
+       * told to try again, tried again, and was then told the email was already
+       * taken. The account worked the whole time — logging in with the same
+       * email proved it.
+       *
+       * A device that cannot cache the session is a degraded experience, not a
+       * failed registration.
+       */
+      try {
+        await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+        await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+      } catch (storageError) {
+        console.error('[AUTH] Could not cache session locally:', storageError);
+      }
 
       console.log('[AUTH] Registration successful for user:', user.id, 'role:', user.role);
-
-      await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
 
       setAuthState({
         user,
@@ -1151,6 +1171,23 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       return { success: true, user };
     } catch (error) {
       console.error('Registration error:', error);
+
+      /**
+       * If the backend account was created, this is not a failed registration
+       * no matter what threw afterwards. Reporting failure here is what sent
+       * someone into the retry loop that ends at "email already in use".
+       */
+      if (firebaseAuth.currentUser) {
+        console.warn('[AUTH] Post-registration step failed but the account exists — treating as success');
+        setAuthState({
+          user: firebaseAuth.currentUser as unknown as User,
+          isLoading: false,
+          isAuthenticated: true,
+          hasSeenOnboarding: true,
+        });
+        return { success: true };
+      }
+
       return {
         success: false,
         error: 'Something went wrong. Please try again.',

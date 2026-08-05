@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Eye, EyeOff, Lock } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import {
@@ -42,6 +42,49 @@ export default function LoginScreen() {
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+
+  /**
+   * Put the message where the person can act on it.
+   *
+   * `errorField` comes back from AuthContext, which reads the Firebase error
+   * code rather than its wording. A wrong password belongs under the password
+   * field with focus there; a disabled account belongs to the form, because no
+   * single input is wrong. Everything used to land in one banner reading
+   * "Incorrect email or password. Please try again." whatever had actually
+   * happened — including a locked account, where retrying is the one thing
+   * that cannot help.
+   */
+  const showAuthFailure = (message: string, field?: string) => {
+    if (field === 'email') {
+      setEmailError(message);
+      emailRef.current?.focus();
+      return;
+    }
+    if (field === 'password') {
+      setPasswordError(message);
+      passwordRef.current?.focus();
+      return;
+    }
+    setAuthError(message);
+  };
+
+  /**
+   * Checked when the person leaves the field, not only when they submit.
+   *
+   * Waiting for submit means a typo in the address is reported as a failed
+   * login, which sends them to check the password instead.
+   */
+  const validateEmailOnBlur = () => {
+    setEmailFocused(false);
+    const trimmed = email.trim();
+    if (!trimmed) return; // Empty is "not finished", not "wrong".
+    if (!isEmail(trimmed)) {
+      setEmailError('Enter a valid email address.');
+    }
+  };
+
   const handleLogin = async () => {
     const trimmedEmail = email.trim();
     let hasError = false;
@@ -51,19 +94,23 @@ export default function LoginScreen() {
     setAuthError('');
     
     if (!trimmedEmail) {
-      setEmailError('Please enter your email address.');
+      setEmailError('Enter your email address.');
       hasError = true;
     } else if (!isEmail(trimmedEmail)) {
-      setEmailError('Please enter a valid email address.');
+      setEmailError('Enter a valid email address.');
       hasError = true;
     }
 
     if (!password) {
-      setPasswordError('Please enter your password.');
+      setPasswordError('Enter your password.');
       hasError = true;
     }
 
+    // Focus the first field that failed, so the fix is one keystroke away
+    // rather than a hunt down the form.
     if (hasError) {
+      if (!trimmedEmail || !isEmail(trimmedEmail)) emailRef.current?.focus();
+      else passwordRef.current?.focus();
       return;
     }
 
@@ -77,7 +124,20 @@ export default function LoginScreen() {
       });
       
       if (!response.success) {
-        setAuthError('Incorrect email or password. Please try again.');
+        /**
+         * The reason the sign-in failed, not a guess at it.
+         *
+         * This screen used to overwrite whatever came back with "Incorrect
+         * email or password. Please try again." — so a disabled account, a
+         * rate limit and an unverified email all told the person to retry a
+         * password that was already correct. AuthContext resolves the real
+         * reason from the Firebase error code; the only job left here is to
+         * show it and put focus where it applies.
+         */
+        showAuthFailure(
+          response.error || 'Incorrect email or password.',
+          response.errorField,
+        );
         setIsLoading(false);
         return;
       }
@@ -85,8 +145,11 @@ export default function LoginScreen() {
       if (response.user) {
         console.log('[AUTH FLOW] Login successful, user will be redirected by auth guard');
       }
-    } catch {
-      setAuthError('Incorrect email or password. Please try again.');
+    } catch (error) {
+      // Nothing above threw an auth answer, so this is genuinely our side —
+      // the one case where "try again" is real advice.
+      console.error('[AUTH FLOW] Login error:', error);
+      setAuthError('Something went wrong on our side. Please try again.');
       setIsLoading(false);
     }
   };
@@ -135,6 +198,13 @@ export default function LoginScreen() {
         >
           <View style={styles.content}>
             <View style={styles.header}>
+              <Image
+                source={require('@/assets/images/the platform-logo.png')}
+                style={styles.brandLogo}
+                resizeMode="contain"
+                accessibilityRole="image"
+                accessibilityLabel="the platform"
+              />
               <Text style={styles.title}>Welcome back</Text>
               <Text style={styles.subtitle}>Log in to your the platform account</Text>
             </View>
@@ -191,6 +261,7 @@ export default function LoginScreen() {
             <View style={styles.form}>
               <View style={styles.inputSection}>
                 <TextInput
+                  ref={emailRef}
                   style={[
                     styles.input,
                     emailFocused && styles.inputFocused,
@@ -199,10 +270,14 @@ export default function LoginScreen() {
                   value={email}
                   onChangeText={(text) => {
                     setEmail(text);
+                    // Editing the field answers the complaint about it, and
+                    // clears the banner too: a stale "account disabled" sitting
+                    // over a freshly typed address is not about that address.
                     if (emailError) setEmailError('');
+                    if (authError) setAuthError('');
                   }}
                   onFocus={() => setEmailFocused(true)}
-                  onBlur={() => setEmailFocused(false)}
+                  onBlur={validateEmailOnBlur}
                   placeholder="Email address"
                   placeholderTextColor="#9CA3AF"
                   autoCapitalize="none"
@@ -219,6 +294,7 @@ export default function LoginScreen() {
               <View style={styles.inputSection}>
                 <View style={styles.passwordWrap}>
                 <TextInput
+                  ref={passwordRef}
                   style={[
                     styles.input,
                     styles.passwordInput,
@@ -229,6 +305,7 @@ export default function LoginScreen() {
                   onChangeText={(text) => {
                     setPassword(text);
                     if (passwordError) setPasswordError('');
+                    if (authError) setAuthError('');
                   }}
                   onFocus={() => setPasswordFocused(true)}
                   onBlur={() => setPasswordFocused(false)}
@@ -258,7 +335,14 @@ export default function LoginScreen() {
               </View>
 
               {authError ? (
-                <View style={styles.authErrorBox}>
+                // Announced when it appears, so it isn't a silent change for
+                // anyone not looking at that part of the screen.
+                <View
+                  style={styles.authErrorBox}
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="polite"
+                  testID="login-form-error"
+                >
                   <Text style={styles.authErrorText}>{authError}</Text>
                 </View>
               ) : null}
@@ -331,6 +415,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center' as const,
   },
+  brandLogo: { width: 132, height: 36, alignSelf: 'center', marginBottom: 20 },
   header: {
     marginBottom: 32,
     alignItems: 'center' as const,
