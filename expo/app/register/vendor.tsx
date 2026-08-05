@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { openLegalDocument } from '@/constants/legalLinks';
 import LocationCascadeFields from '@/components/LocationCascadeFields';
 import type { LocationValue } from '@/components/LocationCascadeFields';
+import { useLocationCatalogue } from '@/hooks/useLocationCatalogue';
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -117,6 +118,18 @@ export default function VendorSignupScreen() {
   const [password, setPassword] = useState<string>('');
 
   const [location, setLocation] = useState<LocationValue | null>(null);
+
+  /**
+   * The dial code for the country the vendor picked, for the phone example.
+   * listCountries returns it per country and nothing was reading it, so the
+   * field showed +234 to everyone.
+   */
+  const { countries } = useLocationCatalogue();
+  const phonePlaceholder = useMemo(() => {
+    if (!location?.countryCode) return null;
+    const match = countries.items.find((c: any) => c.code === location.countryCode);
+    return match?.dialCode ?? null;
+  }, [countries.items, location?.countryCode]);
   const [referralCode, setReferralCode] = useState<string>('');
   const [referralValidation, setReferralValidation] = useState<ReferralValidationState>({
     valid: false,
@@ -402,7 +415,21 @@ export default function VendorSignupScreen() {
                 onChangeText={(t) => { setPhone(t); clearError('phone'); }}
                 onFocus={() => setFocusedField('phone')}
                 onBlur={() => setFocusedField('')}
-                placeholder="+234 800 000 0000"
+                /**
+                 * Follows the country the vendor picked.
+                 *
+                 * This was hardcoded to +234, so someone registering from
+                 * Canada was shown a Nigerian example — on a platform that
+                 * seeds 196 countries and gates availability per country, a
+                 * fixed dial code reads as "this is not really for you".
+                 *
+                 * listCountries already returns dialCode per country; nothing
+                 * was reading it. The generic example is only used before a
+                 * country is chosen.
+                 */
+                placeholder={
+                  phonePlaceholder ? `${phonePlaceholder} 800 000 0000` : 'Phone number'
+                }
                 placeholderTextColor="#9CA3AF"
                 keyboardType="phone-pad"
                 editable={!isLoading}

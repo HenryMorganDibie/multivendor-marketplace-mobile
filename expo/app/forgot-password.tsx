@@ -13,6 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, MailCheck } from 'lucide-react-native';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -50,8 +52,19 @@ export default function ForgotPasswordScreen() {
     setIsLoading(true);
     try {
       console.log('[AUTH FLOW] Password reset requested for', trimmedEmail);
-      // Mock the password-reset email request. We never reveal whether an account exists.
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      /**
+       * Actually sends the email.
+       *
+       * This waited 1.2 seconds and showed the confirmation screen without
+       * requesting anything, so anyone who had genuinely forgotten their
+       * password was told to check an inbox nothing had been sent to.
+       *
+       * Firebase sends and handles the reset link itself; there is no backend
+       * function to write. The neutral confirmation stays either way — whether
+       * an account exists is not something a login screen should disclose, and
+       * an error here would disclose it.
+       */
+      await sendPasswordResetEmail(auth, trimmedEmail);
       setSubmitted(true);
     } catch (err) {
       console.error('[AUTH FLOW] Password reset request error:', err);

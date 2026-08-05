@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 import { verificationService } from '@/services/verificationService';
 import type { MockVerificationProviderData } from '@/utils/vendorDiscovery';
+import { auth, callable } from '@/lib/firebase';
+import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 
 /**
  * Normalized internal verification statuses for vendor accounts.
@@ -263,8 +265,35 @@ export const [VerificationProvider, useVerification] = createContextHook(() => {
     console.log('[VERIFICATION] Selfie stored:', uri.substring(0, 50) + '...');
   };
 
+  /**
+   * Submitting for review, on the server.
+   *
+   * This wrote the submission locally and then decided the outcome itself:
+   * mockVerificationResult ran `Math.random() > 0.3` after five seconds and
+   * marked the vendor approved or rejected. Verification gates discoverability,
+   * so a vendor could hold an approved status their own device invented while
+   * the backend had never seen a submission — and an admin had nothing to
+   * review, because nothing was ever submitted.
+   *
+   * submitVendorVerification has been deployed since Phase 2 and nothing called
+   * it. Approval is an admin decision made through the console, which is the
+   * only place it can be made: it is a judgement about documents, not something
+   * a client can compute.
+   *
+   * The local status is set to pending_review to reflect what actually
+   * happened. It moves off that only when the backend says so.
+   */
   const submitForReview = async () => {
     const now = new Date().toISOString();
+
+    if (!DEV_LOCAL_AUTH_ENABLED || auth.currentUser) {
+      const submit = callable<
+        Record<string, never>,
+        { success: true; verificationStatus: string }
+      >('submitVendorVerification');
+      await submit({});
+    }
+
     const data: VerificationData = {
       ...verificationData,
       status: 'pending_review',
@@ -277,10 +306,13 @@ export const [VerificationProvider, useVerification] = createContextHook(() => {
     };
     await saveVerificationData(data);
 
-    // Mock automated review after 5 seconds
-    setTimeout(async () => {
-      await mockVerificationResult();
-    }, 5000);
+    // The demo logins have no backend account and no admin to review them, so
+    // they keep the simulated outcome. It is unreachable in a release build.
+    if (DEV_LOCAL_AUTH_ENABLED && !auth.currentUser) {
+      setTimeout(async () => {
+        await mockVerificationResult();
+      }, 5000);
+    }
   };
 
   const mockVerificationResult = async () => {
