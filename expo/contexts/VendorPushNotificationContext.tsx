@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notificationThrottleService } from '@/utils/notificationThrottle';
+import { auth, callable } from '@/lib/firebase';
 
 const VENDOR_PUSH_TOKEN_KEY = '@the platform_vendor_push_token';
 
@@ -82,6 +83,27 @@ export const [VendorPushNotificationProvider, useVendorPushNotifications] = crea
       setExpoPushToken(token);
 
       await AsyncStorage.setItem(VENDOR_PUSH_TOKEN_KEY, token);
+
+      /**
+       * registerPushToken has been deployed since notifications shipped and
+       * nothing called it. The token above was obtained from Expo and kept
+       * on-device only — the backend's `dispatchPush` reads
+       * `users/{uid}/pushTokens`, which stayed empty, so a real push (order
+       * accepted, new message) had no token to send to. The in-app chat
+       * "push" seen elsewhere in this file is a local notification the
+       * device schedules for itself and is unrelated to this.
+       */
+      if (auth.currentUser) {
+        try {
+          const register = callable<
+            { token: string; platform: 'ios' | 'android' | 'web'; appVersion?: string },
+            { success: true; tokenId: string }
+          >('registerPushToken');
+          await register({ token, platform: Platform.OS === 'ios' ? 'ios' : 'android' });
+        } catch (err) {
+          console.error('[VendorPush] registerPushToken failed:', err);
+        }
+      }
 
     } catch (error) {
       console.error('[VendorPush] Registration failed:', error);

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Colors } from '@/constants/colors';
 import {
   View,
@@ -29,8 +29,13 @@ import { mockVendor } from '@/mocks/vendorData';
 
 export default function AddItemScreen() {
   const { categoryId } = useLocalSearchParams<{ categoryId: string }>();
-  const { addItem, categories } = useCatalog();
+  const { addItem, categories, addCategory } = useCatalog();
   const { plan } = useVendorPlan();
+  const [isSaving, setIsSaving] = useState(false);
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [pendingCategoryName, setPendingCategoryName] = useState<string | null>(null);
 
   const [name, setName] = useState('');
   const [basePrice, setBasePrice] = useState('');
@@ -66,7 +71,44 @@ export default function AddItemScreen() {
     true
   );
 
-  const handleSave = () => {
+  /**
+   * A vendor with zero real categories had no way to create one without
+   * leaving this screen, going to the catalog tab, adding one there, then
+   * coming back — a category is mandatory server-side (createCatalogItem
+   * rejects submission without one), so this was a dead end for anyone
+   * adding their very first item.
+   */
+  const handleAddNewCategory = async () => {
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) return;
+    setIsAddingCategory(true);
+    try {
+      await addCategory(trimmed);
+      setNewCategoryName('');
+      setShowNewCategoryInput(false);
+      // The live categories listener picks up the real document the moment
+      // Firestore commits it, not synchronously here — watch for it to land
+      // and select it automatically once it does.
+      setPendingCategoryName(trimmed);
+    } catch (error) {
+      const message = (error as { message?: string })?.message
+        ?? 'Could not create this category. Please try again.';
+      Alert.alert('Could not add category', message);
+    } finally {
+      setIsAddingCategory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!pendingCategoryName) return;
+    const created = categories.find((c: Category) => c.name === pendingCategoryName);
+    if (created) {
+      setSelectedCategoryId(created.id);
+      setPendingCategoryName(null);
+    }
+  }, [categories, pendingCategoryName]);
+
+  const handleSave = async () => {
     if (!name.trim() || !basePrice) {
       Alert.alert('Error', 'Please fill in item name and base price');
       return;
@@ -85,27 +127,46 @@ export default function AddItemScreen() {
       return;
     }
 
-    addItem({
-      name: name.trim(),
-      basePrice: basePriceNum,
-      salePrice: salePriceNum,
-      description: description.trim() || undefined,
-      photos,
-      isAvailable,
-      isTaxExempt,
-      isHidden,
-      isOutOfStock,
-      isFeatured,
-      categoryId: selectedCategoryId,
-      addOnGroups,
-      trackInventory,
-      inventoryQuantity: trackInventory && inventoryQuantity ? parseInt(inventoryQuantity, 10) : undefined,
-      lowStockThreshold: trackInventory && lowStockThreshold ? parseInt(lowStockThreshold, 10) : undefined,
-      highlightLabel: highlightLabel ?? undefined,
-    });
+    /**
+     * addItem calls the real backend and can genuinely fail — most commonly
+     * "Choose a category before submitting this item" for a vendor who has
+     * never created a real category yet (the picker's own "Uncategorized"
+     * option is a local placeholder, not a real one, and maps to no category
+     * at all when saved). This used to fire addItem and navigate back
+     * immediately regardless of the result, so a failure here was completely
+     * invisible: the screen closed as if it had worked, and the item never
+     * actually existed.
+     */
+    setIsSaving(true);
+    try {
+      await addItem({
+        name: name.trim(),
+        basePrice: basePriceNum,
+        salePrice: salePriceNum,
+        description: description.trim() || undefined,
+        photos,
+        isAvailable,
+        isTaxExempt,
+        isHidden,
+        isOutOfStock,
+        isFeatured,
+        categoryId: selectedCategoryId,
+        addOnGroups,
+        trackInventory,
+        inventoryQuantity: trackInventory && inventoryQuantity ? parseInt(inventoryQuantity, 10) : undefined,
+        lowStockThreshold: trackInventory && lowStockThreshold ? parseInt(lowStockThreshold, 10) : undefined,
+        highlightLabel: highlightLabel ?? undefined,
+      });
 
-    unsavedChanges.resetChanges();
-    router.back();
+      unsavedChanges.resetChanges();
+      router.back();
+    } catch (error) {
+      const message = (error as { message?: string })?.message
+        ?? 'Could not save this item. Please try again.';
+      Alert.alert('Could not add item', message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -295,8 +356,10 @@ export default function AddItemScreen() {
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <TouchableOpacity onPress={handleSave} disabled={!isValid}>
-              <Text style={[styles.saveText, !isValid && styles.saveTextDisabled]}>Save</Text>
+            <TouchableOpacity onPress={handleSave} disabled={!isValid || isSaving}>
+              <Text style={[styles.saveText, (!isValid || isSaving) && styles.saveTextDisabled]}>
+                {isSaving ? 'Saving…' : 'Save'}
+              </Text>
             </TouchableOpacity>
           ),
         }}
@@ -721,6 +784,42 @@ export default function AddItemScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+
+          {showNewCategoryInput ? (
+            <View style={styles.newCatRow}>
+              <TextInput
+                style={styles.newCatInput}
+                placeholder="Category name"
+                placeholderTextColor={Colors.textMuted}
+                value={newCategoryName}
+                onChangeText={setNewCategoryName}
+                autoFocus
+                editable={!isAddingCategory}
+                onSubmitEditing={handleAddNewCategory}
+              />
+              <TouchableOpacity
+                onPress={handleAddNewCategory}
+                disabled={!newCategoryName.trim() || isAddingCategory}
+                style={styles.newCatAddButton}
+              >
+                <Text style={[
+                  styles.newCatAddButtonText,
+                  (!newCategoryName.trim() || isAddingCategory) && styles.saveTextDisabled,
+                ]}>
+                  {isAddingCategory ? 'Adding…' : 'Add'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.addNewCatRow}
+              onPress={() => setShowNewCategoryInput(true)}
+              activeOpacity={0.7}
+            >
+              <Plus size={18} color={Colors.primary} />
+              <Text style={styles.addNewCatText}>Add new category</Text>
+            </TouchableOpacity>
+          )}
           <View style={{ height: 28 }} />
         </View>
       </Modal>
@@ -1333,6 +1432,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.white,
     fontWeight: '700' as const,
+  },
+  addNewCatRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  addNewCatText: {
+    fontSize: 16,
+    color: Colors.primary,
+    fontWeight: '600' as const,
+  },
+  newCatRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  newCatInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: Colors.text,
+  },
+  newCatAddButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+  },
+  newCatAddButtonText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: Colors.primary,
   },
   sectionHelper: {
     fontSize: 13,

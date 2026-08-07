@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
+import { auth, callable } from '@/lib/firebase';
+import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 
 interface BusinessArea {
   city: string;
@@ -62,8 +64,42 @@ export const [VendorPickupProvider, useVendorPickup] = createContextHook(() => {
     }
   };
 
+  /**
+   * updateVendorPickupSettings has been deployed since pickup instructions
+   * shipped and nothing called it — this saved to AsyncStorage only, so
+   * pickup details never reached the server, and the away/auto-send message
+   * flows that read pickup settings server-side (sendPickupDetails,
+   * createCommerceConversation's greeting path) never saw what a vendor
+   * actually typed.
+   *
+   * The server call happens before the local write: the backend's own
+   * validation (instructions length, auto-send enable-guard) is what should
+   * decide whether this save is allowed, not the client's mirror of that
+   * logic — so a rejection here must not have already been written locally.
+   */
   const savePickupDetails = async (details: PickupDetails) => {
     try {
+      if (!DEV_LOCAL_AUTH_ENABLED || auth.currentUser) {
+        const update = callable<
+          {
+            pickupAddress: { streetAddress: string; unit: string; businessArea: BusinessArea };
+            pickupInstructions: string;
+            pickupContactPhone: string;
+            pickupVerificationCode: string;
+          },
+          { success: true }
+        >('updateVendorPickupSettings');
+        await update({
+          pickupAddress: {
+            streetAddress: details.streetAddress,
+            unit: details.unit,
+            businessArea: details.businessArea,
+          },
+          pickupInstructions: details.instructions,
+          pickupContactPhone: details.contactPhone,
+          pickupVerificationCode: details.verificationCode,
+        });
+      }
       await AsyncStorage.setItem(PICKUP_DETAILS_KEY, JSON.stringify(details));
       setPickupDetails(details);
       console.log('Pickup details saved:', details);
@@ -75,6 +111,12 @@ export const [VendorPickupProvider, useVendorPickup] = createContextHook(() => {
 
   const setAutoSend = async (enabled: boolean) => {
     try {
+      if (!DEV_LOCAL_AUTH_ENABLED || auth.currentUser) {
+        const update = callable<{ autoSendPickupDetailsEnabled: boolean }, { success: true }>(
+          'updateVendorPickupSettings',
+        );
+        await update({ autoSendPickupDetailsEnabled: enabled });
+      }
       await AsyncStorage.setItem(AUTO_SEND_KEY, enabled.toString());
       setAutoSendEnabled(enabled);
       console.log('Auto-send pickup enabled:', enabled);

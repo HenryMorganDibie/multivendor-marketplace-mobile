@@ -1,4 +1,6 @@
 import React, { useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { sendOtp } from '@/lib/auth/verifyOtp';
 import {
   Image,
   View,
@@ -18,14 +20,25 @@ import { useAuth } from '@/contexts/AuthContext';
 import { openLegalDocument } from '@/constants/legalLinks';
 import LocationCascadeFields from '@/components/LocationCascadeFields';
 import type { LocationValue } from '@/components/LocationCascadeFields';
-import { useUserLocation } from '@/contexts/UserLocationContext';
 import { useLocationCatalogue } from '@/hooks/useLocationCatalogue';
 import { checkPassword, PASSWORD_POLICY_SUMMARY } from '@/constants/passwordPolicy';
 import PasswordRequirements from '@/components/PasswordRequirements';
+import { callable } from '@/lib/firebase';
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
+
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  const maskedLocal = local.length > 2
+    ? local[0] + '*'.repeat(local.length - 2) + local[local.length - 1]
+    : local;
+  return `${maskedLocal}@${domain}`;
+}
+
+/** Matches the key verify-otp.tsx reads from once the code is confirmed. */
+export const PENDING_CUSTOMER_REG_KEY = '@the platform_pending_customer_reg';
 
 /**
  * Reduce whatever was typed to a single capitalised letter.
@@ -45,8 +58,7 @@ type FieldErrors = Record<string, string | undefined>;
 
 export default function CustomerSignupScreen() {
   const router = useRouter();
-  const { checkAccountExists, registerAccount } = useAuth();
-  const { setInitialCountry } = useUserLocation();
+  const { checkAccountExists } = useAuth();
 
   const [firstName, setFirstName] = useState<string>('');
   const [lastInitial, setLastInitial] = useState<string>('');
@@ -158,6 +170,33 @@ export default function CustomerSignupScreen() {
 
     setIsLoading(true);
     try {
+      /**
+       * A final server-side check before submitting.
+       *
+       * The cascade above can only ever offer a combination the catalogue
+       * actually contains, but that assumes the catalogue has not changed
+       * since it loaded and the picker was not bypassed —
+       * validateLocationSelection has been deployed since the catalogue
+       * itself and nothing called it. Catching a stale selection here means
+       * a clear, specific inline error instead of registration failing
+       * opaquely inside completeRegistration, which runs this same check
+       * server-side regardless.
+       */
+      const validateLocation = callable<
+        { countryCode: string; stateId?: string; areaId?: string },
+        { success: true; valid: boolean; reason?: string }
+      >('validateLocationSelection');
+      const locationCheck = await validateLocation({
+        countryCode: location!.countryCode,
+        stateId: location?.stateCode || undefined,
+        areaId: location?.areaId || undefined,
+      });
+      if (!locationCheck.data.valid) {
+        setErrors((p) => ({ ...p, country: locationCheck.data.reason || 'That location is no longer available. Please pick again.' }));
+        setIsLoading(false);
+        return;
+      }
+
       const trimmedEmail = email.trim();
       const check = await checkAccountExists(trimmedEmail);
       if (check.exists) {
@@ -169,38 +208,27 @@ export default function CustomerSignupScreen() {
         return;
       }
 
-      console.log('[AUTH FLOW] Creating customer account for', trimmedEmail);
-      const response = await registerAccount({
+      const pendingPayload = {
         identifier: trimmedEmail,
         password,
-        role: 'customer',
+        role: 'customer' as const,
         firstName: firstName.trim(),
         lastName: lastInitial.trim().toUpperCase(),
         location: location!,
+      };
+
+      await AsyncStorage.setItem(PENDING_CUSTOMER_REG_KEY, JSON.stringify(pendingPayload));
+      console.log('[AUTH FLOW] Sending OTP for customer registration:', trimmedEmail);
+      await sendOtp(trimmedEmail);
+
+      router.push({
+        pathname: '/verify-otp',
+        params: {
+          contact: trimmedEmail,
+          maskedContact: maskEmail(trimmedEmail),
+          context: 'customer-registration',
+        },
       });
-
-      if (!response.success) {
-        showRegistrationFailure(
-          response.error || 'Something went wrong on our side. Please try again.',
-          response.errorField,
-        );
-        setIsLoading(false);
-        return;
-      }
-
-      // Carry the location they just gave us into UserLocationContext. It only
-      // ever read AsyncStorage, so without this a customer who had just picked
-      // country, state and area on this form landed on the home screen and was
-      // immediately asked to "Select your country" all over again.
-      await setInitialCountry(
-        location!.countryCode,
-        location!.stateCode || undefined,
-        undefined,
-        location!.areaName || undefined,
-      );
-
-      console.log('[AUTH FLOW] Customer registration successful → customer onboarding');
-      router.replace('/customer' as any);
     } catch (err) {
       console.error('[AUTH FLOW] Customer registration error:', err);
       showRegistrationFailure('Something went wrong on our side. Please try again.');

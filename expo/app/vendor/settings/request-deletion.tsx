@@ -5,6 +5,8 @@ import { Stack, useRouter } from 'expo-router';
 import { AlertTriangle, CheckSquare, Square } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import EditScreenHeader from '@/components/EditScreenHeader';
+import { callable } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 
 const DELETION_REASONS = [
   'No longer using the platform',
@@ -19,10 +21,12 @@ const DELETION_REASONS = [
 
 export default function RequestDeletionScreen() {
   const router = useRouter();
+  const { logout } = useAuth();
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [showReasonDropdown, setShowReasonDropdown] = useState(false);
   const [additionalFeedback, setAdditionalFeedback] = useState('');
   const [isConfirmationChecked, setIsConfirmationChecked] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const sanitizeInput = (text: string): string => {
     const urlPattern = /(https?:\/\/[^\s]+)|(www\.[^\s]+)/gi;
@@ -41,29 +45,40 @@ export default function RequestDeletionScreen() {
     setAdditionalFeedback(sanitized);
   };
 
-  const handleRequestDeletion = () => {
+  const handleRequestDeletion = async () => {
     if (!isConfirmationChecked) {
       Alert.alert('Confirmation Required', 'Please confirm that you understand the deletion terms.');
       return;
     }
 
-    console.log('Account deletion request submitted');
-    console.log('Reason:', selectedReason || 'Not provided');
-    console.log('Feedback:', additionalFeedback || 'Not provided');
-    console.log('Timestamp:', new Date().toISOString());
-    
-    Alert.alert(
-      'Request Submitted',
-      'Your account has been marked as "Pending Deletion". You will be logged out immediately. You have 90 days to contact support if you wish to undo this request.',
-      [
-        {
-          text: 'Understood',
-          onPress: () => {
-            router.replace('/' as any);
+    setIsSubmitting(true);
+    try {
+      const requestDeletion = callable<{ reason?: string; feedback?: string }, { success: true }>(
+        'requestAccountDeletion'
+      );
+      await requestDeletion({
+        reason: selectedReason || undefined,
+        feedback: additionalFeedback || undefined,
+      });
+
+      Alert.alert(
+        'Request Submitted',
+        'Your account has been marked as "Pending Deletion". You will be logged out immediately. You have 90 days to undo this by logging back in, or by contacting support.',
+        [
+          {
+            text: 'Understood',
+            onPress: () => {
+              void logout();
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not submit your deletion request.';
+      Alert.alert('Something went wrong', message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -150,17 +165,17 @@ export default function RequestDeletionScreen() {
           <TouchableOpacity
             style={[
               styles.primaryButton,
-              !isConfirmationChecked && styles.primaryButtonDisabled,
+              (!isConfirmationChecked || isSubmitting) && styles.primaryButtonDisabled,
             ]}
             onPress={handleRequestDeletion}
             activeOpacity={0.7}
-            disabled={!isConfirmationChecked}
+            disabled={!isConfirmationChecked || isSubmitting}
           >
             <Text style={[
               styles.primaryButtonText,
-              !isConfirmationChecked && styles.primaryButtonTextDisabled,
+              (!isConfirmationChecked || isSubmitting) && styles.primaryButtonTextDisabled,
             ]}>
-              Request Account Deletion
+              {isSubmitting ? 'Submitting…' : 'Request Account Deletion'}
             </Text>
           </TouchableOpacity>
 

@@ -42,7 +42,17 @@ const MAX_VISIBLE_NEXT_ACTIONS = 3;
 
 export default function VendorSetupChecklist() {
   const router = useRouter();
-  const { steps, isSetupComplete, isLoading, error, refresh } = useVendorOnboarding();
+  const { steps, isSetupComplete, isPublished, countryOpen, isLoading, error, refresh } = useVendorOnboarding();
+
+  /**
+   * A vendor can finish every step this checklist tracks — including
+   * verification — and still be invisible to customers, because
+   * discoverability also needs the platform to be open for commerce in their
+   * country, which isn't one of the tracked steps. Without this, the
+   * checklist just disappeared once every step was done, and the dashboard
+   * looked completely normal while the vendor was silently getting nothing.
+   */
+  const showCountryNotice = isPublished && !countryOpen;
 
   const stageState = useMemo(() => {
     const byId = new Map(steps.map((s) => [s.id, s]));
@@ -74,7 +84,7 @@ export default function VendorSetupChecklist() {
     return out;
   }, [stageState]);
 
-  if (isSetupComplete) return null;
+  if (isSetupComplete && !showCountryNotice) return null;
 
   if (isLoading) {
     return (
@@ -130,6 +140,20 @@ export default function VendorSetupChecklist() {
           </View>
         ))}
       </View>
+
+      {showCountryNotice && (
+        <View style={styles.countryNotice} testID="setup-country-notice">
+          <AlertCircle size={16} color={Colors.textSecondary} strokeWidth={2} />
+          <View style={styles.countryNoticeTextWrap}>
+            <Text style={styles.countryNoticeTitle}>Not visible to customers yet</Text>
+            <Text style={styles.countryNoticeBody}>
+              Your storefront is set up, but the platform isn't open for orders in your country yet.
+              You'll appear in Home, Search and Explore as soon as it is — nothing more to do on
+              your end.
+            </Text>
+          </View>
+        </View>
+      )}
 
       {nextActions.length > 0 && (
         <View style={styles.nextBlock}>
@@ -220,6 +244,18 @@ const styles = StyleSheet.create({
   },
   actionLabel: { flex: 1, fontSize: 14.5, color: Colors.text },
   requiredTag: { fontSize: 11, fontWeight: '600' as const, color: Colors.primary },
+
+  countryNotice: {
+    flexDirection: 'row' as const,
+    gap: 8,
+    marginTop: 18,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceMuted ?? '#F8F9FA',
+  },
+  countryNoticeTextWrap: { flex: 1 },
+  countryNoticeTitle: { fontSize: 13.5, fontWeight: '700' as const, color: Colors.text },
+  countryNoticeBody: { fontSize: 12.5, lineHeight: 18, color: Colors.textSecondary, marginTop: 3 },
 
   discoveryNote: {
     marginTop: 16,

@@ -13,10 +13,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
+import { Alert } from '@/utils/alert';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import DiscardChangesModal from '@/components/DiscardChangesModal';
 import { Colors } from '@/constants/colors';
 import { useVendor } from '@/contexts/VendorContext';
+import { callable } from '@/lib/firebase';
 
 const MAX_CHARACTERS = 1000;
 const MIN_CHARACTERS = 50;
@@ -36,19 +38,37 @@ const animateLayout = () => {
 
 export default function BusinessPoliciesScreen() {
   const router = useRouter();
-  const { updateVendor } = useVendor();
+  const { vendor } = useVendor();
   const [persistedEnabled, setPersistedEnabled] = useState(false);
   const [persistedPolicyText, setPersistedPolicyText] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [policyText, setPolicyText] = useState('');
   const [showError, setShowError] = useState(false);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const initialValuesRef = useRef({ enabled: false, policyText: '' });
   const hasInteracted = useRef(false);
 
   useEffect(() => {
     initialValuesRef.current = { enabled: persistedEnabled, policyText: persistedPolicyText };
   }, [persistedEnabled, persistedPolicyText]);
+
+  /**
+   * `updateVendor({ policy })` used to be the entire save path — a purely
+   * local merge that the vendor doc's own next live snapshot would silently
+   * overwrite (mapVendorDoc didn't carry `policy` at all before now). Real
+   * values come from the live vendor document once it resolves; skipped
+   * once the vendor has started typing, so a snapshot arriving mid-edit
+   * cannot clobber unsaved changes.
+   */
+  useEffect(() => {
+    if (hasInteracted.current) return;
+    const policy = vendor.policy ?? '';
+    setPersistedEnabled(policy.length > 0);
+    setPersistedPolicyText(policy);
+    setEnabled(policy.length > 0);
+    setPolicyText(policy);
+  }, [vendor.policy]);
 
   const hasChanges =
     enabled !== initialValuesRef.current.enabled ||
@@ -71,25 +91,36 @@ export default function BusinessPoliciesScreen() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (enabled && policyText.length < MIN_CHARACTERS) {
       setShowError(true);
       return;
     }
 
-    setPersistedEnabled(enabled);
-    setPersistedPolicyText(policyText);
-    initialValuesRef.current = { enabled, policyText };
-    hasInteracted.current = false;
-
     const policyValue = enabled ? policyText : '';
-    console.log('Business policy saved:', {
-      enabled,
-      policyText,
-      visible: enabled && policyText.length >= MIN_CHARACTERS,
-    });
-    updateVendor({ policy: policyValue });
-    router.back();
+    setIsSaving(true);
+    try {
+      const update = callable<{ policy: string }, { success: true }>('updateVendorSettings');
+      await update({ policy: policyValue });
+
+      setPersistedEnabled(enabled);
+      setPersistedPolicyText(policyText);
+      initialValuesRef.current = { enabled, policyText };
+      hasInteracted.current = false;
+      console.log('Business policy saved:', {
+        enabled,
+        policyText,
+        visible: enabled && policyText.length >= MIN_CHARACTERS,
+      });
+      router.back();
+    } catch (error) {
+      console.error('[BusinessPolicies] updateVendorSettings failed:', error);
+      const message = (error as { message?: string })?.message ?? 'Could not save your policy. Please try again.';
+      setShowError(false);
+      Alert.alert('Something went wrong', message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleBackPress = () => {
@@ -117,7 +148,7 @@ export default function BusinessPoliciesScreen() {
           title="Business Policies"
           onBack={handleBackPress}
           onSave={handleSave}
-          saveEnabled={hasChanges}
+          saveEnabled={hasChanges && !isSaving}
         />
       </SafeAreaView>
       <SafeAreaView edges={['bottom']} style={styles.safeArea}>

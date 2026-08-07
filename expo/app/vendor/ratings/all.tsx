@@ -37,13 +37,8 @@ export default function AllRatingsScreen() {
         <View style={styles.reviewLeft}>
           <View style={styles.reviewStars}>{renderStars(item.stars)}</View>
           <Text style={styles.orderRef}>{item.orderReference}</Text>
-          <Text style={styles.reviewDate}>
-            {new Date(item.submittedAt).toLocaleDateString('en-US', {
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric',
-            })}
-          </Text>
+          {/* No date shown here, deliberately — see submittedAt's comment
+              in ReviewsContext for why. */}
         </View>
         <ChevronRight size={20} color={Colors.textMuted} />
       </View>

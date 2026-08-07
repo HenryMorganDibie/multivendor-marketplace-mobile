@@ -185,7 +185,15 @@ export default function SelectUsernameScreen() {
       handleBack();
     } catch (err) {
       console.error('[USERNAME] Failed to set username:', err);
-      setError('Failed to save username. Please try again.');
+      const code = (err as { code?: string })?.code ?? '';
+      if (code.endsWith('already-exists')) {
+        setUsernameAvailable(false);
+        setError('This username is already taken.');
+      } else if (code.endsWith('permission-denied')) {
+        setError((err as { message?: string })?.message ?? 'Choosing a username is not available on your current plan.');
+      } else {
+        setError('Failed to save username. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }

@@ -142,7 +142,7 @@ export interface Category {
 interface CatalogContextValue {
   categories: Category[];
   items: CatalogItem[];
-  addCategory: (name: string) => void;
+  addCategory: (name: string) => Promise<void>;
   updateCategory: (id: string, name: string) => void;
   deleteCategory: (id: string) => void;
   reorderCategories: (newOrder: Category[]) => void;
@@ -408,14 +408,25 @@ export function CatalogProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const addCategory = useCallback((name: string) => {
-    const newCategory: Category = {
-      id: `cat_${Date.now()}`,
-      name,
-      order: categories.length,
-      isSystem: false,
-    };
-    setCategories((prev) => [...prev, newCategory]);
+  /**
+   * Creates the category on the backend. createCatalogCategory has been
+   * deployed since Phase 4 and nothing called it — this added the category
+   * to local state only, so it vanished on the next real snapshot (or, for a
+   * signed-in vendor, never really existed: no other device or the vendor
+   * portal would ever see it).
+   *
+   * No optimistic local insert: the categories listener above will pick up
+   * the real document the moment Firestore commits it, same as addItem does
+   * for catalog items.
+   */
+  const addCategory = useCallback(async (name: string) => {
+    try {
+      const create = callable<{ name: string; order?: number }, { success: true; categoryId: string }>('createCatalogCategory');
+      await create({ name, order: categories.length });
+    } catch (err) {
+      console.error('[Catalog] createCatalogCategory failed:', err);
+      throw err;
+    }
   }, [categories.length]);
 
   const updateCategory = useCallback((id: string, name: string) => {

@@ -39,7 +39,7 @@ import { Colors } from '@/constants/colors';
 
 export default function EditItemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getItemById, updateItem, deleteItem, categories } = useCatalog();
+  const { getItemById, updateItem, deleteItem, categories, addCategory } = useCatalog();
   const { plan } = useVendorPlan();
 
   const item = getItemById(id as string);
@@ -64,6 +64,11 @@ export default function EditItemScreen() {
   const [inventoryQuantity, setInventoryQuantity] = useState('');
   const [lowStockThreshold, setLowStockThreshold] = useState('5');
   const [highlightLabel, setHighlightLabel] = useState<HighlightLabel | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [pendingCategoryName, setPendingCategoryName] = useState<string | null>(null);
 
   const originalData = useRef<{
     name: string; basePrice: string; salePrice: string; description: string;
@@ -140,9 +145,36 @@ export default function EditItemScreen() {
       isHidden, isTaxExempt, isOutOfStock, trackInventory, inventoryQuantity,
       lowStockThreshold, highlightLabel, addOnGroups, photos]);
 
+  useEffect(() => {
+    if (!pendingCategoryName) return;
+    const created = categories.find((c: Category) => c.name === pendingCategoryName);
+    if (created) {
+      setSelectedCategoryId(created.id);
+      setPendingCategoryName(null);
+    }
+  }, [categories, pendingCategoryName]);
+
   if (!item) return null;
 
-  const handleSave = () => {
+  const handleAddNewCategory = async () => {
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) return;
+    setIsAddingCategory(true);
+    try {
+      await addCategory(trimmed);
+      setNewCategoryName('');
+      setShowNewCategoryInput(false);
+      setPendingCategoryName(trimmed);
+    } catch (error) {
+      const message = (error as { message?: string })?.message
+        ?? 'Could not create this category. Please try again.';
+      Alert.alert('Could not add category', message);
+    } finally {
+      setIsAddingCategory(false);
+    }
+  };
+
+  const handleSave = async () => {
     if (!name.trim() || !basePrice) {
       Alert.alert('Error', 'Please fill in item name and base price');
       return;
@@ -157,18 +189,31 @@ export default function EditItemScreen() {
       Alert.alert('Error', 'Sale price must be a valid positive number');
       return;
     }
-    updateItem(item.id, {
-      name: name.trim(), basePrice: basePriceNum, salePrice: salePriceNum,
-      description: description.trim() || undefined, photos, isAvailable,
-      isTaxExempt, isHidden, isOutOfStock, isFeatured,
-      categoryId: selectedCategoryId, addOnGroups, trackInventory,
-      inventoryQuantity: trackInventory && inventoryQuantity ? parseInt(inventoryQuantity, 10) : undefined,
-      lowStockThreshold: trackInventory && lowStockThreshold ? parseInt(lowStockThreshold, 10) : undefined,
-      highlightLabel: highlightLabel ?? undefined,
-      createdAt: item.createdAt, orderCount: item.orderCount,
-      recentOrderCount: item.recentOrderCount,
-    });
-    router.back();
+    // updateItem calls the real backend and can genuinely fail — this used to
+    // fire it and navigate back immediately regardless of the result, so a
+    // failure (e.g. an invalid category) was invisible: the screen closed as
+    // if the edit had saved when it never actually did.
+    setIsSaving(true);
+    try {
+      await updateItem(item.id, {
+        name: name.trim(), basePrice: basePriceNum, salePrice: salePriceNum,
+        description: description.trim() || undefined, photos, isAvailable,
+        isTaxExempt, isHidden, isOutOfStock, isFeatured,
+        categoryId: selectedCategoryId, addOnGroups, trackInventory,
+        inventoryQuantity: trackInventory && inventoryQuantity ? parseInt(inventoryQuantity, 10) : undefined,
+        lowStockThreshold: trackInventory && lowStockThreshold ? parseInt(lowStockThreshold, 10) : undefined,
+        highlightLabel: highlightLabel ?? undefined,
+        createdAt: item.createdAt, orderCount: item.orderCount,
+        recentOrderCount: item.recentOrderCount,
+      });
+      router.back();
+    } catch (error) {
+      const message = (error as { message?: string })?.message
+        ?? 'Could not save these changes. Please try again.';
+      Alert.alert('Could not save', message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDelete = () => {
@@ -298,8 +343,10 @@ export default function EditItemScreen() {
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <TouchableOpacity onPress={handleSave} disabled={!isValid}>
-              <Text style={[styles.saveText, !isValid && styles.saveTextDisabled]}>Save</Text>
+            <TouchableOpacity onPress={handleSave} disabled={!isValid || isSaving}>
+              <Text style={[styles.saveText, (!isValid || isSaving) && styles.saveTextDisabled]}>
+                {isSaving ? 'Saving…' : 'Save'}
+              </Text>
             </TouchableOpacity>
           ),
         }}
@@ -700,6 +747,42 @@ export default function EditItemScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+
+          {showNewCategoryInput ? (
+            <View style={styles.newCatRow}>
+              <TextInput
+                style={styles.newCatInput}
+                placeholder="Category name"
+                placeholderTextColor={Colors.textMuted}
+                value={newCategoryName}
+                onChangeText={setNewCategoryName}
+                autoFocus
+                editable={!isAddingCategory}
+                onSubmitEditing={handleAddNewCategory}
+              />
+              <TouchableOpacity
+                onPress={handleAddNewCategory}
+                disabled={!newCategoryName.trim() || isAddingCategory}
+                style={styles.newCatAddButton}
+              >
+                <Text style={[
+                  styles.newCatAddButtonText,
+                  (!newCategoryName.trim() || isAddingCategory) && styles.saveTextDisabled,
+                ]}>
+                  {isAddingCategory ? 'Adding…' : 'Add'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.addNewCatRow}
+              onPress={() => setShowNewCategoryInput(true)}
+              activeOpacity={0.7}
+            >
+              <Plus size={18} color={Colors.primary} />
+              <Text style={styles.addNewCatText}>Add new category</Text>
+            </TouchableOpacity>
+          )}
           <View style={{ height: 28 }} />
         </View>
       </Modal>
@@ -954,4 +1037,19 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   catCheckMark: { fontSize: 12, color: Colors.white, fontWeight: '700' },
+  addNewCatRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 14, paddingHorizontal: 16,
+  },
+  addNewCatText: { fontSize: 16, color: Colors.primary, fontWeight: '600' },
+  newCatRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingVertical: 10,
+  },
+  newCatInput: {
+    flex: 1, borderWidth: 1, borderColor: Colors.border, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: Colors.text,
+  },
+  newCatAddButton: { paddingHorizontal: 8, paddingVertical: 10 },
+  newCatAddButtonText: { fontSize: 15, fontWeight: '600', color: Colors.primary },
 });

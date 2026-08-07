@@ -87,21 +87,13 @@ export default function RatingDetailScreen() {
           </View>
 
           {/* ORDER INFO CARD */}
+          {/* No date/timestamp here, deliberately — a vendor with few enough
+              orders in a period could infer which customer left this rating
+              from its timing alone, even shown only to the month. */}
           <View style={styles.card}>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Review</Text>
               <Text style={styles.infoValue}>{review.reviewRef}</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Date</Text>
-              <Text style={styles.infoValue}>
-                {new Date(review.submittedAt).toLocaleDateString('en-US', {
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
-              </Text>
             </View>
           </View>
 
@@ -140,7 +132,7 @@ export default function RatingDetailScreen() {
               <View style={styles.privacyNote}>
                 <Lock size={12} color={Colors.textMuted} strokeWidth={2} />
                 <Text style={styles.privacyNoteText}>
-                  Only visible to you and the platform admin. Not displayed publicly.
+                  Visible only to your business and the platform administrators. Not displayed publicly.
                 </Text>
               </View>
             </View>

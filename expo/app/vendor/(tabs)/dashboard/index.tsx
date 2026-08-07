@@ -321,12 +321,7 @@ function InsightsSection({ plan, bestSellerName, bestSellerCount, pendingPayment
 
           <TouchableOpacity
             style={insightStyles.growthInsightsCard}
-onPress={() => {
-console.log('Trying RELATIVE navigation to ../growth-insights');
-  router.push({
-      pathname: '/vendor/growth-insights',
-    });
-  }}
+            onPress={() => router.push('/vendor/growth-insights')}
             activeOpacity={0.75}
           >
             <View style={insightStyles.growthInsightsLeft}>
@@ -780,12 +775,6 @@ export default function VendorDashboardScreen() {
   const pendingOrders = vendorOrders.filter(o => o.status === 'requested');
   const pendingPaymentOrders = vendorOrders.filter(o => o.paymentStatus === 'payment_pending');
 
-  const todayOrders = vendorOrders.filter(o => {
-    const orderDate = new Date(o.orderDate);
-    const today = new Date();
-    return orderDate.toDateString() === today.toDateString();
-  });
-
   const completedOrders = vendorOrders.filter(o => o.status === 'completed');
 
   // Revenue = money the vendor has CONFIRMED receiving. Orders contribute
@@ -814,13 +803,15 @@ export default function VendorDashboardScreen() {
   const totalRevenue = liveTotalRevenue;
   const todayRevenue = liveTodayRevenue;
 
-  const _totalOrders = vendorOrders.length;
+  const totalOrders = vendorOrders.length;
 
-  const todayOrdersCount = todayOrders.length;
-
-  const storefrontVisitsToday = useMemo(() => {
-    return todayOrdersCount * 12 + 47;
-  }, [todayOrdersCount]);
+  // No real storefront-visit tracking exists yet (confirmed against the
+  // backend directly — storefrontPerformance stays honestly dataPending
+  // there for the same reason). This used to invent a number from a formula
+  // with no real data behind it at all — the same class of bug as the
+  // other fabricated dashboard figures already removed elsewhere on this
+  // screen. Zero here is the honest answer until real tracking is built.
+  const storefrontVisitsToday = 0;
 
   const bestSeller = useMemo(() => {
     const itemCounts: Record<string, { name: string; count: number }> = {};
@@ -852,7 +843,7 @@ export default function VendorDashboardScreen() {
         return parseTimeToMinutes(timeA) - parseTimeToMinutes(timeB);
       })
       .slice(0, 3);
-  }, []);
+  }, [vendorOrders]);
 
   const nextOrderId = useMemo(() => {
     if (todayScheduleOrders.length === 0) return null;
@@ -887,7 +878,7 @@ export default function VendorDashboardScreen() {
         return dateA.getTime() - dateB.getTime();
       })
       .slice(0, 3);
-  }, []);
+  }, [vendorOrders]);
 
   const navigateToOrder = useCallback((order: Order) => {
     if (order.orderSource === 'external') {
@@ -1052,7 +1043,7 @@ export default function VendorDashboardScreen() {
             <View style={styles.perfLabelWrap}>
               <Text style={styles.perfLabel} numberOfLines={2}>{"Total\nOrders"}</Text>
             </View>
-            <Text style={styles.perfValue}>{todayOrdersCount}</Text>
+            <Text style={styles.perfValue}>{totalOrders}</Text>
           </View>
           <View style={styles.perfDivider} />
           <View style={styles.perfCard}>

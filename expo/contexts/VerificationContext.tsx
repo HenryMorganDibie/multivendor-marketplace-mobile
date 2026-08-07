@@ -6,6 +6,7 @@ import { verificationService } from '@/services/verificationService';
 import type { MockVerificationProviderData } from '@/utils/vendorDiscovery';
 import { auth, callable } from '@/lib/firebase';
 import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
+import { uploadVerificationDocument } from '@/lib/verification/uploadVerificationDocument';
 
 /**
  * Normalized internal verification statuses for vendor accounts.
@@ -237,8 +238,24 @@ export const [VerificationProvider, useVerification] = createContextHook(() => {
     await saveVerificationData(data);
   };
 
-  /** Store the uploaded ID URI in verification state */
+  /**
+   * Uploads the ID photo and records it on the server.
+   *
+   * This used to store the picked image's local file:// URI and nothing
+   * else — the photo never left the device, so recordVerificationDocument
+   * (deployed since P1-FB-005) never had anything to record, and
+   * submitVendorVerification's required-document check could never see a
+   * government_id document. Mapped to the backend's `identity_document`
+   * type, the closest of its allowed types to a government ID.
+   *
+   * Local URI is still kept for the screen's own "uploaded ✓" preview; the
+   * upload itself is what actually matters now.
+   */
   const uploadIdDocument = async (uri: string) => {
+    if (!DEV_LOCAL_AUTH_ENABLED || auth.currentUser) {
+      await uploadVerificationDocument(uri, 'identity_document');
+    }
+
     const data: VerificationData = {
       ...verificationData,
       providerData: {
@@ -251,8 +268,20 @@ export const [VerificationProvider, useVerification] = createContextHook(() => {
     console.log('[VERIFICATION] ID document stored:', uri.substring(0, 50) + '...');
   };
 
-  /** Store the uploaded selfie URI in verification state */
+  /**
+   * Uploads the selfie and records it on the server.
+   *
+   * Same gap as uploadIdDocument: the photo previously never left the
+   * device. The backend has no dedicated "selfie" document type (its
+   * required categories are business_info / identity_document /
+   * proof_of_address), so this is recorded as `other` — the closest honest
+   * fit rather than mislabeling it as one of the specific categories.
+   */
   const uploadSelfie = async (uri: string) => {
+    if (!DEV_LOCAL_AUTH_ENABLED || auth.currentUser) {
+      await uploadVerificationDocument(uri, 'other');
+    }
+
     const data: VerificationData = {
       ...verificationData,
       providerData: {

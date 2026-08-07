@@ -1,4 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { sendOtp } from '@/lib/auth/verifyOtp';
 import {
   Image,
   View,
@@ -21,6 +23,7 @@ import type { LocationValue } from '@/components/LocationCascadeFields';
 import { useLocationCatalogue } from '@/hooks/useLocationCatalogue';
 import { checkPassword, PASSWORD_POLICY_SUMMARY } from '@/constants/passwordPolicy';
 import PasswordRequirements from '@/components/PasswordRequirements';
+import { callable } from '@/lib/firebase';
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -29,6 +32,17 @@ function isEmail(value: string): boolean {
 function isPhone(value: string): boolean {
   return /^[+]?[\d\s()-]{7,}$/.test(value.trim());
 }
+
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  const maskedLocal = local.length > 2
+    ? local[0] + '*'.repeat(local.length - 2) + local[local.length - 1]
+    : local;
+  return `${maskedLocal}@${domain}`;
+}
+
+/** Matches the key verify-otp.tsx reads from once the code is confirmed. */
+const PENDING_VENDOR_REG_KEY = '@the platform_pending_vendor_reg';
 
 type FieldErrors = Record<string, string | undefined>;
 
@@ -323,6 +337,33 @@ export default function VendorSignupScreen() {
 
     setIsLoading(true);
     try {
+      /**
+       * A final server-side check before submitting.
+       *
+       * The cascade above can only ever offer a combination the catalogue
+       * actually contains, but "can only ever offer" assumes the catalogue
+       * has not changed since it loaded and the picker was not bypassed —
+       * validateLocationSelection has been deployed since the catalogue
+       * itself and nothing called it. Catching a stale selection here means
+       * a clear, specific inline error instead of registration failing
+       * opaquely inside completeRegistration, which runs this same check
+       * server-side regardless.
+       */
+      const validateLocation = callable<
+        { countryCode: string; stateId?: string; areaId?: string },
+        { success: true; valid: boolean; reason?: string }
+      >('validateLocationSelection');
+      const locationCheck = await validateLocation({
+        countryCode: location!.countryCode,
+        stateId: location?.stateCode || undefined,
+        areaId: location?.areaId || undefined,
+      });
+      if (!locationCheck.data.valid) {
+        setErrors((p) => ({ ...p, country: locationCheck.data.reason || 'That location is no longer available. Please pick again.' }));
+        setIsLoading(false);
+        return;
+      }
+
       const trimmedEmail = email.trim();
       const validatedReferral = normalizedReferralCode
         ? await runReferralValidation(normalizedReferralCode)
@@ -343,12 +384,19 @@ export default function VendorSignupScreen() {
         return;
       }
 
-      console.log('[AUTH FLOW] Creating vendor account for', trimmedEmail);
-      const response = await registerAccount({
+      /**
+       * Email is verified before the account exists, not after.
+       *
+       * The full registerAccount payload is built now, while every async
+       * check above (referral validation, location validation, account
+       * existence) has already run — verify-otp only needs to replay it
+       * once the code is confirmed, not recompute any of this.
+       */
+      const pendingPayload = {
         identifier: trimmedEmail,
         password,
-        role: 'vendor',
-        plan: 'basic',
+        role: 'vendor' as const,
+        plan: 'basic' as const,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         phone: phone.trim(),
@@ -369,19 +417,20 @@ export default function VendorSignupScreen() {
         referralAssignedArea: validatedReferral?.assignedArea,
         referralStatus: validatedReferral?.status,
         isDiscoverable: false,
+      };
+
+      await AsyncStorage.setItem(PENDING_VENDOR_REG_KEY, JSON.stringify(pendingPayload));
+      console.log('[AUTH FLOW] Sending OTP for vendor registration:', trimmedEmail);
+      await sendOtp(trimmedEmail);
+
+      router.push({
+        pathname: '/verify-otp',
+        params: {
+          contact: trimmedEmail,
+          maskedContact: maskEmail(trimmedEmail),
+          context: 'vendor-registration',
+        },
       });
-
-      if (!response.success) {
-        showRegistrationFailure(
-          response.error || 'Something went wrong on our side. Please try again.',
-          response.errorField,
-        );
-        setIsLoading(false);
-        return;
-      }
-
-      console.log('[AUTH FLOW] Vendor registration successful → vendor dashboard');
-      router.replace('/vendor/(tabs)/dashboard' as any);
     } catch (err) {
       console.error('[AUTH FLOW] Vendor registration error:', err);
       showRegistrationFailure('Something went wrong on our side. Please try again.');

@@ -28,7 +28,7 @@ const DEMO_SLUGS = new Set(['spicyrest']);
 
 async function findOneBy(field: 'slug' | 'username', value: string): Promise<Vendor | undefined> {
   try {
-    const snap = await getDocs(
+    const discoverableSnap = await getDocs(
       query(
         collection(db, 'vendors'),
         where(field, '==', value),
@@ -38,7 +38,29 @@ async function findOneBy(field: 'slug' | 'username', value: string): Promise<Ven
         limit(1),
       ),
     );
-    return snap.empty ? undefined : mapVendorDoc(snap.docs[0].id, snap.docs[0].data());
+    if (!discoverableSnap.empty) {
+      return mapVendorDoc(discoverableSnap.docs[0].id, discoverableSnap.docs[0].data());
+    }
+
+    /**
+     * A direct storefront link works before verification — search/browse
+     * does not. The security rule already allows this second case
+     * (isPublishedVendor), but a list query has to restate every field the
+     * rule tests itself, the same reason the discoverable query above
+     * can't just filter on isDiscoverable alone. One query can't express
+     * an OR of two different field combinations, so this runs as a second,
+     * separate query only when the first finds nothing.
+     */
+    const publishedSnap = await getDocs(
+      query(
+        collection(db, 'vendors'),
+        where(field, '==', value),
+        where('isPublished', '==', true),
+        where('vendorStatus', '==', 'active'),
+        limit(1),
+      ),
+    );
+    return publishedSnap.empty ? undefined : mapVendorDoc(publishedSnap.docs[0].id, publishedSnap.docs[0].data());
   } catch (error) {
     console.error(`[vendorRepository] Could not look up vendor by ${field}:`, value, error);
     return undefined;

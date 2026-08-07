@@ -15,9 +15,10 @@ import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
 import DiscardChangesModal from '@/components/DiscardChangesModal';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { useVendor } from '@/contexts/VendorContext';
+import { callable } from '@/lib/firebase';
+import { Alert } from '@/utils/alert';
 
 const MAX_CHARS = 200;
-const SYSTEM_USER_ID = 'mock-vendor-admin';
 
 type PaymentInstructionStatus = 'not_configured' | 'active';
 
@@ -38,7 +39,7 @@ function formatDateTime(value?: string): string {
 
 export default function PaymentInstructionsScreen() {
   const router = useRouter();
-  const { vendor, updateVendor } = useVendor();
+  const { vendor } = useVendor();
 
   const hasSavedInstructions = Boolean(
     vendor.paymentInstructionsEnabled &&
@@ -52,6 +53,7 @@ export default function PaymentInstructionsScreen() {
   const [error, setError] = useState<string>('');
   const [attestationChecked, setAttestationChecked] = useState<boolean>(initialOwnershipConfirmed);
   const [isEditing, setIsEditing] = useState<boolean>(!hasSavedInstructions);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
   const paymentStatus: PaymentInstructionStatus = hasSavedInstructions ? 'active' : 'not_configured';
   const shouldShowSetupForm = paymentStatus === 'not_configured' || isEditing;
@@ -114,36 +116,28 @@ export default function PaymentInstructionsScreen() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!isSaveEnabled) return;
     if (!validateInstructions(instructions)) return;
 
-    const timestamp = new Date().toISOString();
-    const ownershipConfirmedAt = initialOwnershipConfirmed
-      ? vendor.ownershipConfirmedAt
-      : timestamp;
-    const ownershipConfirmedBy = initialOwnershipConfirmed
-      ? vendor.ownershipConfirmedBy
-      : vendor.id ?? SYSTEM_USER_ID;
-
-    updateVendor({
-      paymentInstructions: trimmedInstructions,
-      paymentInstructionsEnabled: true,
-      ownershipConfirmed: true,
-      ownershipConfirmedAt,
-      ownershipConfirmedBy,
-      paymentInstructionsUpdatedAt: timestamp,
-      paymentInstructionsUpdatedBy: vendor.id ?? SYSTEM_USER_ID,
-    });
-
-    console.log('Payment instructions saved:', {
-      paymentInstructionsEnabled: true,
-      ownershipConfirmed: true,
-      ownershipConfirmedAt,
-      paymentInstructionsUpdatedAt: timestamp,
-      vendorId: vendor.id,
-    });
-    router.back();
+    setIsSaving(true);
+    try {
+      const update = callable<
+        { enabled: boolean; paymentInstructions?: string; confirmOwnership?: boolean },
+        { success: true }
+      >('updateVendorPaymentInstructions');
+      await update({
+        enabled: true,
+        paymentInstructions: trimmedInstructions,
+        confirmOwnership: initialOwnershipConfirmed ? undefined : attestationChecked,
+      });
+      router.back();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not save payment instructions.';
+      Alert.alert('Could not save', message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleEdit = () => {
@@ -153,19 +147,18 @@ export default function PaymentInstructionsScreen() {
     setIsEditing(true);
   };
 
-  const handleDisable = () => {
-    const timestamp = new Date().toISOString();
-    updateVendor({
-      paymentInstructionsEnabled: false,
-      paymentInstructionsUpdatedAt: timestamp,
-      paymentInstructionsUpdatedBy: vendor.id ?? SYSTEM_USER_ID,
-    });
-    setIsEditing(true);
-    console.log('Payment instructions disabled:', {
-      paymentInstructionsEnabled: false,
-      paymentInstructionsUpdatedAt: timestamp,
-      vendorId: vendor.id,
-    });
+  const handleDisable = async () => {
+    setIsSaving(true);
+    try {
+      const update = callable<{ enabled: boolean }, { success: true }>('updateVendorPaymentInstructions');
+      await update({ enabled: false });
+      setIsEditing(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not disable payment instructions.';
+      Alert.alert('Could not disable', message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -176,7 +169,7 @@ export default function PaymentInstructionsScreen() {
           title="Payment Instructions"
           onBack={handleBack}
           onSave={handleSave}
-          saveEnabled={isSaveEnabled}
+          saveEnabled={isSaveEnabled && !isSaving}
           showSave={shouldShowSetupForm}
         />
       </SafeAreaView>

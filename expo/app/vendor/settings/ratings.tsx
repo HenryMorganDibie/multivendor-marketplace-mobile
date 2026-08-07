@@ -9,12 +9,6 @@ import { useReviews } from '@/contexts/ReviewsContext';
 
 const VENDOR_ID = 'v1';
 
-/** Is this review considered "new" — submitted within the last 14 days */
-function isNewReview(submittedAt: string): boolean {
-  const diff = Date.now() - new Date(submittedAt).getTime();
-  return diff < 14 * 24 * 60 * 60 * 1000;
-}
-
 export default function RatingsScreen() {
   const router = useRouter();
   const { getVendorReviews, getVendorRatingStats, markReviewRead } = useReviews();
@@ -37,7 +31,9 @@ export default function RatingsScreen() {
   );
 
   const renderReviewItem = ({ item }: { item: ReturnType<typeof getVendorReviews>[0] }) => {
-    const showNew = !item.readByVendor && isNewReview(item.submittedAt);
+    // No submission date is available to compute recency from — a vendor
+    // must never see when a rating was submitted, so "new" is just "unread".
+    const showNew = !item.readByVendor;
     return (
       <TouchableOpacity
         style={styles.reviewItem}
@@ -54,7 +50,7 @@ export default function RatingsScreen() {
             {item.feedback && (
               <View style={styles.feedbackPill}>
                 <Lock size={10} color={Colors.primary} strokeWidth={2.5} />
-                <Text style={styles.feedbackPillText}>Note</Text>
+                <Text style={styles.feedbackPillText}>Private feedback</Text>
               </View>
             )}
             {showNew && (
@@ -70,12 +66,9 @@ export default function RatingsScreen() {
         </View>
         <View style={styles.reviewBottom}>
           <Text style={styles.orderReference}>Review {item.reviewRef}</Text>
-          <View style={styles.reviewBottomRight}>
-            <Text style={styles.reviewDate}>
-              {new Date(item.submittedAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-            </Text>
-            <ChevronRight size={14} color={Colors.textMuted} strokeWidth={2} />
-          </View>
+          {/* No date shown here, deliberately — see submittedAt's comment
+              in ReviewsContext for why. */}
+          <ChevronRight size={14} color={Colors.textMuted} strokeWidth={2} />
         </View>
       </TouchableOpacity>
     );

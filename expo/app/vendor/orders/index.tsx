@@ -17,7 +17,7 @@ import { Alert } from '@/utils/alert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Plus, FileText, Package, StickyNote, Trash2 } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { type Order, type OrderStatus } from '@/mocks/ordersData';
 import { useExternalOrders, type ExternalOrder } from '@/contexts/ExternalOrdersContext';
 import { useOrders } from '@/contexts/OrdersContext';
@@ -27,7 +27,7 @@ import { formatPriceCents, formatPriceWithCommas, type Currency } from '@/utils/
 import { mockVendor } from '@/mocks/vendorData';
 import LaektivaModal from '@/components/LaektivaModal';
 
-type FilterType = 'all' | 'new' | 'accepted' | 'confirmed' | 'in_progress' | 'past' | 'today';
+type FilterType = 'all' | 'new' | 'accepted' | 'confirmed' | 'in_progress' | 'past' | 'today' | 'awaiting_payment';
 
 const FILTER_LABELS: Record<FilterType, string> = {
   all: 'All',
@@ -37,6 +37,7 @@ const FILTER_LABELS: Record<FilterType, string> = {
   in_progress: 'In Progress',
   past: 'Past',
   today: 'Today',
+  awaiting_payment: 'Awaiting Payment',
 };
 
 interface SwipeableExternalCardProps {
@@ -145,7 +146,16 @@ export default function VendorOrdersScreen() {
   const router = useRouter();
   const { getTodayOrders, todayNote, updateTodayNote, deleteExternalOrder } = useExternalOrders();
   const { orders } = useOrders();
-  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const { filter: incomingFilter } = useLocalSearchParams<{ filter?: string }>();
+  const [activeFilter, setActiveFilter] = useState<FilterType>(
+    incomingFilter === 'AWAITING_PAYMENT' ? 'awaiting_payment' : 'all'
+  );
+
+  useEffect(() => {
+    if (incomingFilter === 'AWAITING_PAYMENT') {
+      setActiveFilter('awaiting_payment');
+    }
+  }, [incomingFilter]);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [noteInput, setNoteInput] = useState('');
@@ -173,6 +183,8 @@ export default function VendorOrdersScreen() {
             return order.status === 'requested';
           case 'accepted':
             return order.status === 'accepted';
+          case 'awaiting_payment':
+            return order.paymentStatus === 'payment_pending';
           case 'confirmed':
             return order.status === 'confirmed';
           case 'in_progress':
@@ -414,7 +426,7 @@ export default function VendorOrdersScreen() {
     return cardContent;
   };
 
-  const filters: FilterType[] = ['all', 'new', 'accepted', 'confirmed', 'in_progress', 'past', 'today'];
+  const filters: FilterType[] = ['all', 'new', 'accepted', 'confirmed', 'in_progress', 'past', 'today', 'awaiting_payment'];
 
   return (
     <View style={styles.container}>

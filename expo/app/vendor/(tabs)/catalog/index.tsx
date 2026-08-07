@@ -7,7 +7,6 @@ import {
   Modal,
   Pressable,
   TextInput,
-  Share,
   Image,
   SectionList,
   FlatList,
@@ -73,6 +72,7 @@ export default function VendorCatalogScreen() {
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [categoryName, setCategoryName] = useState('');
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const countryStatus = useCountryStatus();
@@ -181,10 +181,17 @@ export default function VendorCatalogScreen() {
   };
 
   const handleShareCatalog = async () => {
+    // This used to share a plain sentence with no link in it at all — a
+    // vendor posting it to WhatsApp gave customers nothing to tap.
+    // shareStorefront builds the real link and refuses to share one that
+    // would not work (no username yet, or not published).
+    const check = checkShareable(vendor);
+    if (!check.canShare) {
+      Alert.alert('Cannot share yet', check.message ?? 'Your storefront is not ready to share.');
+      return;
+    }
     try {
-      await Share.share({
-        message: 'Check out my catalog on the platform! View products and prices.\n\nOrders and payments are handled directly by the vendor.',
-      });
+      await shareStorefront(vendor);
     } catch (error) {
       console.error('Error sharing catalog:', error);
     }
@@ -201,7 +208,7 @@ export default function VendorCatalogScreen() {
     setCategoryName('');
   };
 
-  const handleSaveCategory = () => {
+  const handleSaveCategory = async () => {
     const trimmedName = categoryName.trim();
     if (!trimmedName) {
       Alert.alert('Required', 'Please enter a category name.');
@@ -211,10 +218,18 @@ export default function VendorCatalogScreen() {
       Alert.alert('Duplicate', 'A category with this name already exists.');
       return;
     }
-    addCategory(trimmedName);
-    setShowAddCategoryModal(false);
-    setCategoryName('');
-    Alert.alert('Success', 'Category created successfully.');
+    setIsSavingCategory(true);
+    try {
+      await addCategory(trimmedName);
+      setShowAddCategoryModal(false);
+      setCategoryName('');
+    } catch (error) {
+      console.error('[Catalog] Failed to create category:', error);
+      const message = (error as { message?: string })?.message ?? 'Could not create the category. Please try again.';
+      Alert.alert('Something went wrong', message);
+    } finally {
+      setIsSavingCategory(false);
+    }
   };
 
   const handleToggleHidden = (item: CatalogItem) => {
@@ -735,19 +750,19 @@ export default function VendorCatalogScreen() {
                 <TouchableOpacity
                   style={[
                     styles.acCreateBtn,
-                    (!categoryName.trim() || categories.some((c) => c.name.toLowerCase() === categoryName.trim().toLowerCase()))
+                    (!categoryName.trim() || isSavingCategory || categories.some((c) => c.name.toLowerCase() === categoryName.trim().toLowerCase()))
                       && styles.acCreateBtnDisabled,
                   ]}
                   onPress={handleSaveCategory}
-                  disabled={!categoryName.trim() || categories.some((c) => c.name.toLowerCase() === categoryName.trim().toLowerCase())}
+                  disabled={!categoryName.trim() || isSavingCategory || categories.some((c) => c.name.toLowerCase() === categoryName.trim().toLowerCase())}
                   activeOpacity={0.8}
                 >
                   <Text style={[
                     styles.acCreateBtnText,
-                    (!categoryName.trim() || categories.some((c) => c.name.toLowerCase() === categoryName.trim().toLowerCase()))
+                    (!categoryName.trim() || isSavingCategory || categories.some((c) => c.name.toLowerCase() === categoryName.trim().toLowerCase()))
                       && styles.acCreateBtnTextDisabled,
                   ]}>
-                    Create Category
+                    {isSavingCategory ? 'Creating…' : 'Create Category'}
                   </Text>
                 </TouchableOpacity>
 

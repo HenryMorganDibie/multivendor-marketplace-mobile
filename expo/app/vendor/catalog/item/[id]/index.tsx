@@ -32,11 +32,14 @@ import {
   Clock,
 } from 'lucide-react-native';
 import { useCatalog } from '@/contexts/CatalogContext';
+import { useVendor } from '@/contexts/VendorContext';
 import { Colors } from '@/constants/colors';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
 import { mockVendor } from '@/mocks/vendorData';
 import { HIGHLIGHT_LABEL_OPTIONS } from '@/utils/itemTagging';
 import ForwardToModal, { type ForwardPayload } from '@/components/ForwardToModal';
+import { shareItem, checkShareable } from '@/lib/storefront/shareStorefront';
+import { Alert } from '@/utils/alert';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -50,6 +53,7 @@ const CATALOG_MODERATION_HELP_URL =
 export default function ItemDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { getItemById, getCategoryById } = useCatalog();
+  const { vendor } = useVendor();
   const insets = useSafeAreaInsets();
   const [showMenu, setShowMenu] = useState(false);
   const [showForward, setShowForward] = useState(false);
@@ -87,11 +91,20 @@ export default function ItemDetailsScreen() {
 
   const handleShare = async () => {
     setShowMenu(false);
+    // This used to share a plain sentence with no link at all — the same
+    // dead-end bug the storefront share had, one level down at the item.
+    // shareItem builds the real deep link to this specific item.
+    const vendorCheck = checkShareable(vendor);
+    if (!vendorCheck.canShare) {
+      Alert.alert('Cannot share yet', vendorCheck.message ?? 'Your storefront is not ready to share.');
+      return;
+    }
+    if (!canShareWithCustomers) {
+      Alert.alert('Cannot share yet', 'This item is still awaiting approval and is not visible to customers yet.');
+      return;
+    }
     try {
-      await Share.share({
-        title: item.name,
-        message: `${item.name} — ${formatPriceWithCommas(displayPrice, currency)}\n\nAvailable on the platform.`,
-      });
+      await shareItem(vendor, { id: item.id, name: item.name, price: displayPrice, currency });
     } catch (_) {}
   };
 

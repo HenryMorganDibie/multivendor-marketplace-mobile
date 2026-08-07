@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { generateSystemUsername } from '@/utils/usernameValidation';
 import { subscriptionRepository } from '@/services/repositories/subscriptionRepository';
+import { callable } from '@/lib/firebase';
 
 export type VendorPlan = 'basic' | 'standard' | 'pro' | 'pro+';
 
@@ -164,11 +165,30 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
     }
   };
 
+  /**
+   * Persists a chosen username.
+   *
+   * A vendor-initiated change (isSystemGenerated=false) is the actual
+   * reservation change — it has to happen on the server, which owns
+   * uniqueness across every vendor. This used to only update AsyncStorage,
+   * so a vendor could "change" their username on their own device to one
+   * someone else already held, with nothing anywhere reserving it for them.
+   *
+   * isSystemGenerated=true is not sent to the backend: that path mirrors a
+   * username the backend already assigned and reserved itself (at
+   * registration), so there is nothing left to change server-side.
+   */
   const setUsername = async (username: string, isSystemGenerated: boolean = false) => {
     try {
+      if (!isSystemGenerated) {
+        const change = callable<{ username: string }, { success: true; username: string }>('changeUsername');
+        const res = await change({ username });
+        username = res.data.username;
+      }
+
       const oldUsername = planData.username;
       const changeHistory = [...planData.usernameChangeHistory];
-      
+
       if (oldUsername && oldUsername !== username && !isSystemGenerated) {
         changeHistory.push({
           date: new Date().toISOString(),
@@ -176,7 +196,7 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
           newUsername: username,
         });
       }
-      
+
       const updated = {
         ...planData,
         username,

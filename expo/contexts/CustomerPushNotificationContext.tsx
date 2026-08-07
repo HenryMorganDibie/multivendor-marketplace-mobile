@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { customerNotificationThrottleService } from '@/utils/customerNotificationThrottle';
+import { auth, callable } from '@/lib/firebase';
 import type { OrderStatus } from '@/constants/orderStatus';
 import { shouldBypassCustomerQuietHours, isWithinQuietHours, CustomerNotificationType } from '@/utils/customerNotificationHelper';
 
@@ -84,6 +85,27 @@ export const [CustomerPushNotificationProvider, useCustomerPushNotifications] = 
       setExpoPushToken(token);
 
       await AsyncStorage.setItem(CUSTOMER_PUSH_TOKEN_KEY, token);
+
+      /**
+       * registerPushToken has been deployed since notifications shipped and
+       * nothing called it. The token above was obtained from Expo and kept
+       * on-device only — the backend's `dispatchPush` reads
+       * `users/{uid}/pushTokens`, which stayed empty, so a real push (order
+       * accepted, new message) had no token to send to. The in-app "push"
+       * seen elsewhere in this file is a local notification the device
+       * schedules for itself and is unrelated to this.
+       */
+      if (auth.currentUser) {
+        try {
+          const register = callable<
+            { token: string; platform: 'ios' | 'android' | 'web'; appVersion?: string },
+            { success: true; tokenId: string }
+          >('registerPushToken');
+          await register({ token, platform: Platform.OS === 'ios' ? 'ios' : 'android' });
+        } catch (err) {
+          console.error('[CustomerPush] registerPushToken failed:', err);
+        }
+      }
 
     } catch (error) {
       console.error('[CustomerPush] Registration failed:', error);

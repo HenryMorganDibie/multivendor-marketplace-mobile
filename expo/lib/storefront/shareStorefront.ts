@@ -16,7 +16,11 @@ import { Share } from 'react-native';
  * WhatsApp, Instagram and SMS where most recipients do not have the app. The
  * web page handles opening the app if it is installed.
  */
-const STOREFRONT_BASE_URL = 'https://the platform.com/store';
+// the platform.com is not a live domain — it does not resolve at all. The app is
+// actually deployed on Firebase Hosting, which is where /store/[username]
+// really exists and where every previous link was silently pointing away
+// from. Update this the day the platform.com is a real, deployed custom domain.
+const STOREFRONT_BASE_URL = 'https://the platform-dev.web.app/store';
 
 export function storefrontUrl(username: string): string {
   return `${STOREFRONT_BASE_URL}/${username.trim().toLowerCase().replace(/^@/, '')}`;

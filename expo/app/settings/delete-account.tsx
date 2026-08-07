@@ -12,6 +12,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronDown } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import LaektivaModal from '@/components/LaektivaModal';
+import { callable } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
+import { Alert } from '@/utils/alert';
 
 const DELETION_REASONS = [
   "I'm no longer using the platform",
@@ -36,11 +39,13 @@ const sanitizeInput = (text: string): string => {
 
 export default function DeleteAccountScreen() {
   const router = useRouter();
+  const { logout } = useAuth();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showReasonDropdown, setShowReasonDropdown] = useState(false);
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [otherReasonText, setOtherReasonText] = useState('');
   const [additionalFeedback, setAdditionalFeedback] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleBackPress = () => {
     router.back();
@@ -54,15 +59,27 @@ export default function DeleteAccountScreen() {
     }
   };
 
-  const handleDeleteAccount = () => {
-    console.log('Account deletion requested');
-    console.log('Reason:', selectedReason);
-    console.log('Other reason text:', otherReasonText);
-    console.log('Additional feedback:', additionalFeedback);
-    
-    setShowConfirmModal(false);
-    
-    router.replace('/');
+  const handleDeleteAccount = async () => {
+    setIsSubmitting(true);
+    try {
+      const requestDeletion = callable<{ reason?: string; feedback?: string }, { success: true }>(
+        'requestAccountDeletion'
+      );
+      const reason = selectedReason === 'Other' ? (otherReasonText || 'Other') : selectedReason;
+      await requestDeletion({
+        reason: reason || undefined,
+        feedback: additionalFeedback || undefined,
+      });
+
+      setShowConfirmModal(false);
+      void logout();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not submit your deletion request.';
+      setShowConfirmModal(false);
+      Alert.alert('Something went wrong', message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const canRequestDeletion = selectedReason !== '';

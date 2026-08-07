@@ -121,7 +121,10 @@ export function useStorefrontViewModel(vendor: Vendor) {
   };
 
   const handleMenuPress = async () => {
-    const shareUrl = `https://the platform.com/@${vendor.username}`;
+    // the platform.com does not resolve, and /@{username} was never the real
+    // route anyway — /store/[username].tsx is. Matches shareStorefront.ts's
+    // storefrontUrl() so there is one link format, not two.
+    const shareUrl = `https://the platform-dev.web.app/store/${vendor.username}`;
     try {
       await Clipboard.setStringAsync(shareUrl);
       console.log('[Share Store] URL copied to clipboard:', shareUrl);
@@ -231,7 +234,7 @@ export function useStorefrontViewModel(vendor: Vendor) {
       return;
     }
     console.log('[STORE] Message vendor pressed, resolving thread for vendor:', vendor.id);
-    handleMessageVendorPress(vendor.id, MOCK_CUSTOMER_ID);
+    void handleMessageVendorPress(vendor.id, MOCK_CUSTOMER_ID);
   };
 
   const handleItemPress = (itemId: string) => {

@@ -29,14 +29,21 @@ export default function VerificationSelfieScreen() {
     if (!result.canceled) {
       const uri = result.assets[0].uri;
       setSelfieCompleted(true);
-      
-      await uploadSelfie(uri);
-      
-      await submitForReview();
-      
-      setTimeout(() => {
-        router.push('/vendor/settings/verification-in-progress' as any);
-      }, 500);
+
+      try {
+        await uploadSelfie(uri);
+        await submitForReview();
+
+        setTimeout(() => {
+          router.push('/vendor/settings/verification-in-progress' as any);
+        }, 500);
+      } catch (error) {
+        console.error('[VERIFICATION] Submission failed:', error);
+        setSelfieCompleted(false);
+        const message = (error as { message?: string })?.message
+          ?? 'Could not submit your verification. Please try again.';
+        Alert.alert('Submission failed', message);
+      }
     }
   };
 

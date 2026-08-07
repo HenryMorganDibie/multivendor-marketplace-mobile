@@ -19,9 +19,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { AlertTriangle, Check, ChevronRight, Power } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { doc, onSnapshot } from 'firebase/firestore';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { Colors } from '@/constants/colors';
-import { useVendor } from '@/contexts/VendorContext';
+import { auth, callable, db } from '@/lib/firebase';
+import { Alert } from '@/utils/alert';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const MODAL_HEIGHT = Math.min(SCREEN_HEIGHT * 0.48, 430);
@@ -83,17 +85,66 @@ function EnabledMessageSection({ visible, children }: { visible: boolean; childr
 
 export default function GreetingMessageScreen() {
   const router = useRouter();
-  const { vendor, updateVendor } = useVendor();
-  const savedGreeting = vendor.greetingMessageSettings;
-  const initialEnabled = savedGreeting?.enabled ?? false;
-  const initialMessage = savedGreeting?.message ?? '';
+  const [savedGreeting, setSavedGreeting] = useState<GreetingMessagePayload | undefined>(undefined);
 
-  const [isEnabled, setIsEnabled] = useState<boolean>(initialEnabled);
-  const [messageText, setMessageText] = useState<string>(initialMessage);
+  const [isEnabled, setIsEnabled] = useState<boolean>(false);
+  const [messageText, setMessageText] = useState<string>('');
   const [isEditorOpen, setIsEditorOpen] = useState<boolean>(false);
   const [tempMessage, setTempMessage] = useState<string>('');
   const [hasEditorChanges, setHasEditorChanges] = useState<boolean>(false);
   const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
+  const hasInteracted = useRef(false);
+
+  /**
+   * Live subscription to the vendor's real greeting settings.
+   *
+   * updateVendorChatSettings has been deployed since the greeting flow
+   * shipped and nothing called it — this went through
+   * `updateVendor({ greetingMessageSettings })`, a purely local merge into
+   * VendorContext's state that the vendor document's own next live snapshot
+   * would silently replace (that mapper never carried this field). The
+   * greeting a customer actually sees comes from
+   * `vendors/{vendorId}/settings/chat` on createCommerceConversation, which
+   * never had anything real written to it.
+   */
+  useEffect(() => {
+    let unsubscribeSettings: (() => void) | null = null;
+    const unsubscribeAuth = auth.onIdTokenChanged(async (user) => {
+      unsubscribeSettings?.();
+      unsubscribeSettings = null;
+      if (!user) return;
+
+      const token = await user.getIdTokenResult();
+      const vendorId = token.claims.vendorId as string | undefined;
+      if (!vendorId) return;
+
+      unsubscribeSettings = onSnapshot(
+        doc(db, 'vendors', vendorId, 'settings', 'chat'),
+        (snap) => {
+          const data = snap.data();
+          if (!data) return;
+          const updatedAtRaw = data.greetingUpdatedAt as { toDate?: () => Date } | undefined;
+          const payload: GreetingMessagePayload = {
+            enabled: Boolean(data.greetingEnabled),
+            message: (data.greetingMessage as string) ?? '',
+            updatedAt: updatedAtRaw?.toDate ? updatedAtRaw.toDate().toISOString() : '',
+            vendorId,
+          };
+          setSavedGreeting(payload);
+          if (!hasInteracted.current) {
+            setIsEnabled(payload.enabled);
+            setMessageText(payload.message);
+          }
+        },
+        (err) => console.error('[GreetingMessage] Live subscription failed:', err),
+      );
+    });
+
+    return () => {
+      unsubscribeSettings?.();
+      unsubscribeAuth();
+    };
+  }, []);
 
   const trimmedMessage = messageText.trim();
   const hasValidMessage = trimmedMessage.length > 0;
@@ -101,23 +152,31 @@ export default function GreetingMessageScreen() {
   const lastUpdatedLabel = formatDateTime(savedGreeting?.updatedAt);
   const statusLabel = isEffectivelyEnabled ? 'Active' : isEnabled ? 'Needs action' : 'Disabled';
 
-  const saveGreetingPayload = useCallback((enabled: boolean, message: string): void => {
+  const saveGreetingPayload = useCallback(async (enabled: boolean, message: string): Promise<void> => {
     const sanitizedMessage = message.trim();
-    const payload: GreetingMessagePayload = {
-      enabled: enabled && sanitizedMessage.length > 0,
-      message: sanitizedMessage,
-      updatedAt: new Date().toISOString(),
-      vendorId: vendor.id,
-    };
-
-    updateVendor({ greetingMessageSettings: payload });
-    console.log('[GREETING_MESSAGE] Settings saved:', payload);
-  }, [updateVendor, vendor.id]);
+    try {
+      const update = callable<
+        { greetingEnabled: boolean; greetingMessage: string },
+        { success: true }
+      >('updateVendorChatSettings');
+      await update({
+        greetingEnabled: enabled && sanitizedMessage.length > 0,
+        greetingMessage: sanitizedMessage,
+      });
+      console.log('[GREETING_MESSAGE] Settings saved:', { enabled, message: sanitizedMessage });
+    } catch (error) {
+      console.error('[GREETING_MESSAGE] updateVendorChatSettings failed:', error);
+      const message2 = (error as { message?: string })?.message ?? 'Could not save your greeting message. Please try again.';
+      Alert.alert('Something went wrong', message2);
+      throw error;
+    }
+  }, []);
 
   const handleToggle = useCallback((value: boolean): void => {
+    hasInteracted.current = true;
     animateLayout();
     setIsEnabled(value);
-    saveGreetingPayload(value, messageText);
+    void saveGreetingPayload(value, messageText).catch(() => setIsEnabled(!value));
 
     if (Platform.OS !== 'web') {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -125,9 +184,10 @@ export default function GreetingMessageScreen() {
   }, [messageText, saveGreetingPayload]);
 
   const handleDisable = useCallback((): void => {
+    hasInteracted.current = true;
     animateLayout();
     setIsEnabled(false);
-    saveGreetingPayload(false, messageText);
+    void saveGreetingPayload(false, messageText).catch(() => setIsEnabled(true));
   }, [messageText, saveGreetingPayload]);
 
   const openEditor = useCallback((): void => {
@@ -147,17 +207,20 @@ export default function GreetingMessageScreen() {
   }, []);
 
   const handleSave = useCallback((): void => {
+    hasInteracted.current = true;
     const sanitizedMessage = tempMessage.trim();
+    const previousMessage = messageText;
     setMessageText(sanitizedMessage);
-    saveGreetingPayload(isEnabled, sanitizedMessage);
     setIsEditorOpen(false);
     setHasEditorChanges(false);
     setIsInputFocused(false);
 
-    if (Platform.OS !== 'web') {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  }, [isEnabled, saveGreetingPayload, tempMessage]);
+    saveGreetingPayload(isEnabled, sanitizedMessage).then(() => {
+      if (Platform.OS !== 'web') {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    }).catch(() => setMessageText(previousMessage));
+  }, [isEnabled, saveGreetingPayload, tempMessage, messageText]);
 
   const handleTextChange = useCallback((text: string): void => {
     if (text.length <= MAX_MESSAGE_LENGTH) {

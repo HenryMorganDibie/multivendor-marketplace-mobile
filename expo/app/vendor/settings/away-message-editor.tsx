@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
+import { Alert } from '@/utils/alert';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { Colors } from '@/constants/colors';
 import { useVendorAwayMessage } from '@/contexts/VendorAwayMessageContext';
@@ -24,13 +25,23 @@ export default function AwayMessageEditorScreen() {
 
   const [text, setText] = useState(settings.message);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const hasChanges = text !== settings.message;
 
-  const handleSave = () => {
-    void updateSettings({ message: text });
-    console.log('[AwayMessageEditor] Message saved:', text);
-    router.back();
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateSettings({ message: text });
+      console.log('[AwayMessageEditor] Message saved:', text);
+      router.back();
+    } catch (error) {
+      console.error('[AwayMessageEditor] Save failed:', error);
+      const message = (error as { message?: string })?.message ?? 'Could not save your away message. Please try again.';
+      Alert.alert('Something went wrong', message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleBack = () => {
@@ -54,7 +65,7 @@ export default function AwayMessageEditorScreen() {
           title="Message"
           onBack={handleBack}
           onSave={handleSave}
-          saveEnabled={hasChanges}
+          saveEnabled={hasChanges && !isSaving}
           testID="editor"
         />
       </SafeAreaView>

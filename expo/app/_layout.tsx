@@ -61,6 +61,7 @@ function RootLayoutNav() {
       <Stack.Screen name="role-error" />
       <Stack.Screen name="customer" />
       <Stack.Screen name="vendor" />
+      <Stack.Screen name="admin" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="onboarding-customer" />
       <Stack.Screen name="onboarding-vendor" />

@@ -5,6 +5,8 @@ import { useOrders } from '@/contexts/OrdersContext';
 import { mockVendors } from '@/mocks/vendorData';
 import type { Order, OrderStatus } from '@/mocks/ordersData';
 import type { Chat } from '@/mocks/chatData';
+import { auth, callable } from '@/lib/firebase';
+import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 
 /**
  * Order statuses that are considered "active" for the purpose of
@@ -62,7 +64,7 @@ export function useMessageVendor() {
   );
 
   const handleMessageVendorPress = useCallback(
-    (vendorId: string, customerId: string): MessageVendorResult | null => {
+    async (vendorId: string, customerId: string): Promise<MessageVendorResult | null> => {
       if (!vendorId || !customerId) {
         console.warn('[useMessageVendor] Missing vendorId or customerId', { vendorId, customerId });
         return null;
@@ -110,6 +112,32 @@ export function useMessageVendor() {
       } else {
         const vendorName =
           mockVendors.find((v) => v.id === vendorId)?.name ?? 'Vendor';
+
+        /**
+         * createCommerceConversation has been deployed since this flow was
+         * written and nothing called it. For a real signed-in customer this
+         * creates the canonical `chatThreads` document server-side — the one
+         * `sendChatMessage` actually writes into and the vendor's own
+         * real-time listener actually sees — running the eligibility checks
+         * (blocks, vendor active, country availability) up front rather than
+         * only discovering a problem when the first message fails to send.
+         *
+         * Best-effort: if it fails (offline, vendor just went inactive), the
+         * local scaffold below still opens so the customer sees a
+         * conversation screen; the send path surfaces a real error the next
+         * time a message is actually sent.
+         */
+        if (!DEV_LOCAL_AUTH_ENABLED || auth.currentUser) {
+          try {
+            const create = callable<{ vendorId: string }, { success: true; chatId: string; created: boolean }>(
+              'createCommerceConversation',
+            );
+            await create({ vendorId });
+          } catch (err) {
+            console.error('[useMessageVendor] createCommerceConversation failed:', err);
+          }
+        }
+
         chat = getOrCreateConversation(vendorId, vendorName, 'pre_order_inquiry');
         console.log('[useMessageVendor] Created new pre-order thread:', chat.id);
       }

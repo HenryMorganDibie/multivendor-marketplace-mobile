@@ -101,6 +101,25 @@ export function mapVendorDoc(id: string, data: Record<string, unknown>): Vendor 
     taxEnabled: data.taxEnabled === true,
     taxRate: (data.taxRate as number) ?? 0,
 
+    // Written by updateVendorSettings directly onto this document. Both were
+    // declared on the Vendor type already (the mock data has always carried
+    // them) but never read back out of a real document, so a vendor's saved
+    // minimum order amount / policy vanished the moment the live listener's
+    // next snapshot replaced local state with this mapper's output.
+    minimumOrderAmount: (data.minimumOrderAmount as number) ?? undefined,
+    policy: (data.policy as string) ?? undefined,
+
+    // Same bug as minimumOrderAmount/policy above: updateVendorPaymentInstructions
+    // writes these directly onto this document, so they need to be read back
+    // out here or a saved value vanishes on the next live snapshot.
+    paymentInstructions: (data.paymentInstructions as string) ?? undefined,
+    paymentInstructionsEnabled: data.paymentInstructionsEnabled === true,
+    ownershipConfirmed: data.ownershipConfirmed === true,
+    ownershipConfirmedAt: toIso(data.ownershipConfirmedAt as Timestampish),
+    ownershipConfirmedBy: (data.ownershipConfirmedBy as string) ?? undefined,
+    paymentInstructionsUpdatedAt: toIso(data.paymentInstructionsUpdatedAt as Timestampish),
+    paymentInstructionsUpdatedBy: (data.paymentInstructionsUpdatedBy as string) ?? undefined,
+
     createdAt: toIso(data.createdAt as Timestampish),
   };
 }

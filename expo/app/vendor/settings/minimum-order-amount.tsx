@@ -2,10 +2,13 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
+import { Alert } from '@/utils/alert';
 import { Colors } from '@/constants/colors';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { getCurrencySymbol, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
 import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
+import { callable } from '@/lib/firebase';
 
 const CURRENCY = getCurrencySymbol((mockVendor.currency as Currency) || getCurrencyFromCountryCode(mockVendor.countryCode));
 
@@ -19,19 +22,40 @@ function formatCurrencyDisplay(value: string): string {
 
 export default function MinimumOrderAmountScreen() {
   const router = useRouter();
+  const { vendor } = useVendor();
   const [savedEnabled, setSavedEnabled] = useState(false);
   const [savedAmount, setSavedAmount] = useState('');
 
   const [isEnabled, setIsEnabled] = useState(false);
   const [amount, setAmount] = useState('');
   const [amountError, setAmountError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const hasInteracted = useRef(false);
 
   const hasChanges = isEnabled !== savedEnabled || amount !== savedAmount;
   const isValidAmount = !isEnabled || (amount.trim().length > 0 && parseFloat(amount.replace(/,/g, '')) > 0);
-  const canSave = hasChanges && isValidAmount;
+  const canSave = hasChanges && isValidAmount && !isSaving;
 
   const numericAmount = parseFloat(amount.replace(/,/g, '') || '0');
+
+  /**
+   * This screen previously had no persistence at all — every value reset
+   * on navigating away and back, let alone on app restart, and
+   * updateVendorSettings (deployed since Phase 4) had no caller. The real
+   * value now comes from the live vendor document (mapVendorDoc carries
+   * `minimumOrderAmount` as of this fix); skipped once the vendor starts
+   * typing, so an in-flight edit is never clobbered by a snapshot.
+   */
+  useEffect(() => {
+    if (hasInteracted.current) return;
+    const saved = vendor.minimumOrderAmount;
+    const enabled = typeof saved === 'number' && saved > 0;
+    setSavedEnabled(enabled);
+    setSavedAmount(enabled ? saved.toLocaleString() : '');
+    setIsEnabled(enabled);
+    setAmount(enabled ? saved.toLocaleString() : '');
+  }, [vendor.minimumOrderAmount]);
 
   useEffect(() => {
     if (isEnabled) {
@@ -40,6 +64,7 @@ export default function MinimumOrderAmountScreen() {
   }, [isEnabled]);
 
   const handleToggle = useCallback((val: boolean) => {
+    hasInteracted.current = true;
     setIsEnabled(val);
     if (!val) {
       setAmountError('');
@@ -48,6 +73,7 @@ export default function MinimumOrderAmountScreen() {
   }, []);
 
   const handleAmountChange = useCallback((val: string) => {
+    hasInteracted.current = true;
     const formatted = formatCurrencyDisplay(val);
     setAmount(formatted);
     if (amountError && formatted.length > 0) {
@@ -55,15 +81,29 @@ export default function MinimumOrderAmountScreen() {
     }
   }, [amountError]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     const raw = parseFloat(amount.replace(/,/g, ''));
     if (isEnabled && (!amount || raw <= 0)) {
       setAmountError('Amount must be greater than 0.');
       return;
     }
-    console.log('[MinimumOrderAmount] saved:', { isEnabled, amount: isEnabled ? raw : null });
-    setSavedEnabled(isEnabled);
-    setSavedAmount(amount);
+
+    setIsSaving(true);
+    try {
+      const update = callable<{ minimumOrderAmount: number }, { success: true }>('updateVendorSettings');
+      await update({ minimumOrderAmount: isEnabled ? raw : 0 });
+
+      console.log('[MinimumOrderAmount] saved:', { isEnabled, amount: isEnabled ? raw : null });
+      setSavedEnabled(isEnabled);
+      setSavedAmount(amount);
+      hasInteracted.current = false;
+    } catch (error) {
+      console.error('[MinimumOrderAmount] updateVendorSettings failed:', error);
+      const message = (error as { message?: string })?.message ?? 'Could not save this setting. Please try again.';
+      Alert.alert('Something went wrong', message);
+    } finally {
+      setIsSaving(false);
+    }
   }, [isEnabled, amount]);
 
   return (

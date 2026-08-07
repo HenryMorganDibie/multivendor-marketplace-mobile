@@ -22,8 +22,15 @@ export default function VerificationUploadIDScreen() {
 
     if (!result.canceled) {
       const uri = result.assets[0].uri;
-      await uploadIdDocument(uri);
-      setIdUploaded(true);
+      try {
+        await uploadIdDocument(uri);
+        setIdUploaded(true);
+      } catch (error) {
+        console.error('[VERIFICATION] ID upload failed:', error);
+        const message = (error as { message?: string })?.message
+          ?? 'Could not upload your ID. Please try again.';
+        Alert.alert('Upload failed', message);
+      }
     }
   };
 

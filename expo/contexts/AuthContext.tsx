@@ -9,7 +9,7 @@ import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 import { VendorPlan } from './VendorPlanContext';
 import { mapRegistrationError, mapLoginError, type AuthErrorField } from '@/lib/auth/authErrors';
 
-type UserRole = 'customer' | 'vendor';
+type UserRole = 'customer' | 'vendor' | 'admin';
 
 type AccountStatus = 'active' | 'pending_deletion' | 'deactivated' | 'frozen' | 'banned';
 
@@ -201,7 +201,22 @@ async function buildSessionFromBackend(uid: string, identifier: string): Promise
   }
 
   const data = snap.data() as Record<string, unknown>;
-  const status = ((data.accountStatus as AccountStatus) ?? 'active');
+  let status = ((data.accountStatus as AccountStatus) ?? 'active');
+
+  // Both deletion screens promise this: logging back in within the 90-day
+  // grace period undoes the request. Attempted here, once, right at the
+  // point a blocked pending_deletion account would otherwise be refused.
+  if (status === 'pending_deletion') {
+    try {
+      const restore = callable<Record<string, never>, { restored: boolean }>('restoreAccountIfEligible');
+      const res = await restore({});
+      if (res.data.restored) {
+        status = 'active';
+      }
+    } catch (error) {
+      console.error('[AUTH] Could not check account-deletion restore eligibility:', error);
+    }
+  }
 
   if (BLOCKED_STATUSES.includes(status)) {
     return { ok: false, error: 'This account is currently unavailable. Please contact support.' };
@@ -246,6 +261,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       } else {
         router.replace('/vendor/(tabs)/dashboard' as any);
       }
+    } else if (user.role === 'admin') {
+      router.replace('/admin/moderation' as any);
     }
   }, [router]);
 
@@ -411,7 +428,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
      * has no account and never will; sending them to a login screen makes the
      * link useless to exactly the person it was sent to.
      */
-    const publicRoutes = ['login', 'create-account', 'register', 'verify-otp', 'onboarding', 'complete-profile', 'vendor-setup-complete', 'legal', 'forgot-password', 'i', 'invoice-view'];
+    // 'store' is a shared storefront link — the one route whose entire point
+    // is being opened by someone who does not have an account yet. Missing
+    // from this list, every such link bounced straight to /login before the
+    // storefront page ever got a chance to render, for every vendor,
+    // verified or not.
+    const publicRoutes = ['login', 'create-account', 'register', 'verify-otp', 'onboarding', 'complete-profile', 'vendor-setup-complete', 'legal', 'forgot-password', 'i', 'invoice-view', 'store'];
     const isPublicRoute = publicRoutes.includes(firstSegment);
 
     if (!authState.isAuthenticated) {
@@ -439,7 +461,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       return;
     }
 
-    if (user.role !== 'customer' && user.role !== 'vendor') {
+    if (user.role !== 'customer' && user.role !== 'vendor' && user.role !== 'admin') {
       safeReplace('/role-error');
       return;
     }
@@ -453,6 +475,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         } else {
           safeReplace('/vendor/(tabs)/dashboard');
         }
+      } else if (user.role === 'admin') {
+        safeReplace('/admin/moderation');
       }
       return;
     }
@@ -470,6 +494,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         } else {
           safeReplace('/vendor/(tabs)/dashboard');
         }
+      } else if (user.role === 'admin') {
+        safeReplace('/admin/moderation');
       }
       return;
     }

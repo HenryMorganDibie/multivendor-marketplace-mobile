@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Platform, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -7,6 +7,19 @@ import EditScreenHeader from '@/components/EditScreenHeader';
 import { Colors } from '@/constants/colors';
 import { useVendorQuietHours } from '@/contexts/VendorQuietHoursContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, callable, db } from '@/lib/firebase';
+
+type VendorPreferencesPatch = Partial<{
+  pushEnabled: boolean;
+  newOrderRequest: boolean;
+  paymentConfirmed: boolean;
+  orderChanges: boolean;
+  actionRequired: boolean;
+  pendingOrderReminder: boolean;
+  newMessage: boolean;
+  unreadMessageReminder: boolean;
+}>;
 
 export default function NotificationSettingsScreen() {
   const router = useRouter();
@@ -20,8 +33,65 @@ export default function NotificationSettingsScreen() {
 
   const [newMessage, setNewMessage] = useState(true);
   const [unreadReminder, setUnreadReminder] = useState(true);
+  // Guards against the live listener's own initial snapshot re-triggering a
+  // write of the defaults it just read.
+  const isHydrated = useRef(false);
 
   const { settings, updateSettings } = useVendorQuietHours();
+
+  /**
+   * These toggles were plain useState with no persistence — every value
+   * reset to the hardcoded defaults above on every app launch, and
+   * updateVendorNotificationPreferences (deployed alongside the rest of the
+   * notification system) had no caller. Reading
+   * `vendors/{vendorId}/settings/notifications` directly, same pattern as
+   * CatalogContext/PromoContext.
+   */
+  useEffect(() => {
+    let unsubscribeSettings: (() => void) | null = null;
+    const unsubscribeAuth = auth.onIdTokenChanged(async (user) => {
+      unsubscribeSettings?.();
+      unsubscribeSettings = null;
+      isHydrated.current = false;
+      if (!user) return;
+
+      const token = await user.getIdTokenResult();
+      const vendorId = token.claims.vendorId as string | undefined;
+      if (!vendorId) return;
+
+      unsubscribeSettings = onSnapshot(
+        doc(db, 'vendors', vendorId, 'settings', 'notifications'),
+        (snap) => {
+          const data = snap.data();
+          if (data) {
+            setPushEnabled(data.pushEnabled ?? true);
+            setNewOrderRequest(data.newOrderRequest ?? true);
+            setPaymentConfirmed(data.paymentConfirmed ?? true);
+            setOrderChanges(data.orderChanges ?? true);
+            setActionRequired(data.actionRequired ?? true);
+            setPendingOrderReminder(data.pendingOrderReminder ?? true);
+            setNewMessage(data.newMessage ?? true);
+            setUnreadReminder(data.unreadMessageReminder ?? true);
+          }
+          isHydrated.current = true;
+        },
+        (err) => console.error('[VendorNotificationSettings] Live subscription failed:', err),
+      );
+    });
+
+    return () => {
+      unsubscribeSettings?.();
+      unsubscribeAuth();
+    };
+  }, []);
+
+  const saveVendorPreferences = useCallback((patch: VendorPreferencesPatch) => {
+    if (!isHydrated.current) return;
+    const update = callable<VendorPreferencesPatch, { success: true }>('updateVendorNotificationPreferences');
+    update(patch).catch((err) => {
+      console.error('[VendorNotificationSettings] updateVendorNotificationPreferences failed:', err);
+    });
+  }, []);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
@@ -66,6 +136,39 @@ export default function NotificationSettingsScreen() {
   const handleToggle = (setter: (value: boolean) => void, value: boolean, label: string) => {
     setter(value);
     console.log(`${label}:`, value);
+  };
+
+  const handlePushEnabledToggle = (value: boolean) => {
+    handleToggle(setPushEnabled, value, 'Push Notifications');
+    saveVendorPreferences({ pushEnabled: value });
+  };
+  const handleNewOrderRequestToggle = (value: boolean) => {
+    handleToggle(setNewOrderRequest, value, 'New Order Request');
+    saveVendorPreferences({ newOrderRequest: value });
+  };
+  const handlePaymentConfirmedToggle = (value: boolean) => {
+    handleToggle(setPaymentConfirmed, value, 'Payment Confirmed');
+    saveVendorPreferences({ paymentConfirmed: value });
+  };
+  const handleOrderChangesToggle = (value: boolean) => {
+    handleToggle(setOrderChanges, value, 'Order Changes');
+    saveVendorPreferences({ orderChanges: value });
+  };
+  const handleActionRequiredToggle = (value: boolean) => {
+    handleToggle(setActionRequired, value, 'Action Required');
+    saveVendorPreferences({ actionRequired: value });
+  };
+  const handlePendingOrderReminderToggle = (value: boolean) => {
+    handleToggle(setPendingOrderReminder, value, 'Pending Order Reminder');
+    saveVendorPreferences({ pendingOrderReminder: value });
+  };
+  const handleNewMessageToggle = (value: boolean) => {
+    handleToggle(setNewMessage, value, 'New Message');
+    saveVendorPreferences({ newMessage: value });
+  };
+  const handleUnreadReminderToggle = (value: boolean) => {
+    handleToggle(setUnreadReminder, value, 'Unread Message Reminder');
+    saveVendorPreferences({ unreadMessageReminder: value });
   };
 
   const renderToggleRow = (
@@ -169,7 +272,7 @@ export default function NotificationSettingsScreen() {
               {renderToggleRow(
                 'Enable Push Notifications',
                 pushEnabled,
-                (val) => handleToggle(setPushEnabled, val, 'Push Notifications'),
+                handlePushEnabledToggle,
                 true
               )}
             </View>
@@ -181,27 +284,27 @@ export default function NotificationSettingsScreen() {
               {renderToggleRow(
                 'New Order Request',
                 newOrderRequest,
-                (val) => handleToggle(setNewOrderRequest, val, 'New Order Request')
+                handleNewOrderRequestToggle
               )}
               {renderToggleRow(
                 'Payment Confirmed',
                 paymentConfirmed,
-                (val) => handleToggle(setPaymentConfirmed, val, 'Payment Confirmed')
+                handlePaymentConfirmedToggle
               )}
               {renderToggleRow(
                 'Order Changes',
                 orderChanges,
-                (val) => handleToggle(setOrderChanges, val, 'Order Changes')
+                handleOrderChangesToggle
               )}
               {renderToggleRow(
                 'Action Required',
                 actionRequired,
-                (val) => handleToggle(setActionRequired, val, 'Action Required')
+                handleActionRequiredToggle
               )}
               {renderToggleRow(
                 'Pending Order Reminder',
                 pendingOrderReminder,
-                (val) => handleToggle(setPendingOrderReminder, val, 'Pending Order Reminder'),
+                handlePendingOrderReminderToggle,
                 true
               )}
             </View>
@@ -213,12 +316,12 @@ export default function NotificationSettingsScreen() {
               {renderToggleRow(
                 'New Message',
                 newMessage,
-                (val) => handleToggle(setNewMessage, val, 'New Message')
+                handleNewMessageToggle
               )}
               {renderToggleRow(
                 'Unread Message Reminder',
                 unreadReminder,
-                (val) => handleToggle(setUnreadReminder, val, 'Unread Message Reminder'),
+                handleUnreadReminderToggle,
                 true
               )}
             </View>

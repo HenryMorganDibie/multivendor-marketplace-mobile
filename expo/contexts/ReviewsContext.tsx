@@ -1,5 +1,6 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { auth, callable } from '@/lib/firebase';
 
 export interface CustomerReview {
   id: string;
@@ -10,7 +11,11 @@ export interface CustomerReview {
   stars: number;
   feedback?: string;
   itemRatings?: Record<string, 'good' | 'bad'>;
-  submittedAt: string;
+  /** Absent for real vendor data — a vendor must never see when a rating was
+   * submitted, not even to the month, since with few enough orders in a
+   * period the timing alone can identify the customer. Present only on the
+   * seeded demo/mock reviews below, which are not real privacy-sensitive data. */
+  submittedAt?: string;
   orderReference: string;
   /** Privacy-safe display reference shown to vendors. Never exposes real order ID. */
   reviewRef: string;
@@ -204,8 +209,83 @@ export function generateReviewRef(): string {
   return result;
 }
 
+interface VendorFacingRatingResponse {
+  ratingId: string;
+  displayId: string;
+  stars: number;
+  privateFeedback: string | null;
+  hasPrivateFeedback: boolean;
+  readByVendor: boolean;
+}
+
+/**
+ * Maps the vendor-facing projection getVendorRatings returns onto the local
+ * CustomerReview shape this screen set already uses. orderId/publicOrderId/
+ * vendorName/submittedAt are intentionally blank — the backend never sends
+ * any of them to a vendor client (that is the whole point of the projection:
+ * a vendor can see that they were rated, not which order or customer it came
+ * from, or when), and nothing in these screens should read those fields for
+ * the vendor's own ratings view.
+ */
+function fromBackendRating(r: VendorFacingRatingResponse, vendorId: string): CustomerReview {
+  return {
+    id: r.ratingId,
+    orderId: '',
+    publicOrderId: '',
+    vendorId,
+    vendorName: '',
+    stars: r.stars,
+    feedback: r.privateFeedback ?? undefined,
+    orderReference: '',
+    reviewRef: r.displayId,
+    readByVendor: r.readByVendor,
+  };
+}
+
 export const [ReviewsProvider, useReviews] = createContextHook(() => {
   const [reviews, setReviews] = useState<CustomerReview[]>(seedReviews);
+  const [realRatingsVendorId, setRealRatingsVendorId] = useState<string | null>(null);
+
+  /**
+   * Live-ish load of the signed-in vendor's own ratings.
+   *
+   * getVendorRatings has been deployed since Phase 4 and nothing called it —
+   * this screen showed twelve fixture reviews for "Spicy Restaurant" to every
+   * vendor, seeded once and never touched again, regardless of whether that
+   * vendor had ever received a real rating.
+   *
+   * Only fetched for a real signed-in vendor; a customer viewing another
+   * vendor's storefront reviews (a different, public-facing screen) keeps
+   * reading the local fixtures below, since getVendorRatings is vendor-only
+   * by design and cannot serve that view.
+   */
+  useEffect(() => {
+    const unsubscribe = auth.onIdTokenChanged(async (user) => {
+      if (!user) {
+        setRealRatingsVendorId(null);
+        return;
+      }
+      const token = await user.getIdTokenResult();
+      const vendorId = token.claims.vendorId as string | undefined;
+      const role = token.claims.role as string | undefined;
+      if (!vendorId || role !== 'vendor') {
+        setRealRatingsVendorId(null);
+        return;
+      }
+
+      try {
+        const getRatings = callable<Record<string, never>, { success: true; ratings: VendorFacingRatingResponse[] }>(
+          'getVendorRatings',
+        );
+        const res = await getRatings({});
+        setReviews(res.data.ratings.map((r) => fromBackendRating(r, vendorId)));
+        setRealRatingsVendorId(vendorId);
+      } catch (error) {
+        console.error('[ReviewsContext] getVendorRatings failed:', error);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   const submitReview = useCallback((review: CustomerReview) => {
     console.log('[ReviewsContext] Submitting review:', review.id, 'stars:', review.stars);
@@ -213,6 +293,10 @@ export const [ReviewsProvider, useReviews] = createContextHook(() => {
   }, []);
 
   const markReviewRead = useCallback((id: string) => {
+    // getVendorRatings marks every unread rating as read the moment the
+    // vendor fetches the list — by the time `reviews` holds real data, the
+    // backend has already flipped this. Kept as a local optimistic update
+    // for the seed/fixture path so the demo behaviour is unchanged.
     setReviews((prev) =>
       prev.map((r) => (r.id === id && !r.readByVendor ? { ...r, readByVendor: true } : r))
     );
@@ -220,9 +304,10 @@ export const [ReviewsProvider, useReviews] = createContextHook(() => {
 
   const getVendorReviews = useCallback(
     (vendorId: string): CustomerReview[] => {
+      if (realRatingsVendorId) return reviews;
       return reviews.filter((r) => r.vendorId === vendorId);
     },
-    [reviews]
+    [reviews, realRatingsVendorId]
   );
 
   const getReviewById = useCallback(
@@ -234,9 +319,10 @@ export const [ReviewsProvider, useReviews] = createContextHook(() => {
 
   const getVendorRatingStats = useCallback(
     (vendorId: string): VendorRatingStats => {
-      return computeStats(reviews.filter((r) => r.vendorId === vendorId));
+      const scoped = realRatingsVendorId ? reviews : reviews.filter((r) => r.vendorId === vendorId);
+      return computeStats(scoped);
     },
-    [reviews]
+    [reviews, realRatingsVendorId]
   );
 
   const hasReviewForOrder = useCallback(

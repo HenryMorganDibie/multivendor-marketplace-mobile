@@ -24,6 +24,7 @@ import type { ChatMessage, ContactCardData } from '@/mocks/chatData';
 
 import { useOrders } from '@/contexts/OrdersContext';
 import { useChats } from '@/contexts/ChatContext';
+import { chatService } from '@/services/chatService';
 import { useVendor } from '@/contexts/VendorContext';
 import { useChangeRequests } from '@/contexts/ChangeRequestsContext';
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
@@ -144,7 +145,7 @@ export default function VendorOrderChatScreen() {
   const [showViewProofModal, setShowViewProofModal] = useState(false);
   const changeAcceptedMsgRef = useRef(false);
   const customerPaidMsgRef = useRef(false);
-  const { blockUser, getBlockedUserByChatId } = useBlockedUsers();
+  const { blockUser, getBlockedUserByChatId, archiveChat } = useBlockedUsers();
   const { getNote, saveNote } = useVendorCustomerNotes();
   const { items: catalogItems, categories } = useCatalog();
   const { pickupDetails, isLoaded: isPickupLoaded } = useVendorPickup();
@@ -193,12 +194,7 @@ export default function VendorOrderChatScreen() {
         (o.status === 'accepted' || o.status === 'confirmed' || o.status === 'in_progress')
     ).sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())
     .slice(0, 5);
-    
-    console.log('🔍 VENDOR CHAT - Pinned Active Orders:');
-    console.log('Current order:', order?.id, order?.customerId, order?.vendorId);
-    console.log('Pinned count:', filtered.length);
-    console.log('Pinned orders:', filtered.map(o => ({ id: o.id, status: o.status })));
-    
+
     return filtered;
   }, [order]);
 
@@ -212,7 +208,6 @@ export default function VendorOrderChatScreen() {
       )
       .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())
       .slice(0, 5);
-    console.log('[VENDOR CHAT] pinnedOrders count:', all.length);
     return all;
   }, [order]);
 
@@ -356,7 +351,6 @@ export default function VendorOrderChatScreen() {
         return;
       }
       
-      console.log('[VENDOR ORDER CHAT] Vendor sending message:', messageContent);
       clearDraft(chatId);
       setMessageText('');
 
@@ -369,7 +363,6 @@ export default function VendorOrderChatScreen() {
           lastSenderId: vendor.id,
           senderRole: 'vendor',
         });
-        console.log('[VENDOR ORDER CHAT] Inbox snapshot updated:', conv.conversationId);
       }
     }
   };
@@ -384,13 +377,11 @@ export default function VendorOrderChatScreen() {
   };
 
   const handleCreateCustomOrder = () => {
-    console.log('Create custom order tapped');
     const newProposalId = `proposal-${Date.now()}`;
     const proposalChatId = chatId;
     const proposalVendorId = order?.vendorId || chat?.vendorId || '';
-    const vendorSlug = 'sanste';
+    const vendorSlug = vendor.username;
     const formattedCustomerName = formatCustomerNameFromFull(order?.customerName || 'Customer');
-    console.log('Creating new custom order proposal:', newProposalId);
     router.push(
       `/vendor/custom-order/${newProposalId}?chatId=${encodeURIComponent(proposalChatId)}&customerName=${encodeURIComponent(
         formattedCustomerName
@@ -437,7 +428,6 @@ export default function VendorOrderChatScreen() {
 
   const handleResendPaymentRequest = () => {
     setShowExistingPaymentModal(false);
-    console.log('[VENDOR CHAT] Resending existing payment request');
     Alert.alert(
       'Payment Request Resent',
       'The payment request has been resent to the customer.',
@@ -462,39 +452,64 @@ export default function VendorOrderChatScreen() {
     setSelectedCatalogItems([]);
   };
 
-  const handleSendCatalogItems = () => {
-    console.log('Sending catalog items:', selectedCatalogItems);
+  const handleSendCatalogItems = async () => {
+    const itemsToSend = catalogItems.filter(item => selectedCatalogItems.includes(item.id));
     setShowCatalogModal(false);
     setSelectedCatalogItems([]);
+
+    // Like pickup details below, this used to close the modal without
+    // sending anything — the selection was simply discarded.
+    try {
+      for (const item of itemsToSend) {
+        await chatService.sendMessage({
+          chatId,
+          type: 'catalog_item',
+          content: item.name,
+          sender: 'vendor',
+          catalogItemData: {
+            id: item.id,
+            name: item.name,
+            description: item.description || undefined,
+            price: item.salePrice || item.basePrice,
+            image: item.photos[0] || undefined,
+          },
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not send catalog items.';
+      Alert.alert('Could not send', message);
+    }
   };
 
   const handlePickupDetailsPress = () => {
-    console.log('Pickup details pressed');
     setShowPickupModal(true);
     setEditingPickup(false);
   };
 
-  const handleSendPickupDetails = () => {
-    console.log('Sending pickup details:', { address: pickupAddress, instructions: pickupInstructions });
-    
-    const pickupMessage: ChatMessage = {
-      id: `m${Date.now()}`,
-      type: 'pickup-details',
-      content: 'Pickup details sent',
-      sender: 'vendor',
-      timestamp: new Date().toISOString(),
-      pickupDetailsData: {
-        address: pickupAddress,
-        instructions: pickupInstructions,
-        scheduledDate: order?.scheduledDate,
-        scheduledTime: order?.scheduledTime,
-      },
-    };
-    
-    console.log('Pickup details message created:', pickupMessage);
-    
+  const handleSendPickupDetails = async () => {
     setShowPickupModal(false);
     setEditingPickup(false);
+
+    // This used to construct the message object and then drop it on the
+    // floor — the modal closed, nothing was sent, and the customer never
+    // received the pickup details.
+    try {
+      await chatService.sendMessage({
+        chatId,
+        type: 'pickup-details',
+        content: 'Pickup details sent',
+        sender: 'vendor',
+        pickupDetailsData: {
+          address: pickupAddress,
+          instructions: pickupInstructions,
+          scheduledDate: order?.scheduledDate,
+          scheduledTime: order?.scheduledTime,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not send pickup details.';
+      Alert.alert('Could not send', message);
+    }
   };
 
   const handleQuickReplyPress = () => {
@@ -617,7 +632,6 @@ export default function VendorOrderChatScreen() {
               id: `action-block-${Date.now()}`,
               content: `You blocked ${customerDisplayName}`,
             }]);
-            console.log('Customer blocked');
           },
         },
       ]
@@ -714,7 +728,8 @@ export default function VendorOrderChatScreen() {
             text: 'Clear chat',
             style: 'destructive',
             onPress: () => {
-              console.log('[VENDOR] Clear chat for orderId:', orderId);
+              archiveChat(chatId, 'manual');
+              router.back();
             },
           },
         ]
@@ -728,7 +743,6 @@ export default function VendorOrderChatScreen() {
       saveNote(vendorId, customerId, trimmed);
       setCustomerNoteText(trimmed);
       setTempNoteText(trimmed);
-      console.log('Note saved for customer');
       setShowNotesModal(false);
       handleReturnToCustomerProfile();
     }
@@ -752,7 +766,6 @@ export default function VendorOrderChatScreen() {
   };
 
   const handleReportCustomer = () => {
-    console.log('Report customer pressed');
     setShowCustomerProfile(false);
     setTimeout(() => {
       router.push(`/report-vendor?type=customer&name=${encodeURIComponent(customerDisplayName)}` as any);
@@ -861,10 +874,7 @@ export default function VendorOrderChatScreen() {
       <TouchableOpacity
         key={o.id}
         style={[styles.pinnedOrderCard, isScrollItem && styles.pinnedOrderCardScrollItem]}
-        onPress={() => {
-          console.log('Pinned card tapped, viewing order:', o.id);
-          router.push(`/vendor/orders/${o.id}` as any);
-        }}
+        onPress={() => router.push(`/vendor/orders/${o.id}` as any)}
         activeOpacity={0.8}
         testID={`pinned-order-card-${o.id}`}
       >
@@ -1019,7 +1029,6 @@ export default function VendorOrderChatScreen() {
             <TouchableOpacity
               style={styles.catalogItemCardButton}
               onPress={() => {
-                console.log('View catalog item:', item.id);
                 if (item.id) {
                   router.push(`/vendor/catalog/item/${item.id}` as any);
                 }

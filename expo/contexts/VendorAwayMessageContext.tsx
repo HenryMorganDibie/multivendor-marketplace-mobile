@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, callable, db } from '@/lib/firebase';
 
 const AWAY_MESSAGE_KEY = 'vendor_away_message_settings';
 export const AWAY_COOLDOWN_MS = 12 * 60 * 60 * 1000;
@@ -31,6 +33,8 @@ const DEFAULT_SETTINGS: AwayMessageSettings = {
 export const [VendorAwayMessageProvider, useVendorAwayMessage] = createContextHook(() => {
   const [settings, setSettings] = useState<AwayMessageSettings>(DEFAULT_SETTINGS);
   const [isLoaded, setIsLoaded] = useState(false);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   useEffect(() => {
     void loadSettings();
@@ -42,17 +46,92 @@ export const [VendorAwayMessageProvider, useVendorAwayMessage] = createContextHo
       if (stored) {
         setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(stored) });
       }
-      setIsLoaded(true);
-      console.log('[AwayMessage] Settings loaded');
     } catch (error) {
       console.error('[AwayMessage] Failed to load settings:', error);
+    } finally {
       setIsLoaded(true);
     }
   };
 
+  /**
+   * Live subscription to the vendor's real away-message settings.
+   *
+   * updateVendorChatSettings has been deployed since the away-message flow
+   * shipped and nothing called it — this lived in AsyncStorage only, so it
+   * never reached `vendors/{vendorId}/settings/chat`, which is what
+   * sendAwayMessageIfEligible actually reads server-side when deciding
+   * whether to send one. A vendor could "turn on" away messages here and a
+   * customer would never receive one, because the server never saw the
+   * setting.
+   *
+   * AsyncStorage stays as the offline-first local cache (loadSettings
+   * above); this listener's snapshot is the authoritative value once it
+   * arrives.
+   */
+  useEffect(() => {
+    let unsubscribeSettings: (() => void) | null = null;
+    const unsubscribeAuth = auth.onIdTokenChanged(async (user) => {
+      unsubscribeSettings?.();
+      unsubscribeSettings = null;
+      if (!user) return;
+
+      const token = await user.getIdTokenResult();
+      const vendorId = token.claims.vendorId as string | undefined;
+      if (!vendorId) return;
+
+      unsubscribeSettings = onSnapshot(
+        doc(db, 'vendors', vendorId, 'settings', 'chat'),
+        (snap) => {
+          const data = snap.data();
+          if (!data) return;
+          const awaySchedule = (data.awaySchedule as { type?: AwayScheduleType; start?: string; end?: string } | undefined) ?? {};
+          const next: AwayMessageSettings = {
+            enabled: Boolean(data.awayMessageEnabled),
+            message: (data.awayMessage as string) ?? '',
+            schedule: awaySchedule.type ?? DEFAULT_SETTINGS.schedule,
+            customScheduleStart: awaySchedule.start ?? DEFAULT_SETTINGS.customScheduleStart,
+            customScheduleEnd: awaySchedule.end ?? DEFAULT_SETTINGS.customScheduleEnd,
+            cooldownHours: (data.awayCooldownHours as number) ?? DEFAULT_SETTINGS.cooldownHours,
+          };
+          setSettings(next);
+          void AsyncStorage.setItem(AWAY_MESSAGE_KEY, JSON.stringify(next));
+          setIsLoaded(true);
+        },
+        (err) => console.error('[AwayMessage] Live subscription failed:', err),
+      );
+    });
+
+    return () => {
+      unsubscribeSettings?.();
+      unsubscribeAuth();
+    };
+  }, []);
+
   const updateSettings = useCallback(async (partial: Partial<AwayMessageSettings>) => {
+    const current = settingsRef.current;
+    const updated = { ...current, ...partial, updatedAt: new Date().toISOString() };
     try {
-      const updated = { ...settings, ...partial, updatedAt: new Date().toISOString() };
+      if (auth.currentUser) {
+        const update = callable<
+          {
+            awayMessageEnabled?: boolean;
+            awayMessage?: string;
+            awaySchedule?: { type: AwayScheduleType; start: string; end: string };
+            awayCooldownHours?: number;
+          },
+          { success: true }
+        >('updateVendorChatSettings');
+        await update({
+          awayMessageEnabled: updated.enabled,
+          awayMessage: updated.message,
+          awaySchedule: {
+            type: updated.schedule,
+            start: updated.customScheduleStart,
+            end: updated.customScheduleEnd,
+          },
+          awayCooldownHours: updated.cooldownHours,
+        });
+      }
       await AsyncStorage.setItem(AWAY_MESSAGE_KEY, JSON.stringify(updated));
       setSettings(updated);
       console.log('[AwayMessage] Settings updated:', updated);
@@ -60,7 +139,7 @@ export const [VendorAwayMessageProvider, useVendorAwayMessage] = createContextHo
       console.error('[AwayMessage] Failed to save settings:', error);
       throw error;
     }
-  }, [settings]);
+  }, []);
 
   const isScheduleActive = useCallback((): boolean => {
     const { schedule, customScheduleStart, customScheduleEnd } = settings;

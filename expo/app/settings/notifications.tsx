@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Colors } from '@/constants/colors';
 import {
   View,
@@ -9,6 +9,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, callable, db } from '@/lib/firebase';
+
+type PreferencesPatch = Partial<{
+  pushEnabled: boolean;
+  orderUpdates: boolean;
+  chatMessages: boolean;
+  pickupReminders: boolean;
+  cartReminders: boolean;
+  promotions: boolean;
+}>;
 
 export default function NotificationsScreen() {
   const [enableNotifications, setEnableNotifications] = useState(true);
@@ -17,7 +28,58 @@ export default function NotificationsScreen() {
   const [appointmentReminders, setAppointmentReminders] = useState(true);
   const [cartReminders, setCartReminders] = useState(false);
   const [promotions, setPromotions] = useState(false);
+  // Guards against the live listener's own initial snapshot re-triggering a
+  // write of the defaults it just read.
+  const isHydrated = useRef(false);
 
+  /**
+   * These toggles were plain useState with no persistence at all — every
+   * value reset to the hardcoded defaults above on every app launch, and
+   * updateCustomerNotificationPreferences (deployed alongside the rest of
+   * the notification system) had no caller. Reading
+   * `users/{uid}/settings/notifications` directly, same pattern as
+   * CatalogContext/PromoContext, so a change from another device is
+   * reflected here too.
+   */
+  useEffect(() => {
+    let unsubscribeSettings: (() => void) | null = null;
+    const unsubscribeAuth = auth.onIdTokenChanged((user) => {
+      unsubscribeSettings?.();
+      unsubscribeSettings = null;
+      isHydrated.current = false;
+      if (!user) return;
+
+      unsubscribeSettings = onSnapshot(
+        doc(db, 'users', user.uid, 'settings', 'notifications'),
+        (snap) => {
+          const data = snap.data();
+          if (data) {
+            setEnableNotifications(data.pushEnabled ?? true);
+            setOrderUpdates(data.orderUpdates ?? true);
+            setChatMessages(data.chatMessages ?? true);
+            setAppointmentReminders(data.pickupReminders ?? true);
+            setCartReminders(data.cartReminders ?? false);
+            setPromotions(data.promotions ?? false);
+          }
+          isHydrated.current = true;
+        },
+        (err) => console.error('[NotificationSettings] Live subscription failed:', err),
+      );
+    });
+
+    return () => {
+      unsubscribeSettings?.();
+      unsubscribeAuth();
+    };
+  }, []);
+
+  const savePreferences = useCallback((patch: PreferencesPatch) => {
+    if (!isHydrated.current) return;
+    const update = callable<PreferencesPatch, { success: true }>('updateCustomerNotificationPreferences');
+    update(patch).catch((err) => {
+      console.error('[NotificationSettings] updateCustomerNotificationPreferences failed:', err);
+    });
+  }, []);
 
   const handleMasterToggle = useCallback((value: boolean) => {
     setEnableNotifications(value);
@@ -27,17 +89,51 @@ export default function NotificationsScreen() {
       setAppointmentReminders(false);
       setCartReminders(false);
       setPromotions(false);
+      savePreferences({
+        pushEnabled: false,
+        orderUpdates: false,
+        chatMessages: false,
+        pickupReminders: false,
+        cartReminders: false,
+        promotions: false,
+      });
     } else {
       setOrderUpdates(true);
       setChatMessages(true);
+      savePreferences({ pushEnabled: true, orderUpdates: true, chatMessages: true });
     }
     console.log('Enable notifications:', value);
-  }, []);
+  }, [savePreferences]);
 
   const handleToggle = useCallback((setter: (value: boolean) => void, value: boolean, label: string) => {
     setter(value);
     console.log(`${label}:`, value);
   }, []);
+
+  const handleOrderUpdatesToggle = useCallback((value: boolean) => {
+    handleToggle(setOrderUpdates, value, 'Order Updates');
+    savePreferences({ orderUpdates: value });
+  }, [handleToggle, savePreferences]);
+
+  const handleChatMessagesToggle = useCallback((value: boolean) => {
+    handleToggle(setChatMessages, value, 'Chat Messages');
+    savePreferences({ chatMessages: value });
+  }, [handleToggle, savePreferences]);
+
+  const handleAppointmentRemindersToggle = useCallback((value: boolean) => {
+    handleToggle(setAppointmentReminders, value, 'Appointment Reminders');
+    savePreferences({ pickupReminders: value });
+  }, [handleToggle, savePreferences]);
+
+  const handleCartRemindersToggle = useCallback((value: boolean) => {
+    handleToggle(setCartReminders, value, 'Cart Reminders');
+    savePreferences({ cartReminders: value });
+  }, [handleToggle, savePreferences]);
+
+  const handlePromotionsToggle = useCallback((value: boolean) => {
+    handleToggle(setPromotions, value, 'Promotions');
+    savePreferences({ promotions: value });
+  }, [handleToggle, savePreferences]);
 
   const renderToggleRow = (
     label: string,
@@ -101,7 +197,7 @@ export default function NotificationsScreen() {
               {renderToggleRow(
                 'Order Updates',
                 orderUpdates && enableNotifications,
-                (val) => handleToggle(setOrderUpdates, val, 'Order Updates'),
+                handleOrderUpdatesToggle,
                 true,
                 allDisabled,
                 'Status changes, confirmations, and delivery updates',
@@ -115,7 +211,7 @@ export default function NotificationsScreen() {
               {renderToggleRow(
                 'Chat Messages',
                 chatMessages && enableNotifications,
-                (val) => handleToggle(setChatMessages, val, 'Chat Messages'),
+                handleChatMessagesToggle,
                 true,
                 allDisabled,
                 'e.g. Bella Cakes sent you a message',
@@ -129,7 +225,7 @@ export default function NotificationsScreen() {
               {renderToggleRow(
                 'Appointment & Pickup Reminders',
                 appointmentReminders && enableNotifications,
-                (val) => handleToggle(setAppointmentReminders, val, 'Appointment Reminders'),
+                handleAppointmentRemindersToggle,
                 false,
                 allDisabled,
                 'e.g. Your order from Bella Cakes is scheduled for pickup at 7:00 PM today',
@@ -137,7 +233,7 @@ export default function NotificationsScreen() {
               {renderToggleRow(
                 'Cart Reminders',
                 cartReminders && enableNotifications,
-                (val) => handleToggle(setCartReminders, val, 'Cart Reminders'),
+                handleCartRemindersToggle,
                 true,
                 allDisabled,
                 'e.g. You left items in your cart from Bella Cakes',
@@ -151,7 +247,7 @@ export default function NotificationsScreen() {
               {renderToggleRow(
                 'Promotions & Announcements',
                 promotions && enableNotifications,
-                (val) => handleToggle(setPromotions, val, 'Promotions'),
+                handlePromotionsToggle,
                 true,
                 allDisabled,
                 'Deals, offers, and vendor announcements',

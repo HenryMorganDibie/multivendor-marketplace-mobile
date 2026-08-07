@@ -37,6 +37,7 @@ interface OnboardingStatusResponse {
   blockedReasons: string[];
   isPublished: boolean;
   isDiscoverable: boolean;
+  countryOpen: boolean;
   hasSystemGeneratedUsername: boolean;
 }
 
@@ -157,6 +158,10 @@ export const [VendorOnboardingProvider, useVendorOnboarding] = createContextHook
       // never wrongly treated as already live.
       isPublished: status?.isPublished ?? false,
       isDiscoverable: status?.isDiscoverable ?? false,
+      // Defaults to true (not false) while status is loading — this is purely
+      // informational (drives a banner, not a gate), and a false alarm on
+      // first render is worse than briefly assuming the country is open.
+      countryOpen: status?.countryOpen ?? true,
       isSetupComplete,
       isLoading,
       error,

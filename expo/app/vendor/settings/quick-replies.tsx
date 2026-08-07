@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Animated, PanResponder, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Alert } from '@/utils/alert';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { MessageSquareText, ChevronRight } from 'lucide-react-native';
 import EditScreenHeader from '@/components/EditScreenHeader';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth, callable, db } from '@/lib/firebase';
 import { Colors } from '@/constants/colors';
 
 interface QuickReply {
@@ -28,37 +29,62 @@ export default function QuickRepliesScreen() {
   const [shortcutInput, setShortcutInput] = useState('');
   const [messageInput, setMessageInput] = useState('');
   const [openSwipeId, setOpenSwipeId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const MAX_REPLIES = 20;
 
-  const loadQuickReplies = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('quickReplies');
-      if (stored) {
-        setQuickReplies(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error('Failed to load quick replies:', error);
-    }
-  };
-
-  const saveQuickReplies = useCallback(async () => {
-    try {
-      await AsyncStorage.setItem('quickReplies', JSON.stringify(quickReplies));
-    } catch (error) {
-      console.error('Failed to save quick replies:', error);
-    }
-  }, [quickReplies]);
-
+  /**
+   * Live subscription to the vendor's real quick replies.
+   *
+   * createQuickReply/updateQuickReply/deleteQuickReply have been deployed
+   * since this screen was built and nothing called them — the list lived in
+   * a single global AsyncStorage key, shared by every vendor account on the
+   * device and gone on reinstall. Reading the vendor's own subcollection
+   * directly (same pattern as CatalogContext/PromoContext) means an edit
+   * from this screen, another device, or eventually the vendor portal all
+   * show up here without a manual refresh.
+   */
   useEffect(() => {
-    void loadQuickReplies();
+    let unsubscribeReplies: (() => void) | null = null;
+
+    const unsubscribeAuth = auth.onIdTokenChanged(async (user) => {
+      unsubscribeReplies?.();
+      unsubscribeReplies = null;
+      if (!user) return;
+
+      const token = await user.getIdTokenResult();
+      const vendorId = token.claims.vendorId as string | undefined;
+      if (!vendorId) return;
+
+      unsubscribeReplies = onSnapshot(
+        query(collection(db, 'vendors', vendorId, 'quickReplies'), orderBy('sortOrder', 'asc')),
+        (snap) => {
+          setQuickReplies(
+            snap.docs.map((d) => {
+              const data = d.data();
+              const shortcutRaw = String(data.shortcut ?? '');
+              return {
+                id: d.id,
+                shortcut: shortcutRaw.startsWith('/') ? shortcutRaw.slice(1) : shortcutRaw,
+                message: (data.message as string) ?? '',
+                text: (data.message as string) ?? '',
+                isActive: Boolean(data.isActive),
+              };
+            }),
+          );
+        },
+        (err) => {
+          console.error('[QuickReplies] Live subscription failed:', err);
+          setQuickReplies([]);
+        },
+      );
+    });
+
+    return () => {
+      unsubscribeReplies?.();
+      unsubscribeAuth();
+    };
   }, []);
-
-  useEffect(() => {
-    if (quickReplies.length > 0) {
-      void saveQuickReplies();
-    }
-  }, [quickReplies, saveQuickReplies]);
 
   const handleAddNew = () => {
     if (quickReplies.length >= MAX_REPLIES) {
@@ -77,7 +103,7 @@ export default function QuickRepliesScreen() {
     setShowModal(true);
   };
 
-  const handleSave = () => {
+  const handleSave = useCallback(async () => {
     const trimmedShortcut = shortcutInput.trim();
     const trimmedMessage = messageInput.trim();
 
@@ -115,36 +141,52 @@ export default function QuickRepliesScreen() {
       return;
     }
 
-    if (editingReply) {
-      setQuickReplies(quickReplies.map(r => 
-        r.id === editingReply.id 
-          ? { ...r, shortcut: trimmedShortcut, message: trimmedMessage, text: trimmedMessage, updatedAt: new Date().toISOString(), isActive: true }
-          : r
-      ));
-    } else {
-      const timestamp = new Date().toISOString();
-      const newReply: QuickReply = {
-        id: Date.now().toString(),
-        shortcut: trimmedShortcut,
-        message: trimmedMessage,
-        text: trimmedMessage,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        createdBy: 'vendor',
-        isActive: true,
-      };
-      setQuickReplies([...quickReplies, newReply]);
+    setIsSaving(true);
+    try {
+      if (editingReply) {
+        const update = callable<
+          { replyId: string; shortcut: string; message: string },
+          { success: true }
+        >('updateQuickReply');
+        await update({ replyId: editingReply.id, shortcut: trimmedShortcut, message: trimmedMessage });
+      } else {
+        // No separate "title" field exists in this UI — the shortcut is the
+        // only label a vendor gives a reply, so it doubles as the title the
+        // backend stores for display elsewhere (e.g. the vendor portal).
+        const create = callable<
+          { title: string; shortcut: string; message: string; sortOrder?: number },
+          { success: true; replyId: string }
+        >('createQuickReply');
+        await create({
+          title: trimmedShortcut,
+          shortcut: trimmedShortcut,
+          message: trimmedMessage,
+          sortOrder: quickReplies.length,
+        });
+      }
+      setShowModal(false);
+      setEditingReply(null);
+      setShortcutInput('');
+      setMessageInput('');
+    } catch (error) {
+      console.error('[QuickReplies] Save failed:', error);
+      const message = (error as { message?: string })?.message ?? 'Could not save this quick reply. Please try again.';
+      Alert.alert('Something went wrong', message);
+    } finally {
+      setIsSaving(false);
     }
+  }, [shortcutInput, messageInput, editingReply, quickReplies]);
 
-    setShowModal(false);
-    setEditingReply(null);
-    setShortcutInput('');
-    setMessageInput('');
-  };
-
-  const handleDelete = (id: string) => {
-    setQuickReplies(quickReplies.filter(r => r.id !== id));
-  };
+  const handleDelete = useCallback(async (id: string) => {
+    try {
+      const del = callable<{ replyId: string }, { success: true }>('deleteQuickReply');
+      await del({ replyId: id });
+    } catch (error) {
+      console.error('[QuickReplies] Delete failed:', error);
+      const message = (error as { message?: string })?.message ?? 'Could not delete this quick reply. Please try again.';
+      Alert.alert('Something went wrong', message);
+    }
+  }, []);
 
   const handleReorder = (fromIndex: number, toIndex: number) => {
     const newReplies = [...quickReplies];
@@ -257,15 +299,15 @@ export default function QuickRepliesScreen() {
                 activeOpacity={0.85}
                 style={[
                   styles.saveButton,
-                  (!shortcutInput.trim() || !messageInput.trim()) && styles.saveButtonDisabled,
+                  (!shortcutInput.trim() || !messageInput.trim() || isSaving) && styles.saveButtonDisabled,
                 ]}
-                disabled={!shortcutInput.trim() || !messageInput.trim()}
+                disabled={!shortcutInput.trim() || !messageInput.trim() || isSaving}
               >
                 <Text style={[
                   styles.saveButtonText,
-                  (!shortcutInput.trim() || !messageInput.trim()) && styles.saveButtonTextDisabled
+                  (!shortcutInput.trim() || !messageInput.trim() || isSaving) && styles.saveButtonTextDisabled
                 ]}>
-                  Save
+                  {isSaving ? 'Saving…' : 'Save'}
                 </Text>
               </TouchableOpacity>
             </View>

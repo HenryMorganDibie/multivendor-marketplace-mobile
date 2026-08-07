@@ -201,7 +201,17 @@ export default function ChangeUsernameScreen() {
               );
             } catch (error) {
               console.error('[USERNAME] Failed to change username:', error);
-              setError('Failed to change username. Please try again.');
+              const code = (error as { code?: string })?.code ?? '';
+              if (code.endsWith('already-exists')) {
+                setUsernameAvailable(false);
+                setError('This username is already taken.');
+              } else if (code.endsWith('permission-denied')) {
+                setError((error as { message?: string })?.message ?? 'Username changes are not available on your current plan.');
+              } else if (code.endsWith('failed-precondition')) {
+                setError((error as { message?: string })?.message ?? 'You cannot change your username right now.');
+              } else {
+                setError('Failed to change username. Please try again.');
+              }
               setIsSubmitting(false);
             }
           },

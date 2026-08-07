@@ -14,21 +14,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserLocation } from '@/contexts/UserLocationContext';
 import { verifyOtp, sendOtp } from '@/lib/auth/verifyOtp';
 import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 
 const PENDING_VENDOR_REG_KEY = '@the platform_pending_vendor_reg';
+const PENDING_CUSTOMER_REG_KEY = '@the platform_pending_customer_reg';
 
 export default function VerifyOTPScreen() {
-  const { contact, maskedContact, context, password, businessName } = useLocalSearchParams<{
+  const { contact, maskedContact, context } = useLocalSearchParams<{
     contact?: string;
     maskedContact: string;
     context: 'login' | 'customer-registration' | 'vendor-registration';
-    password?: string;
-    businessName?: string;
   }>();
   const router = useRouter();
   const { login, registerAccount, redirectAfterLogin } = useAuth() as any;
+  const { setInitialCountry } = useUserLocation();
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -151,23 +152,49 @@ export default function VerifyOTPScreen() {
           redirectAfterLogin(response.user);
         }
       } else if (context === 'customer-registration') {
-        if (!contact || !password) {
+        if (!contact) {
           setError('Missing registration data');
           setIsVerifying(false);
           return;
         }
 
+        let pendingData: any = null;
+        try {
+          const stored = await AsyncStorage.getItem(PENDING_CUSTOMER_REG_KEY);
+          if (stored) pendingData = JSON.parse(stored);
+        } catch (e) {
+          console.error('[AUTH FLOW] Failed to load pending customer reg data:', e);
+        }
+
+        if (!pendingData) {
+          setError('Your registration details were lost. Please start again.');
+          setIsVerifying(false);
+          return;
+        }
+
         console.log('[AUTH FLOW] Registering customer account');
-        const response = await registerAccount({
-          identifier: contact,
-          password: password,
-          role: 'customer',
-        });
+        const response = await registerAccount(pendingData);
 
         if (!response.success) {
           setError(response.error || 'Registration failed');
           setIsVerifying(false);
           return;
+        }
+
+        await AsyncStorage.removeItem(PENDING_CUSTOMER_REG_KEY).catch(() => {});
+
+        // Carry the location they just gave us into UserLocationContext. It
+        // only ever read AsyncStorage, so without this a customer who had
+        // just picked country, state and area landed on the home screen and
+        // was immediately asked to "Select your country" all over again.
+        const loc = pendingData.location;
+        if (loc?.countryCode) {
+          await setInitialCountry(
+            loc.countryCode,
+            loc.stateCode || undefined,
+            undefined,
+            loc.areaName || undefined,
+          );
         }
 
         /**
@@ -186,37 +213,28 @@ export default function VerifyOTPScreen() {
         console.log('[AUTH FLOW] Customer registration successful → home (profile already complete)');
         router.replace('/customer' as any);
       } else if (context === 'vendor-registration') {
-        if (!contact || !password) {
+        if (!contact) {
           setError('Missing registration data');
           setIsVerifying(false);
           return;
         }
 
-        let pendingData: any = {};
+        let pendingData: any = null;
         try {
           const stored = await AsyncStorage.getItem(PENDING_VENDOR_REG_KEY);
-          if (stored) {
-            pendingData = JSON.parse(stored);
-            console.log('[AUTH FLOW] Loaded pending vendor reg data:', pendingData.businessName);
-          }
+          if (stored) pendingData = JSON.parse(stored);
         } catch (e) {
           console.error('[AUTH FLOW] Failed to load pending vendor reg data:', e);
         }
 
+        if (!pendingData) {
+          setError('Your registration details were lost. Please start again.');
+          setIsVerifying(false);
+          return;
+        }
+
         console.log('[AUTH FLOW] Registering vendor account');
-        const response = await registerAccount({
-          identifier: contact,
-          password: password,
-          role: 'vendor',
-          businessName: pendingData.businessName || businessName || '',
-          plan: 'basic',
-          fullName: pendingData.fullName || '',
-          categoryId: pendingData.categoryId || '',
-          categoryName: pendingData.categoryName || '',
-          country: pendingData.country || '',
-          state: pendingData.state || '',
-          area: pendingData.area || '',
-        });
+        const response = await registerAccount(pendingData);
 
         if (!response.success) {
           setError(response.error || 'Registration failed');
@@ -226,8 +244,12 @@ export default function VerifyOTPScreen() {
 
         await AsyncStorage.removeItem(PENDING_VENDOR_REG_KEY).catch(() => {});
 
-        console.log('[AUTH FLOW] Vendor registration successful → redirecting to setup complete');
-        router.replace('/vendor-setup-complete' as any);
+        // Matches what register/vendor.tsx itself did before OTP verification
+        // sat between it and this point — not routing through
+        // vendor-setup-complete, which updates VendorContext's local-only
+        // state rather than the real backend record, a separate existing gap.
+        console.log('[AUTH FLOW] Vendor registration successful → vendor dashboard');
+        router.replace('/vendor/(tabs)/dashboard' as any);
       }
     } catch (err) {
       console.error('Verification error:', err);

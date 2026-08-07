@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { ScrollView } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { getChatByOrderId, ContactCardData, ReplyToData, ChatMessage } from '@/mocks/chatData';
 import { mockOrders } from '@/mocks/ordersData';
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
@@ -149,12 +150,35 @@ export const useVendorOrderChat = (orderId: string) => {
     ? getStableColor(order.customerName)
     : Colors.textSecondary;
 
+  /**
+   * Reads the vendor's real quick replies (same `vendors/{vendorId}/quickReplies`
+   * collection the settings screen manages) rather than the shared, per-device
+   * AsyncStorage key this used to read — that key stopped being written once
+   * the settings screen was pointed at the backend, so this would otherwise
+   * always show stale or empty results.
+   */
   const loadQuickReplies = async () => {
     try {
-      const stored = await AsyncStorage.getItem('quickReplies');
-      if (stored) {
-        setQuickReplies(JSON.parse(stored));
-      }
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdTokenResult();
+      const vendorId = token.claims.vendorId as string | undefined;
+      if (!vendorId) return;
+
+      const snap = await getDocs(
+        query(collection(db, 'vendors', vendorId, 'quickReplies'), orderBy('sortOrder', 'asc')),
+      );
+      setQuickReplies(
+        snap.docs.map((d) => {
+          const data = d.data();
+          const shortcutRaw = String(data.shortcut ?? '');
+          return {
+            id: d.id,
+            shortcut: shortcutRaw.startsWith('/') ? shortcutRaw.slice(1) : shortcutRaw,
+            message: (data.message as string) ?? '',
+          };
+        }),
+      );
     } catch (error) {
       console.error('Failed to load quick replies:', error);
     }
