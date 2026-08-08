@@ -8,7 +8,7 @@ import {
   TextInput,
   FlatList,
 } from 'react-native';
-import { ChevronDown, Search, Check, MapPin } from 'lucide-react-native';
+import { ChevronDown, Search, Check, MapPin, Lock } from 'lucide-react-native';
 import type { CountryInfo } from '@/constants/countries';
 import { getStateLabel } from '@/constants/states';
 import type { StateInfo } from '@/constants/states';
@@ -69,6 +69,12 @@ interface LocationCascadeFieldsProps {
    * Used by vendor signup, where country is needed immediately (currency,
    * pricing, availability) but the finer location is deferred to onboarding. */
   countryOnly?: boolean;
+  /** Shows the country as a fixed, non-editable row while leaving state and
+   * area selectable — the mirror of countryOnly, for the onboarding step that
+   * completes what signup deliberately left blank. Country is locked because
+   * currency, plan pricing and country availability were all resolved from it
+   * when the account was created; state and area carry none of that. */
+  lockCountry?: boolean;
 }
 
 /**
@@ -103,6 +109,7 @@ export default function LocationCascadeFields({
   disabled = false,
   testIDPrefix = 'location',
   countryOnly = false,
+  lockCountry = false,
 }: LocationCascadeFieldsProps) {
   const catalogue = useLocationCatalogue();
 
@@ -276,8 +283,8 @@ export default function LocationCascadeFields({
         <TouchableOpacity
           style={[styles.selectorButton, errors?.country ? styles.inputError : null]}
           onPress={() => setShowCountryModal(true)}
-          activeOpacity={0.7}
-          disabled={disabled}
+          activeOpacity={lockCountry ? 1 : 0.7}
+          disabled={disabled || lockCountry}
           testID={`${testIDPrefix}-country`}
         >
           {selectedCountry ? (
@@ -288,7 +295,11 @@ export default function LocationCascadeFields({
           ) : (
             <Text style={styles.selectorPlaceholder}>Select your country</Text>
           )}
-          <ChevronDown size={20} color="#9CA3AF" strokeWidth={2} />
+          {lockCountry ? (
+            <Lock size={16} color="#9CA3AF" strokeWidth={2} />
+          ) : (
+            <ChevronDown size={20} color="#9CA3AF" strokeWidth={2} />
+          )}
         </TouchableOpacity>
         {errors?.country ? <Text style={styles.errorText}>{errors.country}</Text> : null}
       </View>

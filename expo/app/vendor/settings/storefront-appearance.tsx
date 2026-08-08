@@ -8,16 +8,21 @@ import {
   TextInput,
   Image,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Upload, X, AlertCircle, Info, CheckCircle2, ChevronRight, Eye, Globe, Instagram } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import Toast from '@/components/Toast';
 import { Colors } from '@/constants/colors';
 import { useVendor } from '@/contexts/VendorContext';
 import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
 import DiscardChangesModal from '@/components/DiscardChangesModal';
 import EditScreenHeader from '@/components/EditScreenHeader';
+import { uploadStorefrontImage } from '@/lib/storefront/uploadStorefrontImage';
+import { callable } from '@/lib/firebase';
+import { Alert } from '@/utils/alert';
 
 // ─── Completion bar ───────────────────────────────────────────────────────────
 
@@ -167,6 +172,9 @@ export default function StorefrontAppearanceScreen() {
   const [instagram, setInstagram] = useState(vendor.contactLinks?.instagram ?? '');
   const [tiktok, setTiktok] = useState(vendor.contactLinks?.tiktok ?? '');
   const [showToast, setShowToast] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const unsavedChanges = useUnsavedChanges(
     { storeDescription, website, instagram, tiktok, storeLogo, storeBanner },
@@ -187,28 +195,116 @@ export default function StorefrontAppearanceScreen() {
     router.back();
   };
 
-  const handleSave = useCallback(() => {
-    updateVendor({
-      logoImage: storeLogo ?? undefined,
-      bannerImage: storeBanner ?? undefined,
-      description: storeDescription,
-      contactLinks: {
-        ...vendor.contactLinks,
-        website: website.trim() || undefined,
-        instagram: instagram.trim() || undefined,
-        tiktok: tiktok.trim() || undefined,
-      },
-    });
-    setShowToast(true);
-  }, [storeLogo, storeBanner, storeDescription, website, instagram, tiktok, vendor.contactLinks, updateVendor]);
+  /**
+   * This wrote everything through VendorContext.updateVendor, which only
+   * touches AsyncStorage — so the logo, banner, description and links never
+   * reached vendors/{vendorId} and were wiped by the next snapshot from the
+   * live listener. Customers never saw any of it. updateVendorStorefront is
+   * the real write path; local state is still updated so the screen reflects
+   * the save immediately rather than waiting on the listener round trip.
+   */
+  const handleSave = useCallback(async () => {
+    if (uploadingLogo || uploadingBanner) {
+      Alert.alert('Still uploading', 'Wait for the image upload to finish before saving.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const update = callable<
+        {
+          logoUrl: string | null;
+          coverImageUrl: string | null;
+          description: string;
+          contactLinks: { website: string | null; instagram: string | null; tiktok: string | null };
+        },
+        { success: true }
+      >('updateVendorStorefront');
+      await update({
+        logoUrl: storeLogo ?? null,
+        coverImageUrl: storeBanner ?? null,
+        description: storeDescription.trim(),
+        contactLinks: {
+          website: website.trim() || null,
+          instagram: instagram.trim() || null,
+          tiktok: tiktok.trim() || null,
+        },
+      });
+      updateVendor({
+        logoImage: storeLogo ?? undefined,
+        bannerImage: storeBanner ?? undefined,
+        description: storeDescription,
+        contactLinks: {
+          ...vendor.contactLinks,
+          website: website.trim() || undefined,
+          instagram: instagram.trim() || undefined,
+          tiktok: tiktok.trim() || undefined,
+        },
+      });
+      unsavedChanges.resetChanges();
+      setShowToast(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not save your storefront.';
+      Alert.alert('Could not save', message);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [storeLogo, storeBanner, storeDescription, website, instagram, tiktok, vendor.contactLinks, updateVendor, uploadingLogo, uploadingBanner, unsavedChanges]);
 
-  const handleUploadLogo = () => {
-    setStoreLogo('https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=200&h=200&fit=crop');
+  /**
+   * These two used to assign a hardcoded Unsplash stock photo — no picker
+   * ever opened, so tapping "Upload Logo" simply put someone else's
+   * photograph on the vendor's storefront and gave them no way to choose
+   * their own image. Now it picks from the library and uploads to the
+   * vendorMedia path the Storage rules allow.
+   */
+  const pickAndUpload = async (kind: 'logo' | 'banner') => {
+    const setLocal = kind === 'logo' ? setStoreLogo : setStoreBanner;
+    const setUploading = kind === 'logo' ? setUploadingLogo : setUploadingBanner;
+    const previous = kind === 'logo' ? storeLogo : storeBanner;
+
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Photo access needed',
+          `Allow photo library access in Settings to upload a ${kind}.`,
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        // A logo is shown in a circle/square; a banner is a wide header.
+        aspect: kind === 'logo' ? [1, 1] : [16, 6],
+        quality: 0.85,
+      });
+      if (result.canceled || !result.assets?.length) return;
+
+      // Shown from the local uri first so the preview is immediate, then
+      // replaced with the uploaded URL — a file:// uri means nothing to a
+      // customer's device and the backend rejects it.
+      const localUri = result.assets[0].uri;
+      setLocal(localUri);
+      try {
+        setUploading(true);
+        const url = await uploadStorefrontImage(localUri, kind);
+        setLocal(url);
+      } catch (error) {
+        setLocal(previous);
+        const message = error instanceof Error ? error.message : 'Please try again.';
+        Alert.alert(`${kind === 'logo' ? 'Logo' : 'Banner'} upload failed`, message);
+      } finally {
+        setUploading(false);
+      }
+    } catch (e) {
+      console.error(`[StorefrontAppearance] ${kind} upload failed`, e);
+      Alert.alert('Upload failed', 'Could not pick that image. Please try again.');
+    }
   };
 
-  const handleUploadBanner = () => {
-    setStoreBanner('https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&h=300&fit=crop');
-  };
+  const handleUploadLogo = () => { void pickAndUpload('logo'); };
+  const handleUploadBanner = () => { void pickAndUpload('banner'); };
 
   const charCount = storeDescription.length;
   const charOver = charCount > 260;
@@ -221,7 +317,7 @@ export default function StorefrontAppearanceScreen() {
           title="Storefront Appearance"
           onBack={handleBackPress}
           onSave={handleSave}
-          saveEnabled={unsavedChanges.hasUnsavedChanges}
+          saveEnabled={unsavedChanges.hasUnsavedChanges && !isSaving && !uploadingLogo && !uploadingBanner}
         />
       </SafeAreaView>
 
@@ -276,12 +372,21 @@ export default function StorefrontAppearanceScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity style={styles.uploadArea} onPress={handleUploadLogo} activeOpacity={0.7}>
+              <TouchableOpacity
+                style={styles.uploadArea}
+                onPress={handleUploadLogo}
+                activeOpacity={0.7}
+                disabled={uploadingLogo}
+              >
                 <View style={[styles.uploadIconBox, styles.uploadIconBoxRed]}>
-                  <Upload size={20} color={Colors.error} strokeWidth={1.8} />
+                  {uploadingLogo ? (
+                    <ActivityIndicator size="small" color={Colors.error} />
+                  ) : (
+                    <Upload size={20} color={Colors.error} strokeWidth={1.8} />
+                  )}
                 </View>
                 <View style={styles.uploadText}>
-                  <Text style={styles.uploadPrimary}>Upload Logo</Text>
+                  <Text style={styles.uploadPrimary}>{uploadingLogo ? 'Uploading…' : 'Upload Logo'}</Text>
                   <Text style={styles.uploadSub}>Square image · Required to go live</Text>
                 </View>
               </TouchableOpacity>
@@ -310,12 +415,21 @@ export default function StorefrontAppearanceScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity style={styles.uploadArea} onPress={handleUploadBanner} activeOpacity={0.7}>
+              <TouchableOpacity
+                style={styles.uploadArea}
+                onPress={handleUploadBanner}
+                activeOpacity={0.7}
+                disabled={uploadingBanner}
+              >
                 <View style={[styles.uploadIconBox, styles.uploadIconBoxAmber]}>
-                  <Upload size={20} color={Colors.warning} strokeWidth={1.8} />
+                  {uploadingBanner ? (
+                    <ActivityIndicator size="small" color={Colors.warning} />
+                  ) : (
+                    <Upload size={20} color={Colors.warning} strokeWidth={1.8} />
+                  )}
                 </View>
                 <View style={styles.uploadText}>
-                  <Text style={styles.uploadPrimary}>Upload Banner</Text>
+                  <Text style={styles.uploadPrimary}>{uploadingBanner ? 'Uploading…' : 'Upload Banner'}</Text>
                   <Text style={styles.uploadSub}>Wide image · Optional</Text>
                 </View>
               </TouchableOpacity>

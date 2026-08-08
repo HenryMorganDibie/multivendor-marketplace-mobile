@@ -89,6 +89,18 @@ export function mapVendorDoc(id: string, data: Record<string, unknown>): Vendor 
     bannerImage: (data.coverImageUrl as string) ?? undefined,
     description: (data.description as string) ?? undefined,
 
+    // Written by updateVendorStorefront. Missing here meant a vendor's saved
+    // website/Instagram/TikTok never came back out of the document — the
+    // storefront-appearance fields reset to empty on every load, and the
+    // links never reached the customer-facing storefront.
+    contactLinks: (data.contactLinks as Record<string, string | null> | undefined)
+      ? {
+          website: (data.contactLinks as Record<string, string | null>).website ?? undefined,
+          instagram: (data.contactLinks as Record<string, string | null>).instagram ?? undefined,
+          tiktok: (data.contactLinks as Record<string, string | null>).tiktok ?? undefined,
+        }
+      : undefined,
+
     fulfillmentTypes,
     // The booleans and the array say the same thing; both are kept because
     // different screens read different ones.
