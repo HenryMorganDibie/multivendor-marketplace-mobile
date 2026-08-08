@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useSegments } from 'expo-router';
 import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth as firebaseAuth, db as firestore, callable } from '@/lib/firebase';
 import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 import { VendorPlan } from './VendorPlanContext';
@@ -223,6 +223,15 @@ async function buildSessionFromBackend(uid: string, identifier: string): Promise
   }
 
   const onboarding = (data.onboarding ?? {}) as { completed?: boolean };
+  // Name lives under the nested `profile` map — the only place a client-side
+  // write can put it, since firestore.rules' userUpdateAllowed() only
+  // allowlists `profile`/`onboarding` (plus a few others) for self-writes on
+  // users/{uid}, not top-level firstName/lastInitial fields. This used to be
+  // read as data.firstName directly, which was always undefined here (that
+  // field was never written to Firestore by anything), so every fresh
+  // session — new device, cleared storage, a fully expired token — sent an
+  // already-completed profile straight back to /complete-profile.
+  const profile = (data.profile ?? {}) as { firstName?: string; lastInitial?: string; lastName?: string };
 
   return {
     ok: true,
@@ -234,7 +243,13 @@ async function buildSessionFromBackend(uid: string, identifier: string): Promise
       // actually authorised against.
       role: claimRole ?? ((data.role as UserRole) ?? 'customer'),
       status,
+      firstName: profile.firstName,
+      lastInitial: profile.lastInitial,
+      lastName: profile.lastName,
+      // Both spellings: other call sites in this file keep them in sync, and
+      // the route guard's profileComplete check reads the 'Completed' one.
       onboardingComplete: onboarding.completed === true,
+      onboardingCompleted: onboarding.completed === true,
       authProvider: 'email' as AuthProvider,
       vendorId: (data.vendorId as string) ?? undefined,
     } as User,
@@ -372,13 +387,18 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         }
 
         const onboarding = (data.onboarding ?? {}) as { completed?: boolean };
+        const profile = (data.profile ?? {}) as { firstName?: string; lastInitial?: string; lastName?: string };
         const refreshed = {
           id: fbUser.uid,
           identifier: fbUser.email ?? '',
           email: (data.email as string) ?? fbUser.email ?? '',
           role: (token.claims.role as UserRole) ?? ((data.role as UserRole) ?? 'customer'),
           status,
+          firstName: profile.firstName,
+          lastInitial: profile.lastInitial,
+          lastName: profile.lastName,
           onboardingComplete: onboarding.completed === true,
+          onboardingCompleted: onboarding.completed === true,
           authProvider: 'email' as AuthProvider,
           vendorId: (data.vendorId as string) ?? undefined,
         } as User;
@@ -1312,6 +1332,35 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     if (accountIndex !== -1) {
       accounts[accountIndex] = { ...accounts[accountIndex], ...updates };
       await saveAccountsDb(accounts);
+    }
+
+    /**
+     * This used to be local-only (AsyncStorage + the mock accounts array
+     * above), never Firestore. buildSessionFromBackend reads firstName from
+     * users/{uid}.profile — never wrote here — so onboardingCompleted (and
+     * the display name) only ever "stuck" for the current in-memory
+     * session; a fresh session (new device, cleared storage, an expired
+     * token forcing re-auth) always read firstName as undefined and sent an
+     * already-onboarded user straight back to /complete-profile.
+     *
+     * Nested under `profile`/`onboarding`, not top-level fields — that's
+     * what firestore.rules' userUpdateAllowed() actually allowlists for a
+     * user's self-write to their own users/{uid} doc.
+     */
+    if (firebaseAuth.currentUser) {
+      const firestoreUpdates: Record<string, unknown> = {};
+      if (updates.firstName !== undefined) firestoreUpdates['profile.firstName'] = updates.firstName;
+      if (updates.lastInitial !== undefined) firestoreUpdates['profile.lastInitial'] = updates.lastInitial;
+      if (updates.lastName !== undefined) firestoreUpdates['profile.lastName'] = updates.lastName;
+      if (updates.onboardingCompleted !== undefined) firestoreUpdates['onboarding.completed'] = updates.onboardingCompleted;
+
+      if (Object.keys(firestoreUpdates).length > 0) {
+        try {
+          await updateDoc(doc(firestore, 'users', currentUser.id), firestoreUpdates);
+        } catch (error) {
+          console.error('[AUTH] Failed to persist profile update to Firestore:', error);
+        }
+      }
     }
 
     // Keep the canonical customer location store in sync when location is updated.

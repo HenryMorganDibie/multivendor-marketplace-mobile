@@ -15,6 +15,8 @@ import { Colors } from '@/constants/colors';
 import LaektivaModal from '@/components/LaektivaModal';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { useVendor } from '@/contexts/VendorContext';
+import { callable } from '@/lib/firebase';
+import { Alert } from '@/utils/alert';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -125,16 +127,31 @@ export default function BusinessLocationScreen() {
     setShowConfirmModal(true);
   };
 
-  const confirmAreaChange = () => {
+  const [isSavingArea, setIsSavingArea] = useState(false);
+
+  const confirmAreaChange = async () => {
     if (!selectedArea) return;
-    setCurrentLocation(prev => ({
-      ...prev,
-      area: selectedArea.name,
-      state: selectedArea.state,
-    }));
-    setShowConfirmModal(false);
-    setLastAreaChange(new Date());
-    setSelectedArea(null);
+    setIsSavingArea(true);
+    try {
+      const update = callable<
+        { country: string; state: string; area: string },
+        { success: true }
+      >('updateVendorLocation');
+      await update({ country: currentLocation.country, state: selectedArea.state, area: selectedArea.name });
+      setCurrentLocation(prev => ({
+        ...prev,
+        area: selectedArea.name,
+        state: selectedArea.state,
+      }));
+      setShowConfirmModal(false);
+      setLastAreaChange(new Date());
+      setSelectedArea(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not update your business area.';
+      Alert.alert('Could not save', message);
+    } finally {
+      setIsSavingArea(false);
+    }
   };
 
   const getDaysUntilAreaChange = () => {

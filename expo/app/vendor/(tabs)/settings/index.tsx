@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import type { VendorPlan } from '@/contexts/VendorPlanContext';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronRight } from 'lucide-react-native';
 import { useVendorFulfillment } from '@/contexts/VendorFulfillmentContext';
@@ -244,35 +243,6 @@ export default function VendorSettingsScreen() {
           </View>
         </View>
 
-        {__DEV__ && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>DEV TOOLS</Text>
-            <View style={styles.glassCard}>
-              <View style={styles.devToolsRow}>
-                <Text style={styles.devToolsLabel}>Subscription Plan</Text>
-                <View style={styles.devToolsPills}>
-                  {(['basic', 'pro', 'pro+'] as VendorPlan[]).map((p) => (
-                    <TouchableOpacity
-                      key={p}
-                      style={[
-                        styles.devPill,
-                        plan === p && styles.devPillActive,
-                      ]}
-                      onPress={() => {
-                        void vendorPlanActions.updatePlan(p);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.devPillText, plan === p && styles.devPillTextActive]}>
-                        {p === 'pro+' ? 'Pro+' : p.charAt(0).toUpperCase() + p.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            </View>
-          </View>
-        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>LEGAL</Text>

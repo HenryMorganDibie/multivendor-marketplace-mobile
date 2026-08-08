@@ -25,10 +25,11 @@ import { callable } from '@/lib/firebase';
 
 export default function ChangeUsernameScreen() {
   const router = useRouter();
-  const { 
-    setUsername, 
-    username: currentUsername, 
+  const {
+    setUsername,
+    username: currentUsername,
     plan,
+    isPlanConfirmed,
     getUsernameChangeEligibility,
   } = useVendorPlan();
   
@@ -47,14 +48,18 @@ export default function ChangeUsernameScreen() {
   const eligibility = getUsernameChangeEligibility();
 
   useEffect(() => {
-    if (plan === 'basic') {
+    // Wait for the real backend-confirmed plan before judging — plan starts
+    // as 'basic' before getSubscriptionStatus resolves, and firing this on
+    // that default incorrectly showed "Upgrade Required" to Standard+/Pro
+    // vendors for the moment before their real plan arrived.
+    if (isPlanConfirmed && plan === 'basic') {
       Alert.alert(
         'Upgrade Required',
         'Username changes are available on Standard and above plans.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     }
-  }, [plan]);
+  }, [plan, isPlanConfirmed]);
 
   /**
    * Availability is decided by the server.

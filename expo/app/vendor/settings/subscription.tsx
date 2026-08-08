@@ -45,6 +45,7 @@ export default function SubscriptionPlanScreen() {
     cancellationScheduled,
     cancellationDate,
     scheduleCancellation,
+    subscriptionReason,
   } = useVendorPlan();
 
   const { width: screenWidth } = useWindowDimensions();
@@ -53,9 +54,16 @@ export default function SubscriptionPlanScreen() {
 
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Dev-only preview of payment-failed / grace / past-due states. Defaults to
-  // 'ok'. In production Henry's backend drives paymentStatus directly.
-  const [paymentStatusOverride] = useState<PaymentStatus>('ok');
+
+  // Was a hardcoded 'ok' with no setter ever called — a vendor whose
+  // subscription was genuinely in grace_period or past_due (real backend
+  // reason from getSubscriptionStatus) would always see "payment status: ok"
+  // here, hiding an actual billing problem from them.
+  const paymentStatusOverride: PaymentStatus = useMemo(() => {
+    if (subscriptionReason === 'grace_period') return 'grace';
+    if (subscriptionReason === 'expired_or_other') return 'past_due';
+    return 'ok';
+  }, [subscriptionReason]);
 
   const subscription = useMemo(
     () =>

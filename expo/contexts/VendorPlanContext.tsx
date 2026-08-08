@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { generateSystemUsername } from '@/utils/usernameValidation';
 import { subscriptionRepository } from '@/services/repositories/subscriptionRepository';
-import { callable } from '@/lib/firebase';
+import { callable, auth } from '@/lib/firebase';
 
 export type VendorPlan = 'basic' | 'standard' | 'pro' | 'pro+';
 
@@ -36,6 +36,17 @@ interface UsernameChangeRecord {
   newUsername: string;
 }
 
+/** Mirrors resolveEffectivePlan's `reason` union on the backend. */
+export type SubscriptionReason =
+  | 'vendor_suspended'
+  | 'admin_override'
+  | 'active'
+  | 'trialing'
+  | 'grace_period'
+  | 'cancelled_before_period_end'
+  | 'no_subscription'
+  | 'expired_or_other';
+
 interface VendorPlanData {
   plan: VendorPlan;
   businessCountry: BusinessCountry;
@@ -47,6 +58,7 @@ interface VendorPlanData {
   usernameSelectionPending: boolean;
   founderPricingEligible: boolean;
   usernameChangeHistory: UsernameChangeRecord[];
+  subscriptionReason: SubscriptionReason;
 }
 
 const VENDOR_PLAN_STORAGE_KEY = '@the platform_vendor_plan';
@@ -63,18 +75,45 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
     usernameSelectionPending: false,
     founderPricingEligible: true,
     usernameChangeHistory: [],
+    subscriptionReason: 'no_subscription',
   });
   const [isLoading, setIsLoading] = useState(true);
+  // True until the first real getSubscriptionStatus response lands (success
+  // or failure). Separate from isLoading, which only covers the local-cache
+  // read: a screen that gates a paid-plan-only action (e.g.
+  // change-username.tsx's "Upgrade Required" check) needs to know the
+  // *plan* is confirmed, not just that local storage finished loading —
+  // isLoading can already be false while a sign-in-triggered
+  // refreshSubscriptionStatus() is still in flight, which was exactly the
+  // gap that let that screen fire its upgrade-required alert against the
+  // stale 'basic' default before the real 'pro' plan arrived a moment later.
+  const [isPlanConfirmed, setIsPlanConfirmed] = useState(false);
 
   useEffect(() => {
     loadPlan();
   }, []);
 
+  // loadPlan's initial refreshSubscriptionStatus() call fires at app boot,
+  // before a signed-out visitor has authenticated — it fails harmlessly
+  // ("Sign in required") and never runs again, since the effect above has an
+  // empty dependency array. Without this, a fresh sign-in on an already-
+  // mounted app (the common case: the provider tree mounts once on the
+  // /login screen itself) would leave plan-gated UI stuck on whatever it
+  // resolved to pre-auth — 'basic' — until something else happened to
+  // refetch it. This is what actually re-fetches on the real sign-in.
+  useEffect(() => {
+    const unsubscribe = auth.onIdTokenChanged((user) => {
+      if (user) void refreshSubscriptionStatus();
+    });
+    return unsubscribe;
+  }, []);
+
   const loadPlan = async () => {
     try {
-      // Read path flows through the service/repository stack so Henry can repoint
-      // it at Firestore `vendorSubscriptions/{vendorId}` later. The context stays
-      // the live, reactive source and owns all write/upgrade logic.
+      // Local fields only (username, businessCountry, branding) — plan itself
+      // is overwritten immediately after by refreshSubscriptionStatus below.
+      // Kept as a cache so username/country render instantly on launch rather
+      // than waiting on a network round trip.
       const data = (await subscriptionRepository.read()) as VendorPlanData | null;
       if (data) {
         if (data.plan === 'basic' && !data.systemGeneratedUsername && !data.username) {
@@ -84,7 +123,7 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
           data.username = generatedUsername;
           await AsyncStorage.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify(data));
         }
-        
+
         setPlanData(data);
       } else {
         const generatedUsername = generateSystemUsername();
@@ -100,25 +139,62 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
     } catch (error) {
       console.error('Failed to load vendor plan:', error);
     } finally {
+      await refreshSubscriptionStatus();
       setIsLoading(false);
     }
   };
 
-  const updatePlan = async (newPlan: VendorPlan) => {
+  /**
+   * The actual fix for the AsyncStorage-only plan bug described in
+   * frontend-subscription-alignment-scope.md Section 8: `plan` was locally
+   * mutable and defaulted to 'basic' with no connection to
+   * vendorSubscriptions/{vendorId}, the document every backend-gated Cloud
+   * Function actually reads (resolveEffectivePlan). A vendor could "upgrade"
+   * for free on their own device while the backend still enforced Basic —
+   * or a vendor who genuinely paid would still see Basic-gated UI forever.
+   *
+   * This is the read-side fix only. Full checkout/cancellation UI states
+   * (awaiting-webhook, grace period, pending downgrade banners, etc. — see
+   * the design doc Section 8) are a separately-scoped follow-up; this closes
+   * the billing-bypass and stale-plan-display bugs, which is the part that
+   * actually matters for correctness tonight.
+   */
+  const refreshSubscriptionStatus = async () => {
     try {
-      const wasBasic = planData.plan === 'basic';
-      const isUpgrading = wasBasic && (newPlan === 'standard' || newPlan === 'pro' || newPlan === 'pro+');
-      
-      const updated = { 
-        ...planData, 
-        plan: newPlan,
-        usernameSelectionPending: isUpgrading ? true : planData.usernameSelectionPending,
-      };
-      await AsyncStorage.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify(updated));
-      setPlanData(updated);
+      const getStatus = callable<
+        Record<string, never>,
+        {
+          effectivePlan: BackendPlanTier;
+          reason: SubscriptionReason;
+          subscription: { currentPeriodEnd?: { toDate?: () => Date } } | null;
+        }
+      >('getSubscriptionStatus');
+      const res = await getStatus({});
+      const newPlan = fromBackendPlanTier(res.data.effectivePlan);
+
+      setPlanData((prev) => {
+        const wasBasic = prev.plan === 'basic';
+        const isUpgrading = wasBasic && newPlan !== 'basic';
+        const cancellationScheduled = res.data.reason === 'cancelled_before_period_end';
+        const periodEnd = res.data.subscription?.currentPeriodEnd?.toDate?.();
+        const updated: VendorPlanData = {
+          ...prev,
+          plan: newPlan,
+          subscriptionReason: res.data.reason,
+          cancellationScheduled,
+          cancellationDate: cancellationScheduled && periodEnd ? periodEnd.toISOString() : null,
+          usernameSelectionPending: isUpgrading ? true : prev.usernameSelectionPending,
+        };
+        void AsyncStorage.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
     } catch (error) {
-      console.error('Failed to update plan:', error);
-      throw error;
+      // No vendorSubscriptions doc yet ("no_subscription") is the normal
+      // state for a Basic vendor, not an error worth surfacing — the local
+      // 'basic' default already matches. Only genuine failures get logged.
+      console.error('[VENDOR_PLAN] Failed to refresh subscription status:', error);
+    } finally {
+      setIsPlanConfirmed(true);
     }
   };
 
@@ -135,15 +211,9 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
 
   const scheduleCancellation = async () => {
     try {
-      const cancellationDate = new Date();
-      cancellationDate.setDate(cancellationDate.getDate() + 30);
-      const updated = { 
-        ...planData, 
-        cancellationScheduled: true,
-        cancellationDate: cancellationDate.toISOString(),
-      };
-      await AsyncStorage.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify(updated));
-      setPlanData(updated);
+      const cancel = callable<Record<string, never>, { success: true }>('cancelSubscription');
+      await cancel({});
+      await refreshSubscriptionStatus();
     } catch (error) {
       console.error('Failed to schedule cancellation:', error);
       throw error;
@@ -152,13 +222,9 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
 
   const cancelScheduledCancellation = async () => {
     try {
-      const updated = { 
-        ...planData, 
-        cancellationScheduled: false,
-        cancellationDate: null,
-      };
-      await AsyncStorage.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify(updated));
-      setPlanData(updated);
+      const reactivate = callable<Record<string, never>, { success: true }>('reactivateSubscription');
+      await reactivate({});
+      await refreshSubscriptionStatus();
     } catch (error) {
       console.error('Failed to cancel scheduled cancellation:', error);
       throw error;
@@ -292,8 +358,10 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
     usernameSelectionPending: planData.usernameSelectionPending,
     founderPricingEligible: planData.founderPricingEligible,
     usernameChangeHistory: planData.usernameChangeHistory,
+    subscriptionReason: planData.subscriptionReason,
     isLoading,
-    updatePlan,
+    isPlanConfirmed,
+    refreshSubscriptionStatus,
     toggleBranding,
     scheduleCancellation,
     cancelScheduledCancellation,

@@ -45,14 +45,10 @@ export const subscriptionService = {
     return toBackendPlanTier(tier);
   },
 
-  /** Updates the subscription tier. TODO(Henry): drive via billing/IAP webhook. */
-  async setTier(tier: SubscriptionTier): Promise<void> {
-    const data = (await subscriptionRepository.read()) ?? {};
-    await subscriptionRepository.write({ ...data, plan: tier });
-  },
-
-  /** Accepts a backend-canonical tier and stores it as the internal label. */
-  async setBackendTier(tier: BackendPlanTier): Promise<void> {
-    await this.setTier(fromBackendPlanTier(tier));
-  },
+  // setTier()/setBackendTier() were removed: they wrote a plan tier straight
+  // to local storage with no backend involved at all — a vendor's own device
+  // could grant itself Pro+ for free. Plan can only change as a side effect
+  // of VendorPlanContext.refreshSubscriptionStatus() reading a real
+  // vendorSubscriptions/{vendorId} document (createSubscriptionCheckout +
+  // webhook). Nothing in the app called these two methods.
 };

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   useWindowDimensions,
+  Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useRouter } from 'expo-router';
@@ -13,6 +15,8 @@ import { Check, Zap, Star, Info } from 'lucide-react-native';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { Colors } from '@/constants/colors';
+import { callable } from '@/lib/firebase';
+import { Alert } from '@/utils/alert';
 import {
   resolveCatalogForCountry,
   getOrderedActivePlanIds,
@@ -42,10 +46,11 @@ export default function UpgradePlanScreen() {
     plan,
     businessCountry,
     founderPricingEligible: launchSaleEligible,
-    updatePlan,
+    refreshSubscriptionStatus,
   } = useVendorPlan();
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
+  const [checkingOutPlan, setCheckingOutPlan] = useState<PlanId | null>(null);
 
   // The entire catalog, resolved for this vendor's country + launch eligibility.
   // Every plan name, price, tagline, and feature below comes from this —
@@ -58,22 +63,44 @@ export default function UpgradePlanScreen() {
   const orderedPlanIds = useMemo(() => getOrderedActivePlanIds(), []);
   const currentPlanId: PlanId = plan === 'pro+' ? 'pro_plus' : (plan as PlanId);
 
+  /**
+   * This used to call the local-only updatePlan() and grant the plan
+   * instantly with zero payment — see frontend-subscription-alignment-scope.md
+   * Section 8. Real checkout now goes through createSubscriptionCheckout,
+   * which resolves the vendor's country/provider server-side and returns a
+   * hosted payment page. The plan does not change here: it only changes once
+   * refreshSubscriptionStatus sees the webhook-confirmed result, which is why
+   * this deliberately does not navigate to username selection immediately —
+   * that now happens the next time the vendor opens a screen that reads
+   * usernameSelectionPending, after the real upgrade has landed.
+   */
   const handleUpgrade = useCallback(async (backendPlanId: PlanId) => {
+    if (backendPlanId === 'basic') return;
+    setCheckingOutPlan(backendPlanId);
     try {
-      const newPlan = fromBackendPlanId(backendPlanId);
-      console.log('[UpgradePlan] Upgrading to:', newPlan);
-      const wasBasic = plan === 'basic';
-      await updatePlan(newPlan);
-      if (wasBasic) {
-        console.log('[UpgradePlan] Upgraded from Basic, redirecting to username selection');
-        router.replace('/vendor/settings/select-username');
-      } else {
-        router.back();
-      }
+      const planForCheckout = backendPlanId === 'pro_plus' ? 'pro_plus' : backendPlanId;
+      const checkout = callable<
+        { plan: string },
+        { success: true; authorizationUrl: string; reference: string }
+      >('createSubscriptionCheckout');
+      const res = await checkout({ plan: planForCheckout });
+      await Linking.openURL(res.data.authorizationUrl);
+      Alert.alert(
+        'Complete your payment',
+        'Finish payment in the page that just opened, then come back here — your plan updates automatically once payment is confirmed.',
+      );
+      // Best-effort immediate check in case the webhook already landed
+      // (fast providers/sandbox); otherwise the vendor's next visit to any
+      // plan-gated screen picks up the real status regardless.
+      await refreshSubscriptionStatus();
     } catch (error) {
-      console.error('[UpgradePlan] Failed to upgrade plan:', error);
+      console.error('[UpgradePlan] Failed to start checkout:', error);
+      const message = error instanceof Error ? error.message : 'Could not start checkout. Please try again.';
+      Alert.alert('Could not start checkout', message);
+    } finally {
+      setCheckingOutPlan(null);
     }
-  }, [plan, updatePlan, router]);
+  }, [refreshSubscriptionStatus]);
 
   const getPlanStatus = useCallback((planId: PlanId): 'current' | 'upgrade' | 'downgrade' => {
     if (planId === currentPlanId) return 'current';
@@ -233,12 +260,17 @@ export default function UpgradePlanScreen() {
                     </View>
                   ) : canUpgrade ? (
                     <TouchableOpacity
-                      style={[styles.upgradeBtn, isPopular && styles.upgradeBtnPopular]}
+                      style={[styles.upgradeBtn, isPopular && styles.upgradeBtnPopular, checkingOutPlan !== null && styles.upgradeBtnDisabled]}
                       onPress={() => handleUpgrade(planId)}
                       activeOpacity={0.8}
+                      disabled={checkingOutPlan !== null}
                       testID={`btn-upgrade-${planId}`}
                     >
-                      <Text style={styles.upgradeBtnText}>Upgrade to {resolved.name}</Text>
+                      {checkingOutPlan === planId ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                      ) : (
+                        <Text style={styles.upgradeBtnText}>Upgrade to {resolved.name}</Text>
+                      )}
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -530,6 +562,9 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: 12,
     alignItems: 'center' as const,
+  },
+  upgradeBtnDisabled: {
+    opacity: 0.6,
   },
   upgradeBtnPopular: {
     backgroundColor: ORANGE,
