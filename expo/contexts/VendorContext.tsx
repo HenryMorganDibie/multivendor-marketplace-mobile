@@ -11,6 +11,24 @@ type VendorContextType = {
   vendor: Vendor;
   updateVendor: (updates: Partial<Vendor>) => void;
   isLoading: boolean;
+  /**
+   * Whether `vendor` is this vendor's real record rather than the mockVendor
+   * placeholder it starts as.
+   *
+   * `vendor` defaults to the full mock business ("Spicy Restaurant",
+   * @spicyrest, Lekki) — realistic-looking data, not an obvious blank — so
+   * before the Firestore listener resolves, every screen reading it shows
+   * someone else's business as if it were the signed-in vendor's. Harmless
+   * for cosmetic fields, but not for identity: a storefront share link built
+   * from the mock username points customers at a different vendor's store
+   * entirely, which is exactly what happened on the storefront screen.
+   *
+   * Screens that show or act on vendor identity should gate on this. The
+   * default itself is left as-is deliberately: 83 screens read this context
+   * and assume the fields are populated, so swapping the default for an
+   * empty object is its own (larger) change.
+   */
+  isRealVendor: boolean;
 };
 
 const VendorContext = createContext<VendorContextType | undefined>(undefined);
@@ -108,7 +126,12 @@ export const VendorProvider = ({ children }: { children: React.ReactNode }) => {
     });
   }, []);
 
-  const value = useMemo(() => ({ vendor, updateVendor, isLoading }), [vendor, updateVendor, isLoading]);
+  const isRealVendor = vendor.id !== mockVendor.id && Boolean(vendor.username);
+
+  const value = useMemo(
+    () => ({ vendor, updateVendor, isLoading, isRealVendor }),
+    [vendor, updateVendor, isLoading, isRealVendor],
+  );
 
   return (
     <VendorContext.Provider value={value}>

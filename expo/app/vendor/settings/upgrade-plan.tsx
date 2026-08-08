@@ -70,9 +70,13 @@ export default function UpgradePlanScreen() {
    * which resolves the vendor's country/provider server-side and returns a
    * hosted payment page. The plan does not change here: it only changes once
    * refreshSubscriptionStatus sees the webhook-confirmed result, which is why
-   * this deliberately does not navigate to username selection immediately —
-   * that now happens the next time the vendor opens a screen that reads
-   * usernameSelectionPending, after the real upgrade has landed.
+   * this deliberately does not navigate to username selection immediately.
+   *
+   * Picking a custom username is left to Manage Account (available on
+   * Standard and above) rather than being force-prompted after checkout —
+   * inferring "just upgraded" from a plan change is what made every
+   * cold-cache sign-in redirect a paying vendor to /select-username. See the
+   * note in VendorPlanContext.refreshSubscriptionStatus.
    */
   const handleUpgrade = useCallback(async (backendPlanId: PlanId) => {
     if (backendPlanId === 'basic') return;

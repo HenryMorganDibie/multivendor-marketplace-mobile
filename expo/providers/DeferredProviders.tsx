@@ -1,4 +1,6 @@
 import React, { type ReactNode, useEffect, useState } from 'react';
+import { View } from 'react-native';
+import { Colors } from '@/constants/colors';
 import { VendorProviders } from './VendorProviders';
 import { CustomerProviders } from './CustomerProviders';
 import { DiscoveryProviders } from './DiscoveryProviders';
@@ -26,15 +28,35 @@ function DeferredVendorCustomerProviders({ children }: Props) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      const id = setTimeout(() => setMounted(true), 16);
-      return () => clearTimeout(id);
-    });
+    const frame = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(frame);
   }, []);
 
+  /**
+   * An empty backdrop for the one frame before the provider tree exists —
+   * NOT `children`.
+   *
+   * Rendering children here (what this did originally) meant every screen
+   * got one render pass with the entire Vendor/Customer provider tree
+   * absent. `createContextHook` returns undefined outside its provider, so
+   * any screen reading one of those ~28 contexts on first render crashed on
+   * the destructure — `Cannot destructure property 'externalOrders' of
+   * useExternalOrders(...) as it is undefined` — and took the whole screen
+   * down to a blank white page. Confirmed live on Business Insights
+   * (useExternalOrders) and vendor username selection (useVendorOnboarding),
+   * and it was latent for any other screen touching a deferred context
+   * during its first pass.
+   *
+   * The three providers hoisted into the eager tree below were each found
+   * this same way, one crash at a time. Gating the children instead fixes
+   * the whole class: no screen code runs until every provider it might read
+   * is mounted. The deferral still does its job — provider construction
+   * stays off the first frame, so the Rork preview's 6000ms budget is
+   * unaffected — and the visible cost is a single frame of background
+   * colour rather than a crash.
+   */
   if (!mounted) {
-    return <>{children}</>;
+    return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
   }
 
   return (

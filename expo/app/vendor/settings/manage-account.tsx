@@ -20,10 +20,16 @@ function maskPhone(phone: string): string {
 export default function ManageAccountScreen() {
   const router = useRouter();
   const { username, systemGeneratedUsername, plan, getUsernameChangeEligibility } = useVendorPlan();
-  const { vendor } = useVendor();
+  const { vendor, isRealVendor } = useVendor();
   const { user } = useAuth();
 
-  const displayUsername = username || systemGeneratedUsername || 'loading';
+  // The vendor doc is authoritative once it lands — VendorPlanContext's copy
+  // is a local cache that invents a system username on any device that
+  // didn't perform the signup itself. Gated on isRealVendor so this doesn't
+  // show the mock vendor's @spicyrest in the meantime. See the note in
+  // change-username.tsx.
+  const displayUsername =
+    (isRealVendor ? vendor.username : undefined) || username || systemGeneratedUsername || 'loading';
   const isSystemGenerated = plan === 'basic';
   const canEditUsername = plan !== 'basic';
   const eligibility = getUsernameChangeEligibility();

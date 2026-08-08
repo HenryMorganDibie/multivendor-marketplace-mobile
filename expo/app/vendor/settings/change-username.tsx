@@ -18,6 +18,7 @@ import { CheckCircle2, XCircle, Loader2, AlertCircle, Lock, ChevronLeft } from '
 import { validateUsername, formatUsername } from '@/utils/usernameValidation';
 import { mockVendors } from '@/mocks/vendorData';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
+import { useVendor } from '@/contexts/VendorContext';
 import LaektivaModal from '@/components/LaektivaModal';
 import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
 import EditScreenHeader from '@/components/EditScreenHeader';
@@ -27,11 +28,34 @@ export default function ChangeUsernameScreen() {
   const router = useRouter();
   const {
     setUsername,
-    username: currentUsername,
+    username: cachedUsername,
     plan,
     isPlanConfirmed,
     getUsernameChangeEligibility,
   } = useVendorPlan();
+  const { vendor, isRealVendor } = useVendor();
+
+  /**
+   * The username on the vendor's actual Firestore document wins over
+   * VendorPlanContext's copy — but only once that document has actually
+   * arrived.
+   *
+   * VendorPlanContext generates and stores a system username in
+   * AsyncStorage when it finds none locally, and never reads the real one
+   * back from the vendor doc (documented technical debt: username state is
+   * meant to move out of that context). The practical effect is that any
+   * device which didn't itself perform the signup — a reinstall, a second
+   * device, cleared storage — invents a fresh "@the platform-XXXXX" and shows it
+   * as the vendor's current username. Caught live: this screen offered to
+   * change "@the platform-DRK67" for a vendor whose real username was
+   * "phaseaudit_vendor".
+   *
+   * isRealVendor matters here: reading vendor.username unconditionally just
+   * trades that for the mock vendor's "@spicyrest" while the listener is
+   * still in flight, which reads as even more plausible and is therefore
+   * worse.
+   */
+  const currentUsername = isRealVendor ? vendor.username : cachedUsername;
   
   const [username, setUsernameInput] = useState('');
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);

@@ -173,17 +173,28 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
       const newPlan = fromBackendPlanTier(res.data.effectivePlan);
 
       setPlanData((prev) => {
-        const wasBasic = prev.plan === 'basic';
-        const isUpgrading = wasBasic && newPlan !== 'basic';
         const cancellationScheduled = res.data.reason === 'cancelled_before_period_end';
         const periodEnd = res.data.subscription?.currentPeriodEnd?.toDate?.();
+        /**
+         * Deliberately does NOT touch usernameSelectionPending.
+         *
+         * The old local updatePlan() set it whenever the plan went from
+         * basic to paid, which was sound there — that transition only
+         * happened because the vendor had just tapped Upgrade. Carrying the
+         * same inference into a status *refresh* is not: "local cache says
+         * basic, server says pro" is the normal cold-cache state for any
+         * paying vendor on a new device or after clearing storage, not a
+         * fresh upgrade. It set the flag on every such sign-in, and the
+         * dashboard redirects to /select-username whenever it's true — so a
+         * Pro vendor who already had a username was force-marched back to
+         * "Choose Your Username" on every fresh login, with no way past it.
+         */
         const updated: VendorPlanData = {
           ...prev,
           plan: newPlan,
           subscriptionReason: res.data.reason,
           cancellationScheduled,
           cancellationDate: cancellationScheduled && periodEnd ? periodEnd.toISOString() : null,
-          usernameSelectionPending: isUpgrading ? true : prev.usernameSelectionPending,
         };
         void AsyncStorage.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify(updated));
         return updated;

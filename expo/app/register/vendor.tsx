@@ -75,53 +75,29 @@ function isReferralCodeFormatValid(value: string): boolean {
   return /^[A-Z0-9](?:[A-Z0-9-]{1,18}[A-Z0-9])$/.test(value) && !value.includes('--');
 }
 
+/**
+ * Referral codes are captured at signup, not verified against a registry.
+ *
+ * This used to check a four-entry hardcoded table after a fake 650ms delay,
+ * so the only codes that ever "validated" were THE PLATFORM-LAGOS, FIELD-LAGOS,
+ * VN7K2M9P and VENDOR-LAGOS — each with an invented rep name and a Lagos
+ * address — while every real code a field rep handed a vendor was rejected
+ * as "Invalid or inactive referral code" and the signup lost the
+ * attribution entirely.
+ *
+ * There is deliberately nothing to verify against: the rewarded referral
+ * programme is deferred to post-MVP, and completeRegistration stores
+ * `referral.code` as free text precisely so attribution can be resolved
+ * later rather than lost at signup (see its comment there). Format is
+ * therefore the only genuine check, and any well-formed code is accepted
+ * and captured. Rep identity/territory is left unset rather than guessed —
+ * the backend drops those fields today, and inventing them here is what
+ * made the old behaviour wrong in the first place.
+ */
 async function validateReferralCode(code: string): Promise<ReferralValidationResult> {
-  await new Promise(resolve => setTimeout(resolve, 650));
-
-  const mockReferralCodes: Record<string, ReferralValidationResult> = {
-    'THE PLATFORM-LAGOS': {
-      valid: true,
-      repId: 'rep_lagos_001',
-      repName: 'the platform Lagos Field Team',
-      assignedCountry: 'Nigeria',
-      assignedState: 'Lagos',
-      assignedArea: 'Lagos',
-      status: 'active',
-      acquisitionSource: 'field_sales',
-    },
-    'FIELD-LAGOS': {
-      valid: true,
-      repId: 'rep_lagos_002',
-      repName: 'Lagos Field Sales',
-      assignedCountry: 'Nigeria',
-      assignedState: 'Lagos',
-      assignedArea: 'Ikeja',
-      status: 'active',
-      acquisitionSource: 'field_sales',
-    },
-    'VN7K2M9P': {
-      valid: true,
-      repId: 'vendor_ref_vn7k2m9p',
-      repName: 'Vendor referral',
-      assignedCountry: 'Nigeria',
-      assignedState: 'Lagos',
-      assignedArea: 'Lekki',
-      status: 'active',
-      acquisitionSource: 'vendor_referral',
-    },
-    'VENDOR-LAGOS': {
-      valid: true,
-      repId: 'vendor_ref_lagos',
-      repName: 'Vendor referral',
-      assignedCountry: 'Nigeria',
-      assignedState: 'Lagos',
-      assignedArea: 'Lagos',
-      status: 'active',
-      acquisitionSource: 'vendor_referral',
-    },
-  };
-
-  return mockReferralCodes[code] ?? { valid: false, status: 'inactive' };
+  return isReferralCodeFormatValid(code)
+    ? { valid: true, status: 'active' }
+    : { valid: false, status: 'inactive' };
 }
 
 export default function VendorSignupScreen() {
@@ -402,6 +378,11 @@ export default function VendorSignupScreen() {
         phone: phone.trim(),
         location: location!,
         referralCode: normalizedReferralCode || undefined,
+        // Whether a code was entered is the only part of this we actually
+        // know. 'field_sales' vs 'vendor_referral' can't be told apart
+        // without the rep registry that the deferred referral programme
+        // would provide, so the fallback is a placeholder, not a finding —
+        // completeRegistration stores only referral.code and drops this.
         acquisitionSource: validatedReferral?.valid
           ? (validatedReferral.acquisitionSource ?? 'field_sales')
           : 'organic',

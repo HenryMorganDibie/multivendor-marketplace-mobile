@@ -19,11 +19,21 @@ import { storefrontUrl, shareStorefront } from '@/lib/storefront/shareStorefront
  */
 export default function StorefrontPublishScreen() {
   const router = useRouter();
-  const { vendor } = useVendor();
+  const { vendor, isRealVendor } = useVendor();
   const { steps, canPublish, blockedReasons, isPublished, setPublished, isLoading } = useVendorOnboarding();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const blockingSteps = steps.filter((s) => s.blocksPublication && !s.complete);
+
+  /**
+   * Until the real vendor doc lands, `vendor` is the mockVendor placeholder,
+   * and this screen rendered — and offered to share — a storefront link
+   * pointing at a completely different vendor. Caught live: a freshly
+   * signed-in vendor saw ".../store/spicyrest" as their own link. Handing
+   * someone a link to another business's storefront is worse than a brief
+   * spinner, so everything identity-bearing waits for the real record.
+   */
+  const hasRealVendor = isRealVendor;
 
   const handlePublish = async () => {
     setIsSubmitting(true);
@@ -70,7 +80,7 @@ export default function StorefrontPublishScreen() {
       </SafeAreaView>
       <SafeAreaView edges={['bottom']} style={styles.safeArea}>
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {isLoading ? (
+          {isLoading || !hasRealVendor ? (
             <ActivityIndicator style={{ marginTop: 40 }} color={Colors.primary} />
           ) : isPublished ? (
             <>
@@ -150,7 +160,7 @@ export default function StorefrontPublishScreen() {
           <View style={styles.bottomSpacer} />
         </ScrollView>
 
-        {!isLoading && !isPublished && (
+        {!isLoading && hasRealVendor && !isPublished && (
           <View style={styles.footer}>
             <TouchableOpacity
               style={[styles.continueButton, (!canPublish || isSubmitting) && styles.continueButtonDisabled]}
