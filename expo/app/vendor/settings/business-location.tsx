@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
@@ -59,11 +59,22 @@ export default function BusinessLocationScreen() {
     location?.stateName && (location.stateName !== savedState || (location.areaName ?? '') !== (vendor.area ?? ''))
   );
 
+  /**
+   * A ref, not the isSaving state, because state updates are asynchronous:
+   * this screen offers Save twice (header and footer) and a quick double tap
+   * got two requests away before the first re-render disabled either button.
+   * That is how the 90-day area cooldown was tripped seconds after a vendor
+   * first set their location.
+   */
+  const savingRef = useRef(false);
+
   const handleSave = async () => {
+    if (savingRef.current) return;
     if (!location?.stateName) {
       Alert.alert('Choose a state', 'Select your state or province before saving.');
       return;
     }
+    savingRef.current = true;
     setIsSaving(true);
     try {
       const update = callable<
@@ -76,14 +87,33 @@ export default function BusinessLocationScreen() {
         stateId: location.stateCode || undefined,
         areaId: location.areaId || undefined,
       });
-      // The dashboard checklist reads business_location from the backend, so
-      // it has to be re-fetched for the step to tick over immediately.
-      await refreshOnboarding();
+
+      /**
+       * Past the point of no return: the location is saved. Anything that
+       * fails from here on is a refresh problem, not a save problem, and must
+       * not be reported as "Could not save" — a vendor told their save failed
+       * will save again, and repeated saves are exactly what the area-change
+       * cooldown counts. The checklist is re-fetched because the dashboard
+       * reads business_location from the backend, but a failure to re-fetch
+       * only means the tick appears a moment later.
+       */
+      try {
+        await refreshOnboarding();
+      } catch (refreshError) {
+        console.error('[BusinessLocation] Saved, but could not refresh onboarding status:', refreshError);
+      }
       router.back();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not save your business location.';
+      const raw = error instanceof Error ? error.message : '';
+      // "internal" is what the callable SDK reports when the request never
+      // completed at the transport layer; the bare code is not something to
+      // put in front of a vendor.
+      const message = !raw || raw === 'internal'
+        ? 'Could not reach the platform just now. Check your connection and try again.'
+        : raw;
       Alert.alert('Could not save', message);
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   };

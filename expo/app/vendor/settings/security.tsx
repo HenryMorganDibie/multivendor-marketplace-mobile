@@ -93,9 +93,12 @@ export default function SecurityScreen() {
               onPress={() => router.push('/vendor/settings/active-sessions' as any)}
               activeOpacity={0.7}
             >
+              {/* Was "Active Sessions / Devices currently signed into your
+                  account", which promised a device list the screen behind it
+                  faked and Firebase Auth cannot actually provide. */}
               <View style={styles.rowContent}>
-                <Text style={styles.rowLabel}>Active Sessions</Text>
-                <Text style={styles.rowSubtitle}>Devices currently signed into your account</Text>
+                <Text style={styles.rowLabel}>Session Security</Text>
+                <Text style={styles.rowSubtitle}>Sign out of the platform on every device</Text>
               </View>
               <ChevronRight size={20} color={Colors.textMuted} />
             </TouchableOpacity>

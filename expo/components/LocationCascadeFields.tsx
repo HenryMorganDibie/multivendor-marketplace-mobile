@@ -127,13 +127,26 @@ export default function LocationCascadeFields({
     if (value?.countryCode) catalogue.ensureStates(value.countryCode);
   }, [value?.countryCode, catalogue]);
 
-  useEffect(() => {
-    if (value?.stateCode) catalogue.ensureAreas(value.stateCode);
-  }, [value?.stateCode, catalogue]);
-
   const countryState = catalogue.countries;
   const stateState = catalogue.statesFor(value?.countryCode ?? '');
-  const areaState = catalogue.areasFor(value?.stateCode ?? '');
+
+  /**
+   * The state's catalogue id, resolved by name when the saved value has none.
+   *
+   * completeRegistration and the older location writes store the state as a
+   * display name (`state: "Lagos"`) with no stateId. Keying the areas fetch on
+   * value.stateCode alone therefore left every existing vendor with their
+   * state showing but no areas to choose from at all.
+   */
+  const resolvedStateId = value?.stateCode
+    || stateState.items.find((st) => st.name === value?.stateName)?.stateId
+    || '';
+
+  const areaState = catalogue.areasFor(resolvedStateId);
+
+  useEffect(() => {
+    if (resolvedStateId) catalogue.ensureAreas(resolvedStateId);
+  }, [resolvedStateId, catalogue]);
 
   // Backend shapes mapped onto the local ones, so nothing downstream changes.
   const countryList = useMemo<CountryInfo[]>(
@@ -164,9 +177,28 @@ export default function LocationCascadeFields({
   );
   const availableStates = stateList;
   const stateLabel = selectedCountry ? getStateLabel(selectedCountry.code) : 'State / Province';
+  /**
+   * Matched by id first, then by name.
+   *
+   * The name fallback is what makes an already-saved location show as
+   * selected. completeRegistration and the older location writes store the
+   * state as a display name (`state: "Lagos"`) with no stateId, so matching on
+   * the id alone left every existing vendor's saved state reading "Select your
+   * state / region" as though it had never been set — and re-picking it was
+   * the only way to make it stick.
+   */
   const selectedState = useMemo<StateInfo | null>(
-    () => (value?.stateCode ? availableStates.find(s => s.regionId === value.stateCode) ?? null : null),
-    [value?.stateCode, availableStates],
+    () => {
+      if (value?.stateCode) {
+        const byId = availableStates.find(s => s.regionId === value.stateCode);
+        if (byId) return byId;
+      }
+      if (value?.stateName) {
+        return availableStates.find(s => s.name === value.stateName) ?? null;
+      }
+      return null;
+    },
+    [value?.stateCode, value?.stateName, availableStates],
   );
   const availableAreas = areaList;
   const hasAreas = availableAreas.length > 0;
@@ -292,6 +324,14 @@ export default function LocationCascadeFields({
               <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
               <Text style={styles.selectorText}>{selectedCountry.name}</Text>
             </View>
+          ) : lockCountry && value?.countryName ? (
+            /* The country is fixed and its name is already known from the
+             * vendor's record, so it is shown directly rather than waiting on
+             * the countries catalogue to load and resolve the code. Depending
+             * on that lookup meant a locked field reading "Select your
+             * country" - an unusable control asking for something the vendor
+             * cannot change - whenever the catalogue was slow or unreachable. */
+            <Text style={styles.selectorText}>{value.countryName}</Text>
           ) : (
             <Text style={styles.selectorPlaceholder}>Select your country</Text>
           )}
@@ -309,7 +349,11 @@ export default function LocationCascadeFields({
           user met three fields and could use one. A control that exists only to
           say "not yet" is worse than no control: it takes up the space, invites
           a tap, and does nothing. */}
-      {!countryOnly && selectedCountry && (
+      {/* With the country locked, the state step is gated on simply having a
+          country code rather than on the catalogue having resolved it into a
+          full record — otherwise a slow catalogue hid the only two fields the
+          vendor came here to fill in, and the step stayed uncompletable. */}
+      {!countryOnly && (selectedCountry || (lockCountry && value?.countryCode)) && (
         <View style={styles.fieldSection}>
           <Text style={styles.label}>{stateLabel}</Text>
           <TouchableOpacity
