@@ -1,7 +1,7 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter, useSegments } from 'expo-router';
+import { useRouter, useSegments, useGlobalSearchParams } from 'expo-router';
 import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth as firebaseAuth, db as firestore, callable } from '@/lib/firebase';
@@ -420,6 +420,23 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const segmentsKey = useMemo(() => segments.join('/'), [segments]);
   const firstSegment = useMemo(() => (segments[0] ?? '') as string, [segments]);
 
+  /**
+   * An explicit request to reach the sign-in screen while already signed in.
+   *
+   * Without this, an authenticated visitor was redirected off every public
+   * route including /login (see the isPublicRoute block below), so there was
+   * no way at all to sign in as somebody else: the session persists, the root
+   * URL opens straight into the previous person's account, and /login bounced
+   * back to it. On a shared computer the only workaround was clearing the
+   * browser's cookies by hand.
+   *
+   * It has to be an opt-in flag rather than simply exempting /login, because
+   * that redirect is also what carries a vendor off the login screen after a
+   * successful sign-in (login.tsx defers to "the auth guard" for that).
+   */
+  const searchParams = useGlobalSearchParams<{ switchAccount?: string }>();
+  const wantsAccountSwitch = searchParams?.switchAccount === '1';
+
   useEffect(() => {
     if (authState.isLoading) return;
 
@@ -486,7 +503,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       return;
     }
 
-    if (isPublicRoute && firstSegment !== 'verify-otp' && firstSegment !== 'complete-profile') {
+    const isDeliberateAccountSwitch =
+      wantsAccountSwitch && (firstSegment === 'login' || firstSegment === 'create-account' || firstSegment === 'register');
+
+    if (
+      isPublicRoute
+      && firstSegment !== 'verify-otp'
+      && firstSegment !== 'complete-profile'
+      && !isDeliberateAccountSwitch
+    ) {
       if (user.role === 'customer') {
         safeReplace('/customer');
       } else if (user.role === 'vendor') {
@@ -637,7 +662,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
       return;
     }
-  }, [authState.isAuthenticated, authState.isLoading, authState.user, segmentsKey, firstSegment, router]);
+  }, [authState.isAuthenticated, authState.isLoading, authState.user, segmentsKey, firstSegment, router, wantsAccountSwitch]);
 
   const getAccountsDb = useCallback(async (): Promise<AccountRecord[]> => {
     try {

@@ -163,14 +163,41 @@ const completionStyles = StyleSheet.create({
 
 export default function StorefrontAppearanceScreen() {
   const router = useRouter();
-  const { vendor, updateVendor } = useVendor();
+  const { vendor, updateVendor, isRealVendor } = useVendor();
 
-  const [storeLogo, setStoreLogo] = useState<string | null>(vendor.logoImage ?? null);
-  const [storeBanner, setStoreBanner] = useState<string | null>(vendor.bannerImage ?? null);
-  const [storeDescription, setStoreDescription] = useState(vendor.description ?? '');
-  const [website, setWebsite] = useState(vendor.contactLinks?.website ?? '');
-  const [instagram, setInstagram] = useState(vendor.contactLinks?.instagram ?? '');
-  const [tiktok, setTiktok] = useState(vendor.contactLinks?.tiktok ?? '');
+  const [storeLogo, setStoreLogo] = useState<string | null>(null);
+  const [storeBanner, setStoreBanner] = useState<string | null>(null);
+  const [storeDescription, setStoreDescription] = useState('');
+  const [website, setWebsite] = useState('');
+  const [instagram, setInstagram] = useState('');
+  const [tiktok, setTiktok] = useState('');
+
+  /**
+   * Seeded only once the vendor's real record arrives.
+   *
+   * Seeding straight from `vendor` meant these fields started out holding
+   * mockVendor's data — its Unsplash banner counted toward the completion
+   * meter (a fresh vendor was shown "70% complete") and a Save would then try
+   * to persist that external stock URL as the vendor's own logo, which
+   * updateVendorStorefront rejects outright.
+   */
+  useEffect(() => {
+    if (!isRealVendor) return;
+    setStoreLogo(vendor.logoImage ?? null);
+    setStoreBanner(vendor.bannerImage ?? null);
+    setStoreDescription(vendor.description ?? '');
+    setWebsite(vendor.contactLinks?.website ?? '');
+    setInstagram(vendor.contactLinks?.instagram ?? '');
+    setTiktok(vendor.contactLinks?.tiktok ?? '');
+  }, [
+    isRealVendor,
+    vendor.logoImage,
+    vendor.bannerImage,
+    vendor.description,
+    vendor.contactLinks?.website,
+    vendor.contactLinks?.instagram,
+    vendor.contactLinks?.tiktok,
+  ]);
   const [showToast, setShowToast] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);

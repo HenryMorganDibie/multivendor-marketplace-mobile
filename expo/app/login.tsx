@@ -30,7 +30,7 @@ function maskEmail(email: string): string {
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, socialLogin } = useAuth();
+  const { login, socialLogin, user, isAuthenticated, logout } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -208,6 +208,31 @@ export default function LoginScreen() {
               <Text style={styles.title}>Welcome back</Text>
               <Text style={styles.subtitle}>Log in to your the platform account</Text>
             </View>
+
+            {/**
+              * Reaching this screen while already signed in is a deliberate
+              * act — the guard only allows it with ?switchAccount=1 — and it
+              * almost always means a different person is at the keyboard on a
+              * shared computer. Saying whose session is currently open matters:
+              * signing in below replaces it, and without this the previous
+              * account is invisible right up until it is gone.
+              */}
+            {isAuthenticated && user ? (
+              <View style={styles.activeSessionCard}>
+                <Text style={styles.activeSessionTitle}>Someone is already signed in</Text>
+                <Text style={styles.activeSessionBody}>
+                  This browser is signed in as {user.identifier || user.email}. Logging in below
+                  will sign that account out on this device.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => { void logout(); }}
+                  activeOpacity={0.7}
+                  testID="login-sign-out-current"
+                >
+                  <Text style={styles.activeSessionAction}>Sign that account out first</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
 
             {/* Hidden until the providers are actually implemented, see
                 constants/authProviders.ts. These were wired to a placeholder
@@ -435,6 +460,31 @@ const styles = StyleSheet.create({
     fontWeight: '400' as const,
     color: '#6B7280',
     textAlign: 'center' as const,
+  },
+  activeSessionCard: {
+    backgroundColor: '#FFF7F2',
+    borderWidth: 1,
+    borderColor: '#FFE0C9',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+  },
+  activeSessionTitle: {
+    fontSize: 14.5,
+    fontWeight: '700' as const,
+    color: '#2B2B2B',
+    marginBottom: 4,
+  },
+  activeSessionBody: {
+    fontSize: 13.5,
+    lineHeight: 19,
+    color: '#6B7280',
+  },
+  activeSessionAction: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.primary,
+    marginTop: 10,
   },
   appleButton: {
     flexDirection: 'row' as const,
