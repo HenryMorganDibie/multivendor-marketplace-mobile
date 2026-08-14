@@ -92,9 +92,13 @@ export default function SubscriptionPlanScreen() {
     isLaunchPricing && isPaid && subscription.standardPriceMinorUnits > subscription.currentPriceMinorUnits;
 
   const periodEndLabel = formatSubscriptionDate(subscription.currentPeriodEnd);
+  // Basic already shows "Free plan" as its status badge (getStatusBadge
+  // below) — repeating "Free" again as the price line under it read as a
+  // mistake, not emphasis. Empty string here, guarded to not render at all,
+  // rather than a second copy of the same word.
   const currentPriceLabel = isPaid
     ? `${formatMinorUnits(subscription.currentPriceMinorUnits, subscription.currencySymbol)}/month`
-    : 'Free';
+    : '';
 
   const handleScheduleCancellation = async () => {
     try {
@@ -355,7 +359,7 @@ function CurrentPlanCard({
               <Text style={[styles.statusText, { color: statusBadge.color }]}>{statusBadge.label}</Text>
             </View>
           </View>
-          <Text style={styles.priceText}>{priceLabel}</Text>
+          {priceLabel !== '' && <Text style={styles.priceText}>{priceLabel}</Text>}
           {isLaunchPricing && (
             <View style={styles.launchPill}>
               <Text style={styles.launchPillText}>Launch price</Text>
