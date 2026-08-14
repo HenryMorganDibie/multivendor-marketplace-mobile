@@ -26,6 +26,7 @@ import { useVendorPlan } from '@/contexts/VendorPlanContext';
 import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
 import { getCurrencySymbol, type Currency } from '@/utils/formatPrice';
 import { mockVendor } from '@/mocks/vendorData';
+import { uploadCatalogItemPhotos } from '@/lib/catalog/uploadCatalogItemPhoto';
 
 export default function AddItemScreen() {
   const { categoryId } = useLocalSearchParams<{ categoryId: string }>();
@@ -139,12 +140,13 @@ export default function AddItemScreen() {
      */
     setIsSaving(true);
     try {
+      const uploadedPhotos = await uploadCatalogItemPhotos(photos);
       await addItem({
         name: name.trim(),
         basePrice: basePriceNum,
         salePrice: salePriceNum,
         description: description.trim() || undefined,
-        photos,
+        photos: uploadedPhotos,
         isAvailable,
         isTaxExempt,
         isHidden,

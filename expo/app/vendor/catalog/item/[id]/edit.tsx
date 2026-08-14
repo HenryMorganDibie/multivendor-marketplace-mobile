@@ -36,6 +36,7 @@ import { getCurrencySymbol, type Currency } from '@/utils/formatPrice';
 import { mockVendor } from '@/mocks/vendorData';
 import { DraggablePhoto } from '@/components/DraggablePhoto';
 import { Colors } from '@/constants/colors';
+import { uploadCatalogItemPhotos } from '@/lib/catalog/uploadCatalogItemPhoto';
 
 export default function EditItemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -195,9 +196,10 @@ export default function EditItemScreen() {
     // if the edit had saved when it never actually did.
     setIsSaving(true);
     try {
+      const uploadedPhotos = await uploadCatalogItemPhotos(photos);
       await updateItem(item.id, {
         name: name.trim(), basePrice: basePriceNum, salePrice: salePriceNum,
-        description: description.trim() || undefined, photos, isAvailable,
+        description: description.trim() || undefined, photos: uploadedPhotos, isAvailable,
         isTaxExempt, isHidden, isOutOfStock, isFeatured,
         categoryId: selectedCategoryId, addOnGroups, trackInventory,
         inventoryQuantity: trackInventory && inventoryQuantity ? parseInt(inventoryQuantity, 10) : undefined,
