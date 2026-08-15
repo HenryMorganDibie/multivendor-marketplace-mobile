@@ -4,6 +4,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { generateSystemUsername } from '@/utils/usernameValidation';
 import { subscriptionRepository } from '@/services/repositories/subscriptionRepository';
 import { callable, auth } from '@/lib/firebase';
+import { fetchRealPlanLimits, type PlanId, type RealPlanLimits } from '@/constants/planCatalog';
 
 export type VendorPlan = 'basic' | 'standard' | 'pro' | 'pro+';
 
@@ -89,8 +90,17 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
   // stale 'basic' default before the real 'pro' plan arrived a moment later.
   const [isPlanConfirmed, setIsPlanConfirmed] = useState(false);
 
+  // subscriptionPlans is public and the same for every vendor, so this is
+  // fetched once per app session rather than per-screen. Every subscription
+  // screen was reading numeric limits (catalog items, photos per item, ...)
+  // straight from the hardcoded mock catalog, which drifted out of sync with
+  // the real, already-live plan config the moment that config changed on the
+  // backend — this is what actually keeps them in step.
+  const [realPlanLimits, setRealPlanLimits] = useState<Record<PlanId, RealPlanLimits> | null>(null);
+
   useEffect(() => {
     loadPlan();
+    fetchRealPlanLimits().then(setRealPlanLimits);
   }, []);
 
   // loadPlan's initial refreshSubscriptionStatus() call fires at app boot,
@@ -372,6 +382,7 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
     subscriptionReason: planData.subscriptionReason,
     isLoading,
     isPlanConfirmed,
+    realPlanLimits,
     refreshSubscriptionStatus,
     toggleBranding,
     scheduleCancellation,

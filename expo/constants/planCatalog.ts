@@ -37,6 +37,8 @@
  * - All features below come from the approved plan matrix only.
  */
 
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import type { BusinessCountry, VendorPlan } from '@/contexts/VendorPlanContext';
 
 /* -------------------------------------------------------------------------- */
@@ -610,6 +612,78 @@ export function getOrderedActivePlanIds(): PlanId[] {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Real backend limits — subscriptionPlans/{planId}                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The numeric limit fields on `subscriptionPlans/{planId}` (see backend
+ * planLimitsSeedData.ts's PlanLimits), mapped to the catalog feature ids they
+ * correspond to. Only numeric limits are covered here, not the boolean
+ * capability flags (canAutoAcceptOrders, canShowAIButton, etc.) or pricing —
+ * those still come from the mock catalog. This is scoped to the specific,
+ * reported failure: a vendor's real plan limit (Basic tightened to 7 items /
+ * 1 photo) no longer matching what this screen showed, because it was never
+ * reading the real subscriptionPlans document at all.
+ */
+const LIMIT_FEATURE_TO_BACKEND_FIELD: Record<string, string> = {
+  [F.catalogItems]: 'catalogItemLimit',
+  [F.photosPerItem]: 'photosPerItemLimit',
+  [F.aiReplies]: 'aiRepliesPerMonth',
+  [F.aiInsights]: 'aiInsightsLimit',
+  [F.invoicesPerMonth]: 'invoicesPerMonth',
+  [F.activePromotions]: 'activePromotionsLimit',
+};
+
+export type RealPlanLimits = Partial<Record<string, number>>;
+
+/** Reads subscriptionPlans/{planId} → { catalogItemLimit, photosPerItemLimit, ... } per plan id. Public collection, no auth required. */
+export async function fetchRealPlanLimits(): Promise<Record<PlanId, RealPlanLimits> | null> {
+  try {
+    const snap = await getDocs(collection(db, 'subscriptionPlans'));
+    const result: Record<string, RealPlanLimits> = {};
+    snap.forEach((docSnap) => {
+      result[docSnap.id] = docSnap.data() as RealPlanLimits;
+    });
+    return result as Record<PlanId, RealPlanLimits>;
+  } catch (error) {
+    console.error('[planCatalog] Failed to fetch real plan limits:', error);
+    return null;
+  }
+}
+
+/**
+ * Returns a copy of the catalog with each plan's numeric limit features
+ * overridden by the real value from subscriptionPlans, where one was
+ * fetched. Falls back to the mock value untouched for anything not in
+ * LIMIT_FEATURE_TO_BACKEND_FIELD, or if realLimits is null (not fetched yet /
+ * fetch failed) — the screen still renders, just with the same mock numbers
+ * as before rather than blocking on the network.
+ */
+export function applyRealPlanLimits(
+  catalog: PlanCatalog,
+  realLimits: Record<PlanId, RealPlanLimits> | null,
+): PlanCatalog {
+  if (!realLimits) return catalog;
+  return {
+    ...catalog,
+    plans: catalog.plans.map((plan) => {
+      const real = realLimits[plan.id];
+      if (!real) return plan;
+      return {
+        ...plan,
+        features: plan.features.map((feature) => {
+          const backendField = LIMIT_FEATURE_TO_BACKEND_FIELD[feature.id];
+          if (!backendField) return feature;
+          const realValue = real[backendField];
+          if (typeof realValue !== 'number') return feature;
+          return { ...feature, value: realValue };
+        }),
+      };
+    }),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Resolvers — fill in country-specific pricing                                */
 /* -------------------------------------------------------------------------- */
 
@@ -620,8 +694,9 @@ export function getOrderedActivePlanIds(): PlanId[] {
 export function resolveCatalogForCountry(
   country: string,
   founderPricingEligible: boolean,
+  realLimits?: Record<PlanId, RealPlanLimits> | null,
 ): ResolvedCatalog {
-  const catalog = MOCK_PLAN_CATALOG;
+  const catalog = applyRealPlanLimits(MOCK_PLAN_CATALOG, realLimits ?? null);
   const countryEntry = getCatalogCountry(country);
   const currencyCode = countryEntry?.currencyCode ?? catalog.currencyCode;
   const currencySymbol = countryEntry?.currencySymbol ?? catalog.currencySymbol;
@@ -629,7 +704,7 @@ export function resolveCatalogForCountry(
   const countryName = countryEntry?.name ?? country;
   const launchActive = catalog.launchSale.active && founderPricingEligible;
 
-  const plans: ResolvedPlan[] = MOCK_PLAN_CATALOG.plans
+  const plans: ResolvedPlan[] = catalog.plans
     .filter((p) => p.status === 'active')
     .sort((a, b) => a.displayOrder - b.displayOrder)
     .map((plan) => {
@@ -678,8 +753,9 @@ export function resolvePlan(
   planId: PlanId,
   country: string,
   founderPricingEligible: boolean,
+  realLimits?: Record<PlanId, RealPlanLimits> | null,
 ): ResolvedPlan | null {
-  const resolved = resolveCatalogForCountry(country, founderPricingEligible);
+  const resolved = resolveCatalogForCountry(country, founderPricingEligible, realLimits);
   return resolved.plans.find((p) => p.id === planId) ?? null;
 }
 
@@ -810,6 +886,9 @@ export interface BuildSubscriptionInput {
   cancellationScheduled: boolean;
   cancellationDate: string | null;
   paymentStatusOverride?: PaymentStatus;
+  realLimits?: Record<PlanId, RealPlanLimits> | null;
+  /** Real count of this vendor's non-hidden catalog items — the same set createCatalogItem counts against the limit. Falls back to the catalog's mock usage number if omitted. */
+  catalogItemsUsed?: number;
 }
 
 /**
@@ -820,7 +899,7 @@ export interface BuildSubscriptionInput {
 export function buildVendorSubscription(input: BuildSubscriptionInput): VendorSubscription {
   const { plan, businessCountry, founderPricingEligible, cancellationScheduled, cancellationDate } = input;
   const planId = toBackendPlanId(plan);
-  const resolved = resolvePlan(planId, businessCountry, founderPricingEligible);
+  const resolved = resolvePlan(planId, businessCountry, founderPricingEligible, input.realLimits);
   const countryEntry = getCatalogCountry(businessCountry);
   const catalog = MOCK_PLAN_CATALOG;
 
@@ -885,6 +964,10 @@ export function buildVendorSubscription(input: BuildSubscriptionInput): VendorSu
     portalUrl: `${catalog.vendorPortalBaseUrl}/subscription`,
     features: rp.features,
     highlightFeatureIds: rp.highlightFeatureIds,
-    usage: buildUsageMetrics(rp),
+    usage: buildUsageMetrics(rp).map((metric) =>
+      metric.featureId === F.catalogItems && input.catalogItemsUsed !== undefined
+        ? { ...metric, current: input.catalogItemsUsed }
+        : metric
+    ),
   };
 }

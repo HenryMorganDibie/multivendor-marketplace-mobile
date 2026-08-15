@@ -27,6 +27,7 @@ export default function PlanDetailsScreen() {
     founderPricingEligible,
     cancellationScheduled,
     cancellationDate,
+    realPlanLimits,
   } = useVendorPlan();
   const { width: screenWidth } = useWindowDimensions();
   const isWide = screenWidth >= 640;
@@ -40,8 +41,9 @@ export default function PlanDetailsScreen() {
         founderPricingEligible,
         cancellationScheduled,
         cancellationDate,
+        realLimits: realPlanLimits,
       }),
-    [plan, businessCountry, founderPricingEligible, cancellationScheduled, cancellationDate],
+    [plan, businessCountry, founderPricingEligible, cancellationScheduled, cancellationDate, realPlanLimits],
   );
 
   // Price label and every feature line below come from the catalog — nothing

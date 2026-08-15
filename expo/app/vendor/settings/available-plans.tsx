@@ -28,6 +28,7 @@ export default function AvailablePlansScreen() {
     founderPricingEligible,
     cancellationScheduled,
     cancellationDate,
+    realPlanLimits,
   } = useVendorPlan();
   const { width: screenWidth } = useWindowDimensions();
   const isWide = screenWidth >= 640;
@@ -42,16 +43,17 @@ export default function AvailablePlansScreen() {
         founderPricingEligible,
         cancellationScheduled,
         cancellationDate,
+        realLimits: realPlanLimits,
       }),
-    [plan, businessCountry, founderPricingEligible, cancellationScheduled, cancellationDate],
+    [plan, businessCountry, founderPricingEligible, cancellationScheduled, cancellationDate, realPlanLimits],
   );
 
   // The full plan catalog, resolved for this vendor's country and launch
   // eligibility. Every price, name, tagline, and highlight below comes from
   // this catalog — nothing is hard-coded in the screen.
   const resolvedCatalog = useMemo(
-    () => resolveCatalogForCountry(businessCountry, founderPricingEligible),
-    [businessCountry, founderPricingEligible],
+    () => resolveCatalogForCountry(businessCountry, founderPricingEligible, realPlanLimits),
+    [businessCountry, founderPricingEligible, realPlanLimits],
   );
 
   const orderedPlanIds = useMemo(() => getOrderedActivePlanIds(), []);

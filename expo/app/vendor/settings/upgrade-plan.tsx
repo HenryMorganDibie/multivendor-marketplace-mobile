@@ -47,6 +47,7 @@ export default function UpgradePlanScreen() {
     businessCountry,
     founderPricingEligible: launchSaleEligible,
     refreshSubscriptionStatus,
+    realPlanLimits,
   } = useVendorPlan();
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
@@ -56,8 +57,8 @@ export default function UpgradePlanScreen() {
   // Every plan name, price, tagline, and feature below comes from this —
   // nothing is hard-coded in this screen.
   const resolvedCatalog = useMemo(
-    () => resolveCatalogForCountry(businessCountry, launchSaleEligible),
-    [businessCountry, launchSaleEligible],
+    () => resolveCatalogForCountry(businessCountry, launchSaleEligible, realPlanLimits),
+    [businessCountry, launchSaleEligible, realPlanLimits],
   );
 
   const orderedPlanIds = useMemo(() => getOrderedActivePlanIds(), []);

@@ -18,6 +18,7 @@ import {
   TrendingUp,
 } from 'lucide-react-native';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
+import { useCatalog } from '@/contexts/CatalogContext';
 import LaektivaModal from '@/components/LaektivaModal';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { Colors } from '@/constants/colors';
@@ -46,7 +47,11 @@ export default function SubscriptionPlanScreen() {
     cancellationDate,
     scheduleCancellation,
     subscriptionReason,
+    realPlanLimits,
   } = useVendorPlan();
+  const { items: catalogItems } = useCatalog();
+  // Same set createCatalogItem counts against the limit — hidden items don't count.
+  const catalogItemsUsed = catalogItems.filter((item) => !item.isHidden).length;
 
   const { width: screenWidth } = useWindowDimensions();
   const isWide = screenWidth >= 640;
@@ -74,8 +79,19 @@ export default function SubscriptionPlanScreen() {
         cancellationScheduled,
         cancellationDate,
         paymentStatusOverride,
+        realLimits: realPlanLimits,
+        catalogItemsUsed,
       }),
-    [plan, businessCountry, launchSaleEligible, cancellationScheduled, cancellationDate, paymentStatusOverride],
+    [
+      plan,
+      businessCountry,
+      launchSaleEligible,
+      cancellationScheduled,
+      cancellationDate,
+      paymentStatusOverride,
+      realPlanLimits,
+      catalogItemsUsed,
+    ],
   );
 
   // Benefits snapshot comes entirely from the catalog's highlightFeatureIds —
