@@ -580,6 +580,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         'customer/profile',
         'customer/notifications',
         'customer/vendors/',
+        'customer/invite',
         'item/',
         'cart',
         'review-order',
