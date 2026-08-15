@@ -38,9 +38,7 @@ import {
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useExternalOrders, type ExternalOrder } from '@/contexts/ExternalOrdersContext';
 import { useCatalog } from '@/contexts/CatalogContext';
-import { generateExternalOrderId, generateShareToken } from '@/utils/externalOrderShare';
 import LaektivaModal from '@/components/LaektivaModal';
 import DiscardChangesModal from '@/components/DiscardChangesModal';
 import EditScreenHeader from '@/components/EditScreenHeader';
@@ -48,12 +46,16 @@ import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
 import { formatPriceWithCommas, getCurrencySymbol, type Currency } from '@/utils/formatPrice';
 import { mockVendor } from '@/mocks/vendorData';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
+import { callable } from '@/lib/firebase';
 
 interface OrderItem {
   id: string;
   name: string;
   quantity: number;
   price: number;
+  /** Set only for items added from the catalog. createExternalOrder needs a
+   * real catalogItems doc id and has no path for a manually typed item. */
+  catalogItemId?: string;
 }
 
 interface SwipeableItemProps {
@@ -174,11 +176,9 @@ function SwipeableItemRow({ item, onDelete, onUpdateQuantity, isOpen, onOpen, on
 }
 
 type FulfillmentType = 'Pickup' | 'Delivery' | 'Service' | 'Event' | 'Other';
-type OrderSource = 'WhatsApp' | 'Instagram' | 'TikTok' | 'Phone' | 'Walk-in' | 'Website' | 'Other';
 type PaymentStatusOption = 'payment_pending' | 'partially_received' | 'payment_received';
 
 const FULFILLMENT_OPTIONS: FulfillmentType[] = ['Pickup', 'Delivery', 'Service', 'Event', 'Other'];
-const ORDER_SOURCE_OPTIONS: OrderSource[] = ['WhatsApp', 'Instagram', 'TikTok', 'Phone', 'Walk-in', 'Website', 'Other'];
 const PAYMENT_STATUS_OPTIONS: { value: PaymentStatusOption; label: string }[] = [
   { value: 'payment_pending', label: 'Pending' },
   { value: 'partially_received', label: 'Partial Payment' },
@@ -257,7 +257,6 @@ function DropdownSelector({ label, value, options, onSelect, placeholder }: Drop
 
 export default function RecordExternalOrderScreen() {
   const router = useRouter();
-  const { addExternalOrder } = useExternalOrders();
   const { plan } = useVendorPlan();
   const canUseScreenshots = plan === 'pro' || plan === 'pro+';
   const vendorCurrency = (mockVendor.currency as Currency) || 'NGN';
@@ -273,7 +272,6 @@ export default function RecordExternalOrderScreen() {
   const [deliveryNote, setDeliveryNote] = useState('');
 
   const [customerName, setCustomerName] = useState('');
-  const [orderSource, setOrderSource] = useState<OrderSource>('WhatsApp');
 
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatusOption>('payment_pending');
   const [amountReceived, setAmountReceived] = useState('');
@@ -333,7 +331,6 @@ export default function RecordExternalOrderScreen() {
       address,
       deliveryNote,
       customerName,
-      orderSource,
       paymentStatus,
       amountReceived,
       notes,
@@ -443,6 +440,7 @@ export default function RecordExternalOrderScreen() {
           name: catalogItem.name,
           quantity: 1,
           price: catalogItem.salePrice || catalogItem.basePrice,
+          catalogItemId: catalogItem.id,
         });
       }
     });
@@ -509,6 +507,44 @@ export default function RecordExternalOrderScreen() {
     return `${hours}:${minutes < 10 ? '0' : ''}${minutes} ${ampm}`;
   };
 
+  /**
+   * createExternalOrder (Milestone 2, real backend) only accepts customer
+   * name/phone, real catalogItems by id, fulfillment type (pickup/delivery/
+   * shipping), and a note. Everything below that isn't one of those is a
+   * screen input with nowhere to go yet on the backend — order source,
+   * payment status, fees, discount, tax, screenshots, manual items, editing
+   * or deleting after save. Rather than silently drop what the vendor typed
+   * (a fee they added would just vanish from the real order with no sign of
+   * it), this blocks save and says exactly which field isn't wired rather
+   * than pretending everything on screen was recorded.
+   */
+  const getUnsupportedFieldReason = (): string | null => {
+    if (items.some((i) => !i.catalogItemId)) {
+      return 'One or more items were typed in manually. Only items from your catalog can be recorded right now.';
+    }
+    if (fulfillmentType !== 'Pickup' && fulfillmentType !== 'Delivery') {
+      return `"${fulfillmentType}" fulfillment isn't supported yet. Use Pickup or Delivery for now.`;
+    }
+    if (deliveryFee > 0 || serviceFee > 0) {
+      return 'Delivery and service fees aren\'t recorded on the real order yet. Remove them to save, or note them separately for now.';
+    }
+    if (discountAmount > 0) {
+      return 'Discounts aren\'t recorded on the real order yet. Remove the discount to save.';
+    }
+    if (taxEnabled) {
+      return 'Tax isn\'t recorded on the real order yet. Turn off tax to save.';
+    }
+    if (paymentStatus !== 'payment_pending') {
+      return 'Payment status isn\'t recorded on the real order yet, it would show as pending regardless. Recording is still fine if that\'s acceptable for now.';
+    }
+    if (screenshots.length > 0) {
+      return 'Screenshots aren\'t saved anywhere yet. Remove them to save this order.';
+    }
+    return null;
+  };
+
+  const [isSaving, setIsSaving] = useState(false);
+
   const handleSave = async () => {
     if (items.length === 0) {
       Alert.alert('Items Required', 'Please add at least one item.');
@@ -526,55 +562,44 @@ export default function RecordExternalOrderScreen() {
       }
     }
 
-    const vendorSlug = mockVendor.slug || 'vendor';
-    const externalOrderId = generateExternalOrderId(vendorSlug);
-    const shareToken = generateShareToken();
+    const blockedReason = getUnsupportedFieldReason();
+    if (blockedReason) {
+      Alert.alert('Not recorded on the real order yet', blockedReason);
+      return;
+    }
 
-    const orderData: ExternalOrder = {
-      id: `ext_${Date.now()}`,
-      externalOrderId,
-      shareToken,
-      vendorName: mockVendor.name,
-      vendorSlug,
-      customerName: customerName || 'Walk-in customer',
-      orderSource: 'external',
-      externalReference: orderSource || undefined,
-      items,
-      fulfillmentType,
-      fulfillmentDate: getFulfillmentDate(),
-      fulfillmentTime: getFulfillmentTime(),
-      address: fulfillmentType === 'Delivery' ? address || undefined : undefined,
-      deliveryNote: fulfillmentType === 'Delivery' ? deliveryNote || undefined : undefined,
-      taxOption: taxEnabled ? 'apply' : 'exempt',
-      paymentStatus,
-      amountReceived: paymentStatus === 'partially_received' ? parseFloat(amountReceived) : undefined,
-      notes,
-      subtotal,
-      tax: taxAmount,
-      taxPercentage: taxEnabled ? taxPercentage : undefined,
-      deliveryFee: deliveryFee > 0 ? deliveryFee : undefined,
-      serviceFee: serviceFee > 0 ? serviceFee : undefined,
-      discountType: discountAmount > 0 ? discountType : undefined,
-      discountValue: discountAmount > 0 ? discountInputVal : undefined,
-      discountAmount: discountAmount > 0 ? discountAmount : undefined,
-      total,
-      status: 'completed',
-      orderDate: new Date().toISOString(),
-      screenshots: screenshots.length > 0 ? screenshots : undefined,
-    };
-
+    setIsSaving(true);
     try {
-      await addExternalOrder(orderData);
-      console.log('External order saved:', orderData.id);
+      const createExternalOrder = callable<
+        {
+          externalCustomerName: string;
+          externalCustomerPhone?: string;
+          items: { itemId: string; quantity: number }[];
+          fulfillmentType: 'pickup' | 'delivery';
+          orderNote?: string;
+        },
+        { success: true; orderId: string; publicOrderId: string }
+      >('createExternalOrder');
+
+      await createExternalOrder({
+        externalCustomerName: customerName.trim() || 'Walk-in customer',
+        items: items.map((i) => ({ itemId: i.catalogItemId!, quantity: i.quantity })),
+        fulfillmentType: fulfillmentType === 'Delivery' ? 'delivery' : 'pickup',
+        orderNote: notes.trim() || undefined,
+      });
+
       unsavedChanges.resetChanges();
       Alert.alert(
-        'Order Created',
-        'The external order has been saved.',
+        'Order recorded',
+        'This order needs your acceptance within 48 hours, same as any other order, since it now lives on your real order list rather than just this device.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error) {
-      console.error('Error saving external order:', error);
-      Alert.alert('Error', 'Failed to save the order. Please try again.');
+      const message = (error as { message?: string })?.message
+        ?? 'Could not record this order. Please try again.';
+      Alert.alert('Could not record order', message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -628,6 +653,7 @@ export default function RecordExternalOrderScreen() {
           onBack={handleBack}
           onSave={handleSave}
           saveEnabled={canSave}
+          isSaving={isSaving}
           saveLabel="Save"
           testID="record-external-order-header"
         />
@@ -904,7 +930,7 @@ export default function RecordExternalOrderScreen() {
               <Text style={styles.sectionTitle}>Customer Info</Text>
               <Text style={styles.sectionSubtitle}>Optional. Recorded for your reference only</Text>
               <View style={styles.sectionCardPadded}>
-                <View style={styles.field}>
+                <View style={[styles.field, { marginBottom: 0 }]}>
                   <Text style={styles.fieldLabel}>Customer Name (optional)</Text>
                   <TextInput
                     style={styles.input}
@@ -912,16 +938,6 @@ export default function RecordExternalOrderScreen() {
                     onChangeText={setCustomerName}
                     placeholder="e.g. John Doe"
                     placeholderTextColor={Colors.inputPlaceholder}
-                  />
-                </View>
-                <View style={[styles.field, { marginBottom: 0 }]}>
-                  <Text style={styles.fieldLabel}>Order Source</Text>
-                  <DropdownSelector
-                    label="Order Source"
-                    value={orderSource}
-                    options={ORDER_SOURCE_OPTIONS.map(o => ({ value: o, label: o }))}
-                    onSelect={(v) => setOrderSource(v as OrderSource)}
-                    placeholder="Select source"
                   />
                 </View>
               </View>
