@@ -78,14 +78,6 @@ interface LocationCascadeFieldsProps {
 }
 
 /**
- * Build a stable area id consistent with the rest of the app.
- * When no area is selected the state region id is used.
- */
-function buildAreaId(stateCode: string, areaName: string): string {
-  return areaName ? `${stateCode}:${areaName}` : stateCode;
-}
-
-/**
  * Format a stored location for display as "Area, State, Country".
  */
 export function formatLocationLabel(location: Partial<LocationValue> | null | undefined): string {
@@ -266,7 +258,14 @@ export default function LocationCascadeFields({
       countryName: selectedCountry.name,
       stateCode: selectedState.regionId,
       stateName: selectedState.name,
-      areaId: buildAreaId(selectedState.regionId, area.name),
+      // The real locationId from the catalogue (listAreas returns it as
+      // regionId), never a synthetic "{state}:{name}" string. Registration
+      // sends this straight to validateLocation, which looks up
+      // locations/{areaId} — a composed id matches no document there, so
+      // every signup that selected an area was rejected with "That area is
+      // not in the location catalogue" even when the area existed and was
+      // active.
+      areaId: area.regionId,
       areaName: area.name,
     });
     setShowAreaModal(false);
