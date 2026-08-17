@@ -86,7 +86,7 @@ export default function VerificationRejectedScreen() {
             </View>
             <View style={styles.listItem}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.listText}>Face matches ID photo</Text>
+              <Text style={styles.listText}>Selfie clearly shows your face</Text>
             </View>
           </View>
 

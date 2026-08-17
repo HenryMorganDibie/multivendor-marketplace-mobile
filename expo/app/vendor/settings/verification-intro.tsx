@@ -53,7 +53,7 @@ export default function VerificationIntroScreen() {
             </View>
             <View style={styles.listItem}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.listText}>Selfie / liveness check</Text>
+              <Text style={styles.listText}>Selfie for manual review</Text>
             </View>
           </View>
 
