@@ -18,6 +18,14 @@ import { Stack, useRouter } from 'expo-router';
 import { ChevronLeft, Paperclip, X, ChevronDown, Check } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '@/constants/colors';
+import { callable } from '@/lib/firebase';
+
+interface CreateTicketResponse {
+  success: true;
+  ticketId: string;
+  chatId: string;
+  created: boolean;
+}
 
 const ISSUE_TYPES = [
   'Order Issue',
@@ -61,21 +69,46 @@ export default function ReportProblemScreen() {
 
   const canSubmit = !!issueType && message.trim().length > 0 && !isSending;
 
-  const handleSubmit = () => {
+  // Files into the same real support-ticket system as the platform Vendor
+  // Support (vendor/settings/support-chat.tsx), reusing
+  // createSupportTicket/sendChatMessage rather than inventing a separate
+  // reports collection. Picked images are still previewed here but not yet
+  // uploaded anywhere — the app has no chat-attachment upload path built
+  // for any screen yet, so attaching them for real is separate, unbuilt
+  // work, not a regression from before.
+  const handleSubmit = async () => {
     if (!canSubmit) return;
     setIsSending(true);
-    console.log('[Vendor Report]', {
-      issueType,
-      orderId: orderId.trim() || null,
-      message: message.trim(),
-      images,
-    });
-    setTimeout(() => {
+    const lines = [`Issue type: ${issueType}`];
+    if (orderId.trim()) lines.push(`Order ID: ${orderId.trim()}`);
+    lines.push('', message.trim());
+    const reportText = lines.join('\n');
+
+    try {
+      const createTicket = callable<{ subject: string; initialMessage: string }, CreateTicketResponse>(
+        'createSupportTicket'
+      );
+      const res = await createTicket({ subject: issueType as string, initialMessage: reportText });
+
+      if (!res.data.created) {
+        // An open ticket already existed for this vendor, so
+        // createSupportTicket returned it without posting reportText —
+        // send it as a follow-up message on that same thread instead.
+        const sendMessage = callable<{ chatId: string; type: string; content: string }, unknown>(
+          'sendChatMessage'
+        );
+        await sendMessage({ chatId: res.data.chatId, type: 'text', content: reportText });
+      }
+
       setIsSending(false);
       Alert.alert('Report submitted', 'Thanks. Our team will review it and get back to you soon.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
-    }, 900);
+    } catch (error) {
+      setIsSending(false);
+      const msg = (error as { message?: string })?.message ?? 'Could not submit your report. Please try again.';
+      Alert.alert('Submission failed', msg);
+    }
   };
 
   return (
