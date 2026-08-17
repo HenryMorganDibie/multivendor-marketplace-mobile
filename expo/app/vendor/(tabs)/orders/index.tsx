@@ -313,10 +313,13 @@ export default function VendorOrdersScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const the platformOrders = useMemo(
-    () => orders.filter((o) => o.orderSource !== 'external'),
-    [orders]
-  );
+  // orders (from OrdersContext) now includes backend-recorded external orders
+  // too, mapped by mapOrderDoc with orderSource: 'external' and an -EXT- in
+  // publicOrderId. This used to filter those out because "external" meant
+  // only the on-device AsyncStorage records rendered below via
+  // externalOrders/SwipeableExtCard. Excluding them here hid every real
+  // external order from every status tab.
+  const the platformOrders = orders;
 
   const tabCounts = useMemo(() => {
     const counts: Record<StatusTab, number> = {

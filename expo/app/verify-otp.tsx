@@ -292,12 +292,17 @@ export default function VerifyOTPScreen() {
     inputRefs.current[0]?.focus();
   };
 
+  /**
+   * Every screen that navigates here (login, register.tsx, register/vendor,
+   * register/customer) uses router.push, never .replace, so the screen the
+   * person was actually on is still underneath this one on the stack —
+   * back always returns to it, with whatever they'd typed still in state.
+   * The registration branch used to send everyone to /login instead,
+   * discarding the entire form (name, password, location, everything) to
+   * fix a typo in an email address.
+   */
   const handleChangeContact = () => {
-    if (context === 'login') {
-      router.back();
-    } else {
-      router.replace('/login');
-    }
+    router.back();
   };
 
   return (

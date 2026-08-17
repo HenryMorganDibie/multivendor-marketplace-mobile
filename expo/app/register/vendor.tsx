@@ -1,6 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendOtp } from '@/lib/auth/verifyOtp';
+import { EMAIL_OTP_REGISTRATION_REQUIRED } from '@/constants/devAuth';
 import {
   Image,
   View,
@@ -383,10 +384,10 @@ export default function VendorSignupScreen() {
         // without the rep registry that the deferred referral programme
         // would provide, so the fallback is a placeholder, not a finding —
         // completeRegistration stores only referral.code and drops this.
-        acquisitionSource: validatedReferral?.valid
+        acquisitionSource: (validatedReferral?.valid
           ? (validatedReferral.acquisitionSource ?? 'field_sales')
-          : 'organic',
-        signupChannel: 'mobile_vendor_app',
+          : 'organic') as 'field_sales' | 'vendor_referral' | 'organic',
+        signupChannel: 'mobile_vendor_app' as const,
         country: location!.countryName,
         state: location?.stateName,
         area: location?.areaName,
@@ -399,6 +400,18 @@ export default function VendorSignupScreen() {
         referralStatus: validatedReferral?.status,
         isDiscoverable: false,
       };
+
+      if (!EMAIL_OTP_REGISTRATION_REQUIRED) {
+        console.log('[AUTH FLOW] Email OTP disabled, registering vendor directly:', trimmedEmail);
+        const response = await registerAccount(pendingPayload);
+        if (!response.success) {
+          showRegistrationFailure(response.error || 'Registration failed');
+          setIsLoading(false);
+          return;
+        }
+        router.replace('/vendor/(tabs)/dashboard' as any);
+        return;
+      }
 
       await AsyncStorage.setItem(PENDING_VENDOR_REG_KEY, JSON.stringify(pendingPayload));
       console.log('[AUTH FLOW] Sending OTP for vendor registration:', trimmedEmail);

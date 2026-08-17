@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendOtp } from '@/lib/auth/verifyOtp';
+import { EMAIL_OTP_REGISTRATION_REQUIRED } from '@/constants/devAuth';
+import { useUserLocation } from '@/contexts/UserLocationContext';
 import {
   Image,
   View,
@@ -58,7 +60,8 @@ type FieldErrors = Record<string, string | undefined>;
 
 export default function CustomerSignupScreen() {
   const router = useRouter();
-  const { checkAccountExists } = useAuth();
+  const { checkAccountExists, registerAccount } = useAuth();
+  const { setInitialCountry } = useUserLocation();
 
   const [firstName, setFirstName] = useState<string>('');
   const [lastInitial, setLastInitial] = useState<string>('');
@@ -216,6 +219,30 @@ export default function CustomerSignupScreen() {
         lastName: lastInitial.trim().toUpperCase(),
         location: location!,
       };
+
+      if (!EMAIL_OTP_REGISTRATION_REQUIRED) {
+        console.log('[AUTH FLOW] Email OTP disabled, registering customer directly:', trimmedEmail);
+        const response = await registerAccount(pendingPayload);
+        if (!response.success) {
+          showRegistrationFailure(response.error || 'Registration failed');
+          setIsLoading(false);
+          return;
+        }
+        // Same carry-over verify-otp.tsx does for this context: without it,
+        // a customer who just picked country/state/area lands on the home
+        // screen and is immediately asked to select all three again, since
+        // UserLocationContext only ever reads its own AsyncStorage key.
+        if (location?.countryCode) {
+          await setInitialCountry(
+            location.countryCode,
+            location.stateCode || undefined,
+            undefined,
+            location.areaName || undefined,
+          );
+        }
+        router.replace('/customer' as any);
+        return;
+      }
 
       await AsyncStorage.setItem(PENDING_CUSTOMER_REG_KEY, JSON.stringify(pendingPayload));
       console.log('[AUTH FLOW] Sending OTP for customer registration:', trimmedEmail);

@@ -16,3 +16,25 @@
  * find every path that depends on it.
  */
 export const DEV_LOCAL_AUTH_ENABLED = __DEV__;
+
+/**
+ * Whether registration requires a real email OTP before an account is created.
+ *
+ * Off because there is nowhere for the code to go: sendEmailOtp writes to the
+ * mail collection for the Firebase "Trigger Email" extension to pick up, and
+ * that extension has never been installed on the platform-dev (`firebase ext:list`
+ * confirms "there are no extensions installed"). Every document written there
+ * sits unprocessed, no `delivery` field ever gets added, no email is ever
+ * sent, to any address, real or fake. Registration was a dead end for every
+ * single vendor and customer: the account is not created until the code is
+ * verified, and the code never arrives.
+ *
+ * With this off, register/vendor.tsx and register/customer.tsx skip straight
+ * to registerAccount() and never route through /verify-otp. Login is
+ * unaffected either way — it authenticates with a password, not a code.
+ *
+ * Turn back on once a real email provider is installed and configured (the
+ * extension, or a direct SendGrid/SMTP call) and a live send has actually
+ * been confirmed to land in an inbox, not just written to Firestore.
+ */
+export const EMAIL_OTP_REGISTRATION_REQUIRED = false;
