@@ -29,7 +29,7 @@ import {
   getOrderStatusBadgeStyle,
 } from '@/features/orders/selectors/orderStatusSelectors';
 import { hasOldUnpaidExternalOrders, sortOrdersByPriority } from '@/utils/orderFilters';
-import { formatPriceCents, formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
+import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
 import { mockVendor } from '@/mocks/vendorData';
 import { useExternalOrders, type ExternalOrder } from '@/contexts/ExternalOrdersContext';
 import { getBottomOverlayPadding } from '@/lib/constants/layout';
@@ -435,7 +435,10 @@ export default function VendorOrdersScreen() {
     const statusBadge = getOrderStatusBadgeStyle(order.status);
     const statusLabel = getVendorOrderStatusLabel(order.status);
     const customerName = formatCustomerNameFromFull(order.customerName ?? 'Customer');
-    const totalFormatted = formatPriceCents(order.total, vendorCurrency);
+    // order.total (from orderSnapshot.total) is stored in major units (naira),
+    // not minor units — formatPriceCents was dividing every real order's total
+    // by 100 on this screen, showing a ₦4,500 order as ₦45.00.
+    const totalFormatted = formatPriceWithCommas(order.total, vendorCurrency);
     const orderId = formatVendorOrderId(order.publicOrderId);
     const fulfillment = buildFulfillmentLabel(
       order.fulfillmentType,

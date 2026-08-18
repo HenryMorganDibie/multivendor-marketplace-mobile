@@ -56,9 +56,24 @@ function toItems(raw: unknown): OrderItem[] {
       id: (item.itemId as string) ?? `item-${index}`,
       name: (item.name as string) ?? 'Item',
       quantity: (item.quantity as number) ?? 1,
-      // price_at_order is the historical price; live catalogue price is wrong
-      // to show on a past order.
-      price: (item.price_at_order as number) ?? (item.price as number) ?? 0,
+      // Real order documents (createOrder.ts / createExternalOrder) snapshot
+      // items as { basePrice, salePrice, lineTotal, quantity }, never
+      // price_at_order or price — this was reading fields that don't exist
+      // on any real order, silently showing ₦0.00 for every line item while
+      // the aggregate subtotal/total (read separately from orderSnapshot)
+      // stayed correct. salePrice/basePrice matches exactly how the backend
+      // itself resolves unit price (repriceCart.ts); lineTotal/quantity is a
+      // last-resort derivation; price_at_order/price are kept as a fallback
+      // only in case an older document shape still uses them.
+      price:
+        (item.salePrice as number) ??
+        (item.basePrice as number) ??
+        (typeof item.lineTotal === 'number' && typeof item.quantity === 'number' && (item.quantity as number) > 0
+          ? (item.lineTotal as number) / (item.quantity as number)
+          : undefined) ??
+        (item.price_at_order as number) ??
+        (item.price as number) ??
+        0,
       addOns: Array.isArray(item.addOns)
         ? (item.addOns as Record<string, unknown>[]).map((a) => ({
             id: (a.id as string) ?? '',
