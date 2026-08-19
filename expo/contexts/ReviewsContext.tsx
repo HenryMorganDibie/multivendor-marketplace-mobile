@@ -242,9 +242,22 @@ function fromBackendRating(r: VendorFacingRatingResponse, vendorId: string): Cus
   };
 }
 
+/**
+ * 'checking' / 'loading' — a signed-in vendor's real ratings haven't
+ * resolved yet. 'error' — the real fetch failed. Vendor-own screens must
+ * treat all three as "not ready" and never fall through to seedReviews,
+ * which would otherwise silently show a vendor twelve fake five-star
+ * reviews with no indication they aren't real. 'not_vendor' / 'ready' are
+ * the two states where `reviews` is trustworthy to render — the former for
+ * the public storefront view (fixtures are the intended content there),
+ * the latter for a vendor's own real data.
+ */
+export type RatingsStatus = 'checking' | 'loading' | 'ready' | 'error' | 'not_vendor';
+
 export const [ReviewsProvider, useReviews] = createContextHook(() => {
   const [reviews, setReviews] = useState<CustomerReview[]>(seedReviews);
   const [realRatingsVendorId, setRealRatingsVendorId] = useState<string | null>(null);
+  const [ratingsStatus, setRatingsStatus] = useState<RatingsStatus>('checking');
 
   /**
    * Live-ish load of the signed-in vendor's own ratings.
@@ -263,6 +276,7 @@ export const [ReviewsProvider, useReviews] = createContextHook(() => {
     const unsubscribe = auth.onIdTokenChanged(async (user) => {
       if (!user) {
         setRealRatingsVendorId(null);
+        setRatingsStatus('not_vendor');
         return;
       }
       const token = await user.getIdTokenResult();
@@ -270,9 +284,11 @@ export const [ReviewsProvider, useReviews] = createContextHook(() => {
       const role = token.claims.role as string | undefined;
       if (!vendorId || role !== 'vendor') {
         setRealRatingsVendorId(null);
+        setRatingsStatus('not_vendor');
         return;
       }
 
+      setRatingsStatus('loading');
       try {
         const getRatings = callable<Record<string, never>, { success: true; ratings: VendorFacingRatingResponse[] }>(
           'getVendorRatings',
@@ -280,8 +296,10 @@ export const [ReviewsProvider, useReviews] = createContextHook(() => {
         const res = await getRatings({});
         setReviews(res.data.ratings.map((r) => fromBackendRating(r, vendorId)));
         setRealRatingsVendorId(vendorId);
+        setRatingsStatus('ready');
       } catch (error) {
         console.error('[ReviewsContext] getVendorRatings failed:', error);
+        setRatingsStatus('error');
       }
     });
     return unsubscribe;
@@ -335,6 +353,7 @@ export const [ReviewsProvider, useReviews] = createContextHook(() => {
   return useMemo(
     () => ({
       reviews,
+      ratingsStatus,
       submitReview,
       markReviewRead,
       getVendorReviews,
@@ -342,6 +361,6 @@ export const [ReviewsProvider, useReviews] = createContextHook(() => {
       getVendorRatingStats,
       hasReviewForOrder,
     }),
-    [reviews, submitReview, markReviewRead, getVendorReviews, getReviewById, getVendorRatingStats, hasReviewForOrder]
+    [reviews, ratingsStatus, submitReview, markReviewRead, getVendorReviews, getReviewById, getVendorRatingStats, hasReviewForOrder]
   );
 });

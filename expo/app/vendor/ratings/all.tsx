@@ -1,17 +1,18 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Star, ChevronRight } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useReviews } from '@/contexts/ReviewsContext';
 
-const VENDOR_ID = 'v1';
-
 export default function AllRatingsScreen() {
   const router = useRouter();
-  const { getVendorReviews } = useReviews();
-  const reviews = getVendorReviews(VENDOR_ID);
+  const { getVendorReviews, ratingsStatus } = useReviews();
+  // Vendor's own settings screen — same rule as ratings.tsx, never fall
+  // through to the seed/fixture reviews here.
+  const isReady = ratingsStatus === 'ready';
+  const reviews = isReady ? getVendorReviews('') : [];
 
   const renderStars = (count: number) => (
     <View style={styles.starsRow}>
@@ -57,7 +58,16 @@ export default function AllRatingsScreen() {
         }}
       />
       <SafeAreaView edges={['bottom']} style={styles.safeArea}>
-        {reviews.length > 0 ? (
+        {ratingsStatus === 'checking' || ratingsStatus === 'loading' ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator color={Colors.primary} />
+          </View>
+        ) : ratingsStatus === 'error' || ratingsStatus === 'not_vendor' ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Couldn't load ratings</Text>
+            <Text style={styles.emptySubtitle}>Please check your connection and try again.</Text>
+          </View>
+        ) : reviews.length > 0 ? (
           <View style={styles.card}>
             <FlatList
               data={reviews}

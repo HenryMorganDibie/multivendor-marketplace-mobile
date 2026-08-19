@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Star, ChevronRight, Lock } from 'lucide-react-native';
@@ -7,14 +7,16 @@ import EditScreenHeader from '@/components/EditScreenHeader';
 import { Colors } from '@/constants/colors';
 import { useReviews } from '@/contexts/ReviewsContext';
 
-const VENDOR_ID = 'v1';
-
 export default function RatingsScreen() {
   const router = useRouter();
-  const { getVendorReviews, getVendorRatingStats, markReviewRead } = useReviews();
+  const { getVendorReviews, getVendorRatingStats, markReviewRead, ratingsStatus } = useReviews();
 
-  const reviews = getVendorReviews(VENDOR_ID);
-  const stats = getVendorRatingStats(VENDOR_ID);
+  // This is the vendor's own settings screen — unlike the public storefront
+  // ratings view, it must never show the seed/fixture reviews. Only render
+  // once the real fetch has actually resolved.
+  const isReady = ratingsStatus === 'ready';
+  const reviews = isReady ? getVendorReviews('') : [];
+  const stats = isReady ? getVendorRatingStats('') : { average: 0, total: 0, breakdown: [5, 4, 3, 2, 1].map((s) => ({ stars: s, count: 0, percentage: 0 })) };
   const recentReviews = reviews.slice(0, 8);
 
   const renderStars = (count: number, size = 15) => (
@@ -81,6 +83,16 @@ export default function RatingsScreen() {
         <EditScreenHeader title="Ratings" onBack={() => router.back()} showSave={false} />
       </SafeAreaView>
       <SafeAreaView edges={['bottom']} style={styles.safeArea}>
+        {ratingsStatus === 'checking' || ratingsStatus === 'loading' ? (
+          <View style={styles.statusContainer}>
+            <ActivityIndicator color={Colors.primary} />
+          </View>
+        ) : ratingsStatus === 'error' || ratingsStatus === 'not_vendor' ? (
+          <View style={styles.statusContainer}>
+            <Text style={styles.emptyText}>Couldn't load ratings</Text>
+            <Text style={styles.emptySubtext}>Please check your connection and try again.</Text>
+          </View>
+        ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
           {/* SUMMARY CARD */}
@@ -151,6 +163,7 @@ export default function RatingsScreen() {
 
           <View style={styles.bottomSpacer} />
         </ScrollView>
+        )}
       </SafeAreaView>
     </View>
   );
@@ -172,6 +185,12 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
+  },
+  statusContainer: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: 40,
   },
 
   // SUMMARY
