@@ -14,7 +14,7 @@ import { ChevronLeft, Package, ChevronDown, Check } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { mockOrders } from '@/mocks/ordersData';
 import { mockVendor } from '@/mocks/vendorData';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useVendor } from '@/contexts/VendorContext';
 import { useAuditLog } from '@/contexts/AuditLogContext';
 import { formatPriceWithCommas, formatAmountForInput, getCurrencySymbol, getCurrencyDecimals, type Currency } from '@/utils/formatPrice';
 
@@ -30,6 +30,7 @@ export default function SendPaymentRequestScreen() {
   const router = useRouter();
   const { orderId, fromOrder } = useLocalSearchParams<{ orderId: string; fromOrder?: string }>();
   const { logEvent } = useAuditLog();
+  const { vendor } = useVendor();
   const order = mockOrders.find((o) => o.id === orderId);
   const vendorCurrency: Currency = (mockVendor.currency as Currency) || 'NGN';
   const currencySymbol = getCurrencySymbol(vendorCurrency);
@@ -71,7 +72,7 @@ export default function SendPaymentRequestScreen() {
   );
   const [amount, setAmount] = useState<string>('');
   const [note, setNote] = useState<string>('');
-  const [paymentInstructions, setPaymentInstructions] = useState<string>('');
+  const paymentInstructions = vendor.paymentInstructionsEnabled ? (vendor.paymentInstructions ?? '') : '';
   const [showOrderDropdown, setShowOrderDropdown] = useState<boolean>(false);
 
   const selectedOrder = mockOrders.find((o) => o.id === selectedOrderId);
@@ -93,21 +94,6 @@ export default function SendPaymentRequestScreen() {
       }
     }
   }, [selectedOrderId, selectedOrder, paymentType, vendorCurrency]);
-
-  useEffect(() => {
-    void loadPaymentInstructions();
-  }, []);
-
-  const loadPaymentInstructions = async (): Promise<void> => {
-    try {
-      const stored = await AsyncStorage.getItem('paymentInstructions');
-      if (stored) {
-        setPaymentInstructions(stored);
-      }
-    } catch (error) {
-      console.error('Failed to load payment instructions:', error);
-    }
-  };
 
   const handleSendRequest = () => {
     if (!selectedOrderId) {

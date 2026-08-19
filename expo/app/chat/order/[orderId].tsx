@@ -25,7 +25,8 @@ import { chatService } from '@/services/chatService';
 import { CustomerInvoiceChatCard } from '@/features/chat/components/CustomerInvoiceChatCard';
 import { useChatSubscription, mergeChatMessages } from '@/hooks/useChatMessages';
 import { mockOrders, OrderStatus, Order } from '@/mocks/ordersData';
-import { mockVendors } from '@/mocks/vendorData';
+import { mockVendors, type Vendor } from '@/mocks/vendorData';
+import { vendorRepository } from '@/services/repositories/vendorRepository';
 import { useOrders } from '@/contexts/OrdersContext';
 
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
@@ -156,6 +157,20 @@ export default function OrderChatScreen() {
     order != null &&
     ['requested', 'accepted', 'confirmed', 'in_progress'].includes(order.status);
   console.log('[ORDER CHAT] Vendor status:', orderVendor?.vendorStatus, '| Safety freeze active:', isVendorSuspendedOnActiveOrder);
+
+  // Real vendor doc, fetched separately from orderVendor above (which stays
+  // on mockVendors for the unrelated suspension check). Only used to show the
+  // vendor's actual configured payment instructions instead of the previous
+  // hardcoded bank details in the Payment Details modal.
+  const [paymentVendor, setPaymentVendor] = useState<Vendor | undefined>(undefined);
+  useEffect(() => {
+    if (!order?.vendorId) return;
+    let cancelled = false;
+    void vendorRepository.getById(order.vendorId).then((v) => {
+      if (!cancelled) setPaymentVendor(v);
+    });
+    return () => { cancelled = true; };
+  }, [order?.vendorId]);
 
   const fulfillmentTypeFromParams = (params.fulfillmentType as string) || 'Pickup';
   const orderTotalFromParams = params.orderTotal ? Number(params.orderTotal) : 0;
@@ -1267,34 +1282,21 @@ export default function OrderChatScreen() {
                   <Text style={styles.paymentDetailLabel}>Payment Method</Text>
                   <Text style={styles.paymentDetailValue}>{messages.find(m => m.id === showPaymentDetails)?.paymentRequestData?.paymentMethod}</Text>
                 </View>
-                {messages.find(m => m.id === showPaymentDetails)?.paymentRequestData?.paymentMethod === 'Bank Transfer' && (
-                  <>
-                    <View style={styles.paymentDetailSection}>
-                      <Text style={styles.paymentDetailLabel}>Bank Name</Text>
-                      <Text style={styles.paymentDetailValue}>First Bank of Nigeria</Text>
-                      <TouchableOpacity style={styles.copyPaymentButton}>
-                        <Text style={styles.copyPaymentButtonText}>Copy</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <View style={styles.paymentDetailSection}>
-                      <Text style={styles.paymentDetailLabel}>Account Number</Text>
-                      <Text style={styles.paymentDetailValue}>1234567890</Text>
-                      <TouchableOpacity style={styles.copyPaymentButton}>
-                        <Text style={styles.copyPaymentButtonText}>Copy</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <View style={styles.paymentDetailSection}>
-                      <Text style={styles.paymentDetailLabel}>Account Name</Text>
-                      <Text style={styles.paymentDetailValue}>Spicy Restaurant Ltd</Text>
-                    </View>
-                  </>
+                {paymentVendor?.paymentInstructionsEnabled && paymentVendor?.paymentInstructions?.trim() ? (
+                  <View style={styles.paymentInstructionsSection}>
+                    <Text style={styles.paymentInstructionsTitle}>Payment Instructions</Text>
+                    <Text style={styles.paymentInstructionsText}>
+                      {paymentVendor.paymentInstructions}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.paymentInstructionsSection}>
+                    <Text style={styles.paymentInstructionsTitle}>Payment Instructions</Text>
+                    <Text style={styles.paymentInstructionsText}>
+                      Your order will be confirmed once payment is received. Contact the vendor if you need payment details.
+                    </Text>
+                  </View>
                 )}
-                <View style={styles.paymentInstructionsSection}>
-                  <Text style={styles.paymentInstructionsTitle}>Payment Instructions</Text>
-                  <Text style={styles.paymentInstructionsText}>
-                    Complete payment using the details above. Your order will be confirmed once payment is received.
-                  </Text>
-                </View>
               </>
             )}
           </ScrollView>
