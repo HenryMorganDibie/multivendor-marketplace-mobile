@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { ChevronRight } from 'lucide-react-native';
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import LaektivaModal from '@/components/LaektivaModal';
 import { Colors } from '@/constants/colors';
+import { auth, callable } from '@/lib/firebase';
 
 export default function SecurityScreen() {
   const router = useRouter();
@@ -16,25 +18,77 @@ export default function SecurityScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [appLockEnabled, setAppLockEnabled] = useState(false);
   const [showAppLockModal, setShowAppLockModal] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const handleChangePassword = () => {
+    setPasswordError(null);
     setShowChangePasswordModal(true);
   };
 
-  const handleConfirmPasswordChange = () => {
+  /**
+   * Real Firebase Auth password change, not a fabricated "24-hour delay"
+   * confirmation. A password change requires a recent sign-in, which most
+   * sessions aren't — reauthenticateWithCredential proves the current
+   * password directly rather than requiring the vendor to sign out and back
+   * in. On success, every other device is signed out for real via the same
+   * signOutAllDevices callable active-sessions.tsx already uses, since a
+   * password change should invalidate sessions started under the old one.
+   */
+  const handleConfirmPasswordChange = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       return;
     }
     if (newPassword !== confirmPassword) {
-      console.log('Passwords do not match');
+      setPasswordError('New passwords do not match.');
       return;
     }
-    console.log('Password change request submitted');
-    setShowChangePasswordModal(false);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setShowSuccessModal(true);
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters.');
+      return;
+    }
+    const user = auth.currentUser;
+    if (!user?.email) {
+      setPasswordError('Your session has expired. Please sign in again.');
+      return;
+    }
+    setPasswordError(null);
+    setIsChangingPassword(true);
+    try {
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, newPassword);
+      try {
+        const revoke = callable<Record<string, never>, { success: true }>('signOutAllDevices');
+        await revoke({});
+      } catch (revokeError) {
+        // The password itself already changed successfully - a failure to
+        // additionally revoke other sessions must not be reported as the
+        // whole operation failing, since that would tell the vendor their
+        // new password didn't take when it did.
+        console.error('[Security] signOutAllDevices after password change failed:', revokeError);
+      }
+      setShowChangePasswordModal(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowSuccessModal(true);
+    } catch (error: any) {
+      const code = error?.code as string | undefined;
+      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        setPasswordError('Current password is incorrect.');
+      } else if (code === 'auth/weak-password') {
+        setPasswordError('New password is too weak. Use a longer password.');
+      } else if (code === 'auth/requires-recent-login') {
+        setPasswordError('For security, please sign out and back in, then try again.');
+      } else if (code === 'auth/too-many-requests') {
+        setPasswordError('Too many attempts. Please wait a moment and try again.');
+      } else {
+        setPasswordError('Could not change your password. Please try again.');
+      }
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   return (
@@ -117,10 +171,14 @@ export default function SecurityScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Change Password</Text>
-            
+
             <Text style={styles.securityNotice}>
-              Password changes require email confirmation and a 24-hour security delay.
+              Changing your password will sign you out on every other device.
             </Text>
+
+            {passwordError ? (
+              <Text style={styles.errorNotice}>{passwordError}</Text>
+            ) : null}
 
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Current Password</Text>
@@ -169,8 +227,10 @@ export default function SecurityScreen() {
                   setCurrentPassword('');
                   setNewPassword('');
                   setConfirmPassword('');
+                  setPasswordError(null);
                 }}
                 activeOpacity={0.7}
+                disabled={isChangingPassword}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
@@ -178,12 +238,13 @@ export default function SecurityScreen() {
                 style={[
                   styles.modalButton,
                   styles.confirmButton,
-                  (!currentPassword || !newPassword || !confirmPassword) && styles.disabledButton,
+                  (!currentPassword || !newPassword || !confirmPassword || isChangingPassword) && styles.disabledButton,
                 ]}
                 onPress={handleConfirmPasswordChange}
                 activeOpacity={0.7}
-                disabled={!currentPassword || !newPassword || !confirmPassword}
+                disabled={!currentPassword || !newPassword || !confirmPassword || isChangingPassword}
               >
+                {isChangingPassword ? <ActivityIndicator color={Colors.white} /> : (
                 <Text
                   style={[
                     styles.confirmButtonText,
@@ -192,6 +253,7 @@ export default function SecurityScreen() {
                 >
                   Confirm Password
                 </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -200,8 +262,8 @@ export default function SecurityScreen() {
 
       <LaektivaModal
         visible={showSuccessModal}
-        title="Password Change Requested"
-        message="A confirmation email has been sent to your registered email address. Your password will be changed after confirmation and a 24-hour security delay. All sessions will be logged out."
+        title="Password Changed"
+        message="Your password has been changed. You've been signed out on every other device for security."
         primaryButton={{
           label: 'Done',
           onPress: () => setShowSuccessModal(false),
@@ -327,6 +389,13 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     lineHeight: 22,
     marginBottom: 24,
+    fontWeight: '500' as const,
+  },
+  errorNotice: {
+    fontSize: 14,
+    color: Colors.error,
+    lineHeight: 20,
+    marginBottom: 16,
     fontWeight: '500' as const,
   },
   inputContainer: {
