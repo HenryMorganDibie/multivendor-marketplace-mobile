@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { PartyPopper, ArrowRight, FileText } from 'lucide-react-native';
 import { useVendor } from '@/contexts/VendorContext';
+import { callable } from '@/lib/firebase';
 
 type Phase = 'optional' | 'complete';
 
@@ -65,10 +66,22 @@ export default function VendorSetupCompleteScreen() {
     setPhase('complete');
   };
 
-  const handleSaveAndContinue = () => {
-    if (description.trim()) {
-      console.log('[VENDOR_SETUP] Saving description:', description.trim());
-      updateVendor({ description: description.trim() });
+  const handleSaveAndContinue = async () => {
+    const trimmed = description.trim();
+    if (trimmed) {
+      console.log('[VENDOR_SETUP] Saving description:', trimmed);
+      try {
+        // updateVendorStorefront already exists and already accepts
+        // description — this screen was the one caller still writing it
+        // through updateVendor()'s AsyncStorage-only path, so an onboarding
+        // description never reached vendors/{vendorId} and no customer ever
+        // saw it.
+        const update = callable<{ description: string }, { success: true }>('updateVendorStorefront');
+        await update({ description: trimmed });
+        updateVendor({ description: trimmed });
+      } catch (err) {
+        console.error('[VENDOR_SETUP] updateVendorStorefront failed:', err);
+      }
     }
     setPhase('complete');
   };

@@ -37,6 +37,7 @@ import VendorPreviewModal from '@/components/VendorPreviewModal';
 import { safeShare } from '@/utils/share';
 import { formatPriceWithCommas } from '@/utils/formatPrice';
 import { mockOrders } from '@/mocks/ordersData';
+import { useOrders } from '@/contexts/OrdersContext';
 import { getActivePromotions } from '@/mocks/promotionsData';
 import { getMenuItemDisplayPrice, hasItemSalePrice } from '@/utils/itemPricing';
 
@@ -188,10 +189,20 @@ function ItemViewContent({
     return badges;
   }, [vendorId, id]);
 
+  const { orders } = useOrders();
   const orderedBefore = useMemo(() => {
     if (!item) return false;
-    return mockOrders.some((o) => o.status === 'completed' && o.items.some((i) => i.id === id));
-  }, [id, item]);
+    return orders.some((o) => o.status === 'completed' && o.items.some((i) => i.id === id));
+  }, [id, item, orders]);
+
+  // isPopular below is NOT fixed by this pass: it needs a per-item order
+  // count across ALL customers, not the signed-in customer's own orders
+  // (useOrders() is customer-scoped), and `item` itself still comes from
+  // mockMenuItems rather than a real single-catalog-item fetch — this whole
+  // page's catalog data source is a separate, larger gap than the mockOrders
+  // reference this pass was scoped to fix. The real equivalent exists
+  // server-side as catalogItems/{itemId}.orderCount (incremented in
+  // adjustInventoryAfterOrder), just not wired to this screen.
 
   const vendor = useMemo(() => {
     if (!vendorId) return null;

@@ -12,6 +12,8 @@ import DiscardChangesModal from '@/components/DiscardChangesModal';
 import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
 import { Colors } from '@/constants/colors';
 import { useVendor } from '@/contexts/VendorContext';
+import { callable } from '@/lib/firebase';
+import type { DayHoursConfig } from '@/mocks/vendorData';
 
 type HoursMode = 'always' | 'selected';
 type DayHours = {
@@ -30,6 +32,64 @@ type WeekHours = {
   Saturday: DayHours;
 };
 
+const DEFAULT_WEEK_HOURS: WeekHours = {
+  Sunday: { open: '9:00 AM', close: '6:00 PM', closed: false },
+  Monday: { open: '9:00 AM', close: '6:00 PM', closed: false },
+  Tuesday: { open: '9:00 AM', close: '6:00 PM', closed: false },
+  Wednesday: { open: '9:00 AM', close: '6:00 PM', closed: false },
+  Thursday: { open: '9:00 AM', close: '6:00 PM', closed: false },
+  Friday: { open: '9:00 AM', close: '6:00 PM', closed: false },
+  Saturday: { open: '9:00 AM', close: '6:00 PM', closed: true },
+};
+
+const ALWAYS_OPEN_RANGE = { open: '12:00 AM', close: '11:59 PM' };
+
+/**
+ * This screen and edit-day-hours.tsx both edit the vendor's weekly hours —
+ * this one as a whole-week overview with an "always open" shortcut,
+ * edit-day-hours.tsx as the per-day editor it links out to. Both now read
+ * and write the same real field (vendors/{vendorId}.weeklyHours via
+ * updateVendorSettings) rather than this screen's own disconnected
+ * `businessHours` string that nothing ever read back.
+ */
+function weeklyHoursToWeekHours(weeklyHours: Record<string, DayHoursConfig> | undefined): { mode: HoursMode; hours: WeekHours } {
+  if (!weeklyHours || Object.keys(weeklyHours).length === 0) {
+    return { mode: 'selected', hours: DEFAULT_WEEK_HOURS };
+  }
+  const days = Object.keys(DEFAULT_WEEK_HOURS) as (keyof WeekHours)[];
+  const isAlwaysOpen = days.every((d) => {
+    const cfg = weeklyHours[d];
+    return cfg && !cfg.closed && cfg.ranges?.length === 1
+      && cfg.ranges[0].open === ALWAYS_OPEN_RANGE.open && cfg.ranges[0].close === ALWAYS_OPEN_RANGE.close;
+  });
+  const hours = { ...DEFAULT_WEEK_HOURS };
+  for (const d of days) {
+    const cfg = weeklyHours[d];
+    if (!cfg) continue;
+    const firstRange = cfg.ranges?.[0];
+    hours[d] = {
+      closed: cfg.closed,
+      open: firstRange?.open ?? DEFAULT_WEEK_HOURS[d].open,
+      close: firstRange?.close ?? DEFAULT_WEEK_HOURS[d].close,
+    };
+  }
+  return { mode: isAlwaysOpen ? 'always' : 'selected', hours };
+}
+
+function weekHoursToWeeklyHours(mode: HoursMode, weekHours: WeekHours): Record<string, DayHoursConfig> {
+  const days = Object.keys(weekHours) as (keyof WeekHours)[];
+  const result: Record<string, DayHoursConfig> = {};
+  for (const day of days) {
+    if (mode === 'always') {
+      result[day] = { closed: false, ranges: [ALWAYS_OPEN_RANGE] };
+      continue;
+    }
+    const h = weekHours[day];
+    result[day] = h.closed ? { closed: true, ranges: [] } : { closed: false, ranges: [{ open: h.open, close: h.close }] };
+  }
+  return result;
+}
+
 function formatWeekHoursToString(mode: HoursMode, weekHours: WeekHours): string {
   if (mode === 'always') return 'Open 24 hours';
   const dayKeys = Object.keys(weekHours) as (keyof WeekHours)[];
@@ -44,30 +104,32 @@ function formatWeekHoursToString(mode: HoursMode, weekHours: WeekHours): string 
 
 export default function BusinessHoursScreen() {
   const router = useRouter();
-  const { updateVendor } = useVendor();
-  const [hoursMode, setHoursMode] = useState<HoursMode>('selected');
-  const [weekHours, setWeekHours] = useState<WeekHours>({
-    Sunday: { open: '9:00 AM', close: '6:00 PM', closed: false },
-    Monday: { open: '9:00 AM', close: '6:00 PM', closed: false },
-    Tuesday: { open: '9:00 AM', close: '6:00 PM', closed: false },
-    Wednesday: { open: '9:00 AM', close: '6:00 PM', closed: false },
-    Thursday: { open: '9:00 AM', close: '6:00 PM', closed: false },
-    Friday: { open: '9:00 AM', close: '6:00 PM', closed: false },
-    Saturday: { open: '9:00 AM', close: '6:00 PM', closed: true },
-  });
+  const { vendor, updateVendor } = useVendor();
+  const seeded = weeklyHoursToWeekHours(vendor.weeklyHours as Record<string, DayHoursConfig> | undefined);
+  const [hoursMode, setHoursMode] = useState<HoursMode>(seeded.mode);
+  const [weekHours, setWeekHours] = useState<WeekHours>(seeded.hours);
+  const [isSaving, setIsSaving] = useState(false);
 
   const unsavedChanges = useUnsavedChanges(
     { hoursMode, weekHours },
     false
   );
 
-  const handleSave = () => {
-    const formattedHours = formatWeekHoursToString(hoursMode, weekHours);
-    console.log('Business hours saved:', hoursMode, weekHours);
-    console.log('[BusinessHours] Formatted hours string:', formattedHours);
-    updateVendor({ businessHours: formattedHours });
-    unsavedChanges.resetChanges();
-    router.back();
+  const handleSave = async () => {
+    const weeklyHours = weekHoursToWeeklyHours(hoursMode, weekHours);
+    console.log('[BusinessHours] Saving weeklyHours:', weeklyHours);
+    setIsSaving(true);
+    try {
+      const update = callable<{ weeklyHours: Record<string, DayHoursConfig> }, { success: true }>('updateVendorSettings');
+      await update({ weeklyHours });
+      updateVendor({ weeklyHours: weeklyHours as any });
+      unsavedChanges.resetChanges();
+      router.back();
+    } catch (err) {
+      console.error('[BusinessHours] updateVendorSettings failed:', err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDayPress = (day: keyof WeekHours) => {
@@ -181,8 +243,9 @@ export default function BusinessHoursScreen() {
             style={styles.saveButton}
             onPress={handleSave}
             activeOpacity={0.7}
+            disabled={isSaving}
           >
-            <Text style={styles.saveButtonText}>Save</Text>
+            <Text style={styles.saveButtonText}>{isSaving ? 'Saving...' : 'Save'}</Text>
           </TouchableOpacity>
 
           <View style={styles.bottomSpacer} />

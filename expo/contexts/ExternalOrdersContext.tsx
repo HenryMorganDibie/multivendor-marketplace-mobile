@@ -2,6 +2,32 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+/**
+ * AsyncStorage-only, device-local, and this is NOT device-local scratch
+ * data — it represents real vendor external-order revenue. Evidence: a
+ * customer-facing shareToken (getExternalOrderByShareToken), full financial
+ * fields (total/subtotal/tax/amountReceived), a terminal `status:
+ * 'completed'`, and it feeds real sales reporting (reports.tsx) alongside
+ * genuine backend orders.
+ *
+ * It is not migrated to the real backend (createExternalOrder,
+ * the platform-backend/functions/src/orders/createOrder.ts) in this pass,
+ * deliberately: several fields this context supports — deliveryFee,
+ * serviceFee, tax, manual discount, fulfillmentDate/fulfillmentTime — have
+ * no backend equivalent at all (confirmed by direct code inspection, not
+ * assumption), and building that backend support is scope that is already
+ * under active, paused negotiation with the client, separate from and
+ * predating this remediation pass. Migrating this context without that
+ * backend work landing first would mean either dropping data the vendor
+ * already relies on, or quietly inventing new backend fields nobody has
+ * agreed to build or price — both out of scope here.
+ *
+ * Until that negotiation resolves, this remains the real (if not
+ * backend-synced) record of a vendor's external orders — not a draft, not
+ * safe to delete, not something to silently "fix" by rewiring to a backend
+ * that cannot yet represent everything this data holds.
+ */
+
 export interface ExternalOrderItem {
   id: string;
   name: string;

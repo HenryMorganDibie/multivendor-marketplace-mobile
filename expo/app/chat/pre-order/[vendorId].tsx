@@ -20,7 +20,7 @@ import { useChats } from '@/contexts/ChatContext';
 import { ChatMessage } from '@/mocks/chatData';
 import { chatService } from '@/services/chatService';
 import { useInbox } from '@/contexts/InboxContext';
-import { MOCK_CUSTOMER_ID } from '@/mocks/inboxData';
+import { useAuth } from '@/contexts/AuthContext';
 
 import { useVendorChatMode } from '@/contexts/VendorChatModeContext';
 import { validateChatMessage } from '@/utils/chatValidation';
@@ -55,6 +55,7 @@ function PreOrderChatContent({ vendorId }: { vendorId: string }) {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
   const { getPreOrderChat, addMessageToChat } = useChats();
+  const { user } = useAuth();
   const { chatMode } = useVendorChatMode();
   const { customerInbox, updateInboxAfterMessage } = useInbox();
   const { canChat } = useVendorStatusPermissions();
@@ -157,7 +158,7 @@ function PreOrderChatContent({ vendorId }: { vendorId: string }) {
       updateInboxAfterMessage({
         conversationId: conv.conversationId,
         lastMessageText: messageContent,
-        lastSenderId: MOCK_CUSTOMER_ID,
+        lastSenderId: user?.id ?? '',
         senderRole: 'customer',
       });
       console.log('[PRE-ORDER CHAT] Inbox snapshot updated:', conv.conversationId);

@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import { ChevronLeft, Archive } from 'lucide-react-native';
 import { getAllVendorChats, Chat } from '@/mocks/chatData';
-import { mockOrders } from '@/mocks/ordersData';
+import type { Order } from '@/mocks/ordersData';
+import { useOrders } from '@/contexts/OrdersContext';
 import { getOrderStatusLabel } from '@/features/orders/selectors/orderStatusSelectors';
 import { OrderConversationListItem, CircularAvatar } from '@/components/OrderConversationListItem';
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
@@ -29,9 +30,9 @@ const getLastMessage = (chat: Chat): string => {
   return lastMsg.content;
 };
 
-const getLatestOrderForChat = (chat: Chat) => {
+const getLatestOrderForChat = (chat: Chat, orders: Order[]) => {
   if (!chat.customerId) return null;
-  return mockOrders
+  return orders
     .filter(o => o.vendorId === chat.vendorId && o.customerId === chat.customerId)
     .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())[0];
 };
@@ -67,6 +68,7 @@ const getFormattedTime = (dateString: string): string => {
 export default function VendorArchivedChatsScreen() {
   const router = useRouter();
   const { archivedChats, unarchiveChat, getBlockedUserByChatId } = useBlockedUsers();
+  const { orders } = useOrders();
 
   const allChats = getAllVendorChats();
 
@@ -85,7 +87,7 @@ export default function VendorArchivedChatsScreen() {
     const isOrderChat = chat.chatType === 'order_chat';
     
     if (isOrderChat) {
-      const order = getLatestOrderForChat(chat);
+      const order = getLatestOrderForChat(chat, orders);
       if (order) {
         router.push({
           pathname: '/vendor/chats/[orderId]' as any,
@@ -111,7 +113,7 @@ export default function VendorArchivedChatsScreen() {
     
     const isOrderChat = item.chatType === 'order_chat';
     
-    const order = isOrderChat ? getLatestOrderForChat(item) : null;
+    const order = isOrderChat ? getLatestOrderForChat(item, orders) : null;
     const displayStatus = order ? getOrderStatusLabel(order.status) : null;
     const blockedUser = getBlockedUserByChatId(item.id);
     const isBlocked = !!blockedUser;

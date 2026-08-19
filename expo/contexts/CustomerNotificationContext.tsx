@@ -1,9 +1,10 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { notificationService } from '@/services/notificationService';
+import { collection, doc, onSnapshot, orderBy, query, limit as fbLimit, updateDoc, writeBatch, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import { useAuth } from './AuthContext';
 
-export type CustomerNotificationType = 
+export type CustomerNotificationType =
   | 'order_sent'
   | 'order_accepted'
   | 'order_rejected'
@@ -12,9 +13,14 @@ export type CustomerNotificationType =
   | 'payment_confirmed'
   | 'pickup_instructions'
   | 'new_vendor_message'
-  | 'new_support_message';
+  | 'new_support_message'
+  // Real backend-generated types this app didn't previously know about —
+  // kept as a passthrough string below rather than a closed union, since
+  // the real users/{uid}/notifications feed is server-generated and this
+  // context does not get to decide what type values arrive.
+  | (string & {});
 
-export type NotificationDomain = 'order' | 'vendor_chat' | 'support';
+export type NotificationDomain = 'order' | 'vendor_chat' | 'customer_chat' | 'support' | 'verification' | 'system' | (string & {});
 
 export interface CustomerNotification {
   id: string;
@@ -29,226 +35,116 @@ export interface CustomerNotification {
   vendorId?: string;
   actorName: string;
   trackingLink?: string;
+  deepLink?: string | null;
 }
 
-const AUTH_STORAGE_KEY = '@the platform_auth_user';
-const NOTIFICATIONS_STORAGE_KEY = '@the platform_customer_notifications';
+const NOTIFICATION_PAGE_SIZE = 50;
+
+function toIsoString(value: unknown): string {
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  if (typeof value === 'string') return value;
+  return new Date().toISOString();
+}
 
 /**
- * Notifications are owned per-user, mirroring the backend's
- * `users/{uid}/notifications/{notificationId}` structure. The on-device list is
- * namespaced by the signed-in user id so two accounts on one device never share
- * a feed. Falls back to the legacy global key when no user id is available.
+ * Reads the real users/{uid}/notifications subcollection (Phase 3 spec,
+ * populated server-side by createNotificationInternal — order events, chat
+ * messages, pickup-details, etc). This used to be a fully client-generated,
+ * AsyncStorage-only feed (notifyOrderSent/notifyOrderAccepted/... calling
+ * addNotification locally) with zero real backend consumers and zero real
+ * UI call sites for those creation functions — confirmed by a repo-wide
+ * search before this rewrite. The client-generated functions are removed
+ * entirely rather than ported: per Phase 3's own security rules, only
+ * Cloud Functions may create a notification document at all
+ * (`allow create: if false` for clients), so a client-side "notify" call
+ * was never something that could correctly reach the real collection —
+ * it was always going to be a second, fake, unsynced feed.
  */
-async function getCustomerNotificationsKey(): Promise<string> {
-  try {
-    const stored = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-    if (stored) {
-      const user = JSON.parse(stored);
-      if (user?.id) return `${NOTIFICATIONS_STORAGE_KEY}:${user.id}`;
-    }
-  } catch (error) {
-    console.error('[CustomerNotifications] Failed to resolve per-user key:', error);
-  }
-  return NOTIFICATIONS_STORAGE_KEY;
-}
-
 export const [CustomerNotificationProvider, useCustomerNotifications] = createContextHook(() => {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<CustomerNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadNotifications();
-  }, []);
-
-  const loadNotifications = async () => {
-    try {
-      // Read path: notificationService -> notificationRepository -> notificationMapper.
-      const feed = await notificationService.getForCurrentUser('customer');
-      setNotifications(feed as CustomerNotification[]);
-    } catch (error) {
-      console.error('[CustomerNotifications] Failed to load:', error);
-    } finally {
+    const uid = user?.id ?? auth.currentUser?.uid;
+    if (!uid) {
+      setNotifications([]);
       setIsLoading(false);
+      return;
     }
-  };
 
-  const saveNotifications = useCallback(async (updatedNotifications: CustomerNotification[]) => {
-    try {
-      const key = await getCustomerNotificationsKey();
-      await AsyncStorage.setItem(key, JSON.stringify(updatedNotifications));
-    } catch (error) {
-      console.error('[CustomerNotifications] Failed to save:', error);
-    }
-  }, []);
+    setIsLoading(true);
+    const q = query(
+      collection(db, 'users', uid, 'notifications'),
+      orderBy('createdAt', 'desc'),
+      fbLimit(NOTIFICATION_PAGE_SIZE)
+    );
 
-  const addNotification = useCallback((notification: Omit<CustomerNotification, 'id' | 'timestamp' | 'read'>) => {
-    const newNotification: CustomerNotification = {
-      ...notification,
-      id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      read: false,
-    };
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const list: CustomerNotification[] = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            type: (data.type as string) ?? 'system',
+            domain: (data.domain as string) ?? 'system',
+            title: (data.title as string) ?? '',
+            message: (data.body as string) ?? '',
+            timestamp: toIsoString(data.createdAt),
+            read: Boolean(data.read),
+            orderId: (data.metadata as Record<string, unknown> | undefined)?.orderId as string | undefined,
+            fullOrderId: (data.metadata as Record<string, unknown> | undefined)?.orderId as string | undefined,
+            vendorId: (data.vendorId as string | undefined) ?? undefined,
+            actorName: (data.title as string) ?? '',
+            deepLink: (data.deepLink as string | null | undefined) ?? null,
+          };
+        });
+        setNotifications(list);
+        setIsLoading(false);
+      },
+      (error) => {
+        console.error('[CustomerNotifications] Live subscription failed:', error);
+        setIsLoading(false);
+      }
+    );
 
-    console.log('[CustomerNotifications] Adding notification:', newNotification.type, newNotification.message);
-
-    setNotifications(prev => {
-      const updated = [newNotification, ...prev];
-      saveNotifications(updated);
-      return updated;
-    });
-  }, [saveNotifications]);
+    return () => unsubscribe();
+  }, [user?.id]);
 
   const markAsRead = useCallback((notificationId: string) => {
-    setNotifications(prev => {
-      const updated = prev.map(notif =>
-        notif.id === notificationId ? { ...notif, read: true } : notif
-      );
-      saveNotifications(updated);
-      return updated;
-    });
-  }, [saveNotifications]);
+    const uid = user?.id ?? auth.currentUser?.uid;
+    if (!uid) return;
+    // read/readAt are the only fields a client may write on its own
+    // notification document (Phase 3 rules) — narrow, allowlisted update,
+    // not a general write.
+    void updateDoc(doc(db, 'users', uid, 'notifications', notificationId), {
+      read: true,
+      readAt: serverTimestamp(),
+    }).catch((error) => console.error('[CustomerNotifications] Failed to mark read:', error));
+  }, [user?.id]);
 
   const markAllAsRead = useCallback(() => {
-    setNotifications(prev => {
-      const updated = prev.map(notif => ({ ...notif, read: true }));
-      saveNotifications(updated);
-      return updated;
-    });
-  }, [saveNotifications]);
-
-  const clearNotifications = useCallback(async () => {
-    setNotifications([]);
-    const key = await getCustomerNotificationsKey();
-    await AsyncStorage.removeItem(key);
-  }, []);
+    const uid = user?.id ?? auth.currentUser?.uid;
+    if (!uid) return;
+    const unread = notifications.filter((n) => !n.read);
+    if (unread.length === 0) return;
+    const batch = writeBatch(db);
+    for (const n of unread) {
+      batch.update(doc(db, 'users', uid, 'notifications', n.id), { read: true, readAt: serverTimestamp() });
+    }
+    void batch.commit().catch((error) => console.error('[CustomerNotifications] Failed to mark all read:', error));
+  }, [user?.id, notifications]);
 
   const getUnreadCount = useCallback(() => {
     return notifications.filter(n => !n.read).length;
   }, [notifications]);
 
-  const notifyOrderSent = useCallback((fullOrderId: string, vendorId: string, vendorName: string) => {
-    addNotification({
-      type: 'order_sent',
-      domain: 'order',
-      title: 'Order sent',
-      message: `Your order has been sent to ${vendorName}.`,
-      fullOrderId,
-      vendorId,
-      actorName: vendorName,
-    });
-  }, [addNotification]);
-
-  const notifyOrderAccepted = useCallback((fullOrderId: string, vendorId: string, vendorName: string) => {
-    addNotification({
-      type: 'order_accepted',
-      domain: 'order',
-      title: 'Order accepted',
-      message: `${vendorName} has accepted your order.`,
-      fullOrderId,
-      vendorId,
-      actorName: vendorName,
-    });
-  }, [addNotification]);
-
-  const notifyOrderRejected = useCallback((fullOrderId: string, vendorId: string, vendorName: string) => {
-    addNotification({
-      type: 'order_rejected',
-      domain: 'order',
-      title: 'Order rejected',
-      message: `${vendorName} has declined your order.`,
-      fullOrderId,
-      vendorId,
-      actorName: vendorName,
-    });
-  }, [addNotification]);
-
-  const notifyOrderReady = useCallback((fullOrderId: string, vendorId: string, vendorName: string) => {
-    addNotification({
-      type: 'order_ready',
-      domain: 'order',
-      title: 'Order ready',
-      message: `${vendorName} has prepared your order. It's ready!`,
-      fullOrderId,
-      vendorId,
-      actorName: vendorName,
-    });
-  }, [addNotification]);
-
-  const notifyPartialPaymentConfirmed = useCallback((fullOrderId: string, vendorId: string, vendorName: string, amount: string) => {
-    addNotification({
-      type: 'partial_payment_confirmed',
-      domain: 'order',
-      title: 'Partial payment confirmed',
-      message: `${vendorName} has confirmed your partial payment of ${amount}.`,
-      fullOrderId,
-      vendorId,
-      actorName: vendorName,
-    });
-  }, [addNotification]);
-
-  const notifyPaymentConfirmed = useCallback((fullOrderId: string, vendorId: string, vendorName: string, amount: string) => {
-    addNotification({
-      type: 'payment_confirmed',
-      domain: 'order',
-      title: 'Payment confirmed',
-      message: `${vendorName} has confirmed your payment of ${amount}.`,
-      fullOrderId,
-      vendorId,
-      actorName: vendorName,
-    });
-  }, [addNotification]);
-
-  const notifyPickupInstructions = useCallback((fullOrderId: string, vendorId: string, vendorName: string, instructions: string) => {
-    addNotification({
-      type: 'pickup_instructions',
-      domain: 'order',
-      title: 'Pickup instructions',
-      message: `${vendorName} has sent pickup instructions: ${instructions}`,
-      fullOrderId,
-      vendorId,
-      actorName: vendorName,
-    });
-  }, [addNotification]);
-
-  const notifyNewVendorMessage = useCallback((vendorId: string, vendorName: string, fullOrderId?: string) => {
-    addNotification({
-      type: 'new_vendor_message',
-      domain: 'vendor_chat',
-      title: 'New message',
-      message: `${vendorName} has sent you a message.`,
-      fullOrderId,
-      vendorId,
-      actorName: vendorName,
-    });
-  }, [addNotification]);
-
-  const notifyNewSupportMessage = useCallback(() => {
-    addNotification({
-      type: 'new_support_message',
-      domain: 'support',
-      title: 'New message',
-      message: 'the platform Support has sent you a message.',
-      actorName: 'the platform Support',
-    });
-  }, [addNotification]);
-
   return {
     notifications,
     isLoading,
-    addNotification,
     markAsRead,
     markAllAsRead,
-    clearNotifications,
     getUnreadCount,
-    notifyOrderSent,
-    notifyOrderAccepted,
-    notifyOrderRejected,
-    notifyOrderReady,
-    notifyPartialPaymentConfirmed,
-    notifyPaymentConfirmed,
-    notifyPickupInstructions,
-    notifyNewVendorMessage,
-    notifyNewSupportMessage,
   };
 });

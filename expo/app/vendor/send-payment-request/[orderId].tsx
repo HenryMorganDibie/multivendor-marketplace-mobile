@@ -12,7 +12,13 @@ import { Alert } from '@/utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Package, ChevronDown, Check } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { mockOrders } from '@/mocks/ordersData';
+import type { Order } from '@/mocks/ordersData';
+import { useOrders } from '@/contexts/OrdersContext';
+// mockVendor.primaryPaymentMethod/secondaryPaymentMethod below is the
+// "Payment Methods" feature — confirmed elsewhere this session to have zero
+// backend concept anywhere (no Firestore field, no callable). Left as-is,
+// explicitly paused pending its own scoping decision; out of scope for the
+// mockOrders fix this file otherwise needed.
 import { mockVendor } from '@/mocks/vendorData';
 import { useVendor } from '@/contexts/VendorContext';
 import { useAuditLog } from '@/contexts/AuditLogContext';
@@ -20,7 +26,7 @@ import { formatPriceWithCommas, formatAmountForInput, getCurrencySymbol, getCurr
 
 type PaymentType = 'full' | 'partial';
 
-const getOutstandingBalance = (o: typeof mockOrders[0]): number => {
+const getOutstandingBalance = (o: Order): number => {
   const total = (o.adjustedTotal || o.total);
   const paid = (o.amountPaid || 0);
   return total - paid;
@@ -31,14 +37,15 @@ export default function SendPaymentRequestScreen() {
   const { orderId, fromOrder } = useLocalSearchParams<{ orderId: string; fromOrder?: string }>();
   const { logEvent } = useAuditLog();
   const { vendor } = useVendor();
-  const order = mockOrders.find((o) => o.id === orderId);
-  const vendorCurrency: Currency = (mockVendor.currency as Currency) || 'NGN';
+  const { orders } = useOrders();
+  const order = orders.find((o) => o.id === orderId);
+  const vendorCurrency: Currency = (vendor.currency as Currency) || 'NGN';
   const currencySymbol = getCurrencySymbol(vendorCurrency);
   const currencyDecimals = getCurrencyDecimals(vendorCurrency);
 
   const unpaidOrders = useMemo(() => {
     if (!order) return [];
-    return mockOrders
+    return orders
       .filter(
         (o) =>
           o.customerName === order.customerName &&
@@ -51,7 +58,7 @@ export default function SendPaymentRequestScreen() {
           getOutstandingBalance(o) > 0
       )
       .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
-  }, [order]);
+  }, [order, orders]);
 
   const openedFromSpecificOrder = !!fromOrder;
   const showOrderSelection = !openedFromSpecificOrder && unpaidOrders.length > 1;
@@ -75,7 +82,7 @@ export default function SendPaymentRequestScreen() {
   const paymentInstructions = vendor.paymentInstructionsEnabled ? (vendor.paymentInstructions ?? '') : '';
   const [showOrderDropdown, setShowOrderDropdown] = useState<boolean>(false);
 
-  const selectedOrder = mockOrders.find((o) => o.id === selectedOrderId);
+  const selectedOrder = orders.find((o) => o.id === selectedOrderId);
 
   const amountPaid = selectedOrder?.amountPaid || 0;
   const orderTotal = selectedOrder ? (selectedOrder.adjustedTotal || selectedOrder.total) : 0;
@@ -195,7 +202,7 @@ export default function SendPaymentRequestScreen() {
 
   const isButtonDisabled = !selectedOrderId || !selectedOrder || !selectedMethod || !amount || parseFloat(amount) <= 0;
 
-  const renderOrderCard = (activeOrder: typeof mockOrders[0]) => {
+  const renderOrderCard = (activeOrder: Order) => {
     const isSelected = selectedOrderId === activeOrder.id;
     const oTotal = (activeOrder.adjustedTotal || activeOrder.total) / 100;
     const oBalance = getOutstandingBalance(activeOrder);

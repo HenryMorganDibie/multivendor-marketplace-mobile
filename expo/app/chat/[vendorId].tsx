@@ -13,6 +13,7 @@ import {
   FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Send, MessageCircle, Plus, User, Clock as ClockIcon, CheckCircle, Search as SearchIcon, ChevronUp, ChevronDown, X as XIcon } from 'lucide-react-native';
+import { Alert } from '@/utils/alert';
 import { renderHighlightedText, messageMatchesQuery } from '@/utils/highlightText';
 import MessageStatusIcon from '@/components/MessageStatusIcon';
 import { PaymentRequestCard } from '@/components/PaymentRequestCard';
@@ -21,7 +22,7 @@ import { consumeChatSearchSignal } from '@/utils/chatSearchSignal';
 import { ChatMessage, getChatByVendorId, getChatByOrderId, MessageStatus } from '@/mocks/chatData';
 import { chatService } from '@/services/chatService';
 import { useChatSubscription, mergeChatMessages } from '@/hooks/useChatMessages';
-import { mockOrders, OrderStatus, Order } from '@/mocks/ordersData';
+import { OrderStatus, Order } from '@/mocks/ordersData';
 import { mockVendor, mockVendors } from '@/mocks/vendorData';
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
 import { useChatRead } from '@/contexts/ChatReadContext';
@@ -114,6 +115,7 @@ export default function CanonicalChatScreen() {
   const { getBlockedUserByChatId } = useBlockedUsers();
   const { isChatLimited } = useVendorChatMode();
   const { markChatAsRead } = useChatRead();
+  const { orders } = useOrders();
 
   const preOrderChat = getChatByVendorId(vendorId, 'pre_order_inquiry');
   const resolvedVendor = mockVendors.find(v => v.id === vendorId) ?? mockVendor;
@@ -122,10 +124,17 @@ export default function CanonicalChatScreen() {
   console.log('[CHAT] Vendor status:', resolvedVendor.vendorStatus, '| Suspended:', isVendorSuspended);
 
   const activeOrders = useMemo(() => {
-    return mockOrders.filter(
-      (o: Order) => o.vendorId === vendorId && ['ORDER_REQUESTED', 'CONFIRMED', 'READY'].includes(o.status)
+    // Real order statuses (types2.ts / OrdersContext) are lowercase
+    // requested/accepted/confirmed/in_progress/... — this used to filter
+    // against 'ORDER_REQUESTED'/'CONFIRMED'/'READY', values that don't
+    // exist anywhere in the real status enum, so it silently matched
+    // nothing for a real signed-in customer and this screen always fell
+    // back to the pre-order thread even with a live active order.
+    const ACTIVE: OrderStatus[] = ['requested', 'accepted', 'confirmed', 'in_progress'];
+    return orders.filter(
+      (o: Order) => o.vendorId === vendorId && ACTIVE.includes(o.status)
     );
-  }, [vendorId]);
+  }, [vendorId, orders]);
 
   const hasActiveOrders = activeOrders.length > 0;
   const resolvedChat = hasActiveOrders ? getChatByOrderId(activeOrders[0].id) : preOrderChat;
@@ -152,6 +161,7 @@ export default function CanonicalChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
   const [messageText, setMessageText] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showContactCardPicker, setShowContactCardPicker] = useState(false);
 
@@ -319,39 +329,41 @@ export default function CanonicalChatScreen() {
     });
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     const content = messageText.trim();
-    if (content === '') return;
-    setMessageText('');
+    // isSendingMessage guard: a rapid double-tap used to fire two real
+    // sendChatMessage calls (each minting its own message doc server-side —
+    // there is no idempotency key), producing two identical messages.
+    if (content === '' || isSendingMessage) return;
 
-    if (chatId) {
-      // Single source of truth: chatService persists, subscription delivers
-      // the new message back into local `messages` via the merge effect.
-      chatService
-        .sendMessage({
-          chatId,
-          type: 'text',
-          content,
-          sender: 'customer',
-        })
-        .then((m) => console.log('[LEGACY CHAT] Message persisted via chatService:', m.id))
-        .catch((err) => console.log('[LEGACY CHAT] sendMessage failed:', err));
-    } else {
-      // No resolved chat — fall back to local-only optimistic append so the
-      // sender still sees their message in this session.
-      const newMessage: ChatMessage = {
-        id: `m${Date.now()}`,
+    if (!chatId) {
+      // No resolved chat — this used to silently append a local-only
+      // message that was never persisted anywhere, so the sender believed
+      // it sent while the vendor never saw it. Surfacing the real failure
+      // instead of faking success.
+      Alert.alert('Could not send', 'This conversation could not be found. Please go back and try again.');
+      return;
+    }
+
+    setIsSendingMessage(true);
+    // Composer is NOT cleared until the send actually succeeds, so a
+    // failure leaves the draft intact rather than silently discarding it.
+    try {
+      const sent = await chatService.sendMessage({
+        chatId,
         type: 'text',
         content,
         sender: 'customer',
-        timestamp: new Date().toISOString(),
-        status: 'sent',
-      };
-      setMessages((prev) => [...prev, newMessage]);
-      console.log('[LEGACY CHAT] No chatId resolved, message not persisted to chatService');
+      });
+      console.log('[LEGACY CHAT] Message persisted via chatService:', sent.id);
+      setMessageText('');
+    } catch (err) {
+      console.error('[LEGACY CHAT] sendMessage failed:', err);
+      const message = err instanceof Error ? err.message : 'Could not send your message.';
+      Alert.alert('Message not sent', message);
+    } finally {
+      setIsSendingMessage(false);
     }
-
-    console.log('Message sent:', content);
   };
 
   const handlePlusButtonPress = () => {
@@ -794,10 +806,10 @@ export default function CanonicalChatScreen() {
             <TouchableOpacity
               style={[
                 styles.sendButton,
-                (!canSendMessages || messageText.trim() === '') && styles.sendButtonDisabled,
+                (!canSendMessages || messageText.trim() === '' || isSendingMessage) && styles.sendButtonDisabled,
               ]}
               onPress={handleSendMessage}
-              disabled={!canSendMessages || messageText.trim() === ''}
+              disabled={!canSendMessages || messageText.trim() === '' || isSendingMessage}
               activeOpacity={0.7}
             >
               <Send

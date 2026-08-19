@@ -668,7 +668,7 @@ export default function VendorDashboardScreen() {
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [noteModalVisible, setNoteModalVisible] = useState(false);
   const [verificationBannerDismissed, setVerificationBannerDismissed] = useState(false);
-  const { plan, usernameSelectionPending } = useVendorPlan();
+  const { plan, planLimits, usernameSelectionPending } = useVendorPlan();
   const { unreadHighPriorityCount, hasUnreadMediumPriority } = useVendorNotifications();
   const { vendor, updateVendor: _updateVendor } = useVendor();
   const { note: todaysNote } = useTodaysNote();
@@ -707,7 +707,17 @@ export default function VendorDashboardScreen() {
     }
   }, [usernameSelectionPending, router]);
 
+  // dashboardFilterRange from the real PlanLimits (getSubscriptionStatus) is
+  // the backend's own authoritative "furthest range this plan may view" —
+  // this used to be re-derived from the plan string locally, a second
+  // ranking that could silently drift from the backend's actual gate. Kept
+  // as a client-side default/fallback (fast first paint, before the real
+  // response lands) only for the brief window planLimits is still null;
+  // once real, it's the sole authority.
+  const TIME_RANGE_ORDER: TimeRange[] = ['today', 'week', 'month', 'year'];
+
   const getDefaultTimeRange = (): TimeRange => {
+    if (planLimits) return planLimits.dashboardFilterRange;
     if (plan === 'pro+') return 'year';
     if (plan === 'pro') return 'month';
     if (plan === 'standard') return 'week';
@@ -717,6 +727,9 @@ export default function VendorDashboardScreen() {
   const [timeRange, setTimeRange] = useState<TimeRange>(getDefaultTimeRange());
 
   const canAccessTimeRange = (range: TimeRange): boolean => {
+    if (planLimits) {
+      return TIME_RANGE_ORDER.indexOf(range) <= TIME_RANGE_ORDER.indexOf(planLimits.dashboardFilterRange);
+    }
     if (range === 'today') return true;
     if (range === 'week') return plan !== 'basic';
     if (range === 'month') return plan === 'pro' || plan === 'pro+';

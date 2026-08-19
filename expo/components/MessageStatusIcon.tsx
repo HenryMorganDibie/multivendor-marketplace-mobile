@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Check } from 'lucide-react-native';
+import { Check, AlertCircle } from 'lucide-react-native';
 import { useChatPrivacy } from '@/contexts/ChatPrivacyContext';
 
-export type MessageStatusType = 'sent' | 'delivered' | 'read';
+export type MessageStatusType = 'sent' | 'delivered' | 'read' | 'failed';
 
 interface MessageStatusIconProps {
   status: MessageStatusType;
@@ -23,7 +23,16 @@ export default function MessageStatusIcon({
 
   const greyColor = outgoingBubble ? 'rgba(255,255,255,0.55)' : '#9CA3AF';
   const blueColor = '#60A5FA';
+  const errorColor = '#EF4444';
   const color = displayStatus === 'read' ? blueColor : greyColor;
+
+  if (displayStatus === 'failed') {
+    return (
+      <View style={styles.container}>
+        <AlertCircle size={size} color={errorColor} strokeWidth={2.5} />
+      </View>
+    );
+  }
 
   if (displayStatus === 'sent') {
     return (

@@ -10,7 +10,9 @@ import { useVendorPlan } from '@/contexts/VendorPlanContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Print from 'expo-print';
 import { File, Paths } from 'expo-file-system';
-import { mockOrders, Order } from '@/mocks/ordersData';
+import type { Order } from '@/mocks/ordersData';
+import { useOrders } from '@/contexts/OrdersContext';
+import { useVendor } from '@/contexts/VendorContext';
 import { formatPriceCents, type Currency } from '@/utils/formatPrice';
 import { mockVendor } from '@/mocks/vendorData';
 import { Colors } from '@/constants/colors';
@@ -28,14 +30,15 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-const VENDOR_NAME = 'Spicy Restaurant';
-const VENDOR_ID = 'v1';
 const MONTHLY_REPORT_LIMIT = 3;
 const REPORT_TRACKING_KEY = '@the platform_report_generations';
 
 export default function ReportsScreen() {
   const router = useRouter();
   const { plan } = useVendorPlan();
+  const { orders } = useOrders();
+  const { vendor } = useVendor();
+  const VENDOR_NAME = vendor.name || 'Vendor';
 
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [showYearPicker, setShowYearPicker] = useState(false);
@@ -115,8 +118,10 @@ export default function ReportsScreen() {
   }, []);
 
   const getOrdersForPeriod = (type: ReportType, month?: number, year?: number): Order[] => {
-    return mockOrders.filter(order => {
-      if (order.vendorId !== VENDOR_ID) return false;
+    // orders (useOrders()) is already scoped server-side to the signed-in
+    // vendor's own orders — no separate vendorId filter needed or possible
+    // here now that this isn't a flat mock array of every vendor's orders.
+    return orders.filter(order => {
       const orderDate = new Date(order.orderDate);
       if (type === 'monthly' && month !== undefined && year !== undefined) {
         return orderDate.getMonth() === month && orderDate.getFullYear() === year;

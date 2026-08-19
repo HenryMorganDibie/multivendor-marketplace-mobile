@@ -18,7 +18,7 @@ import { formatTime } from '@/features/chat/selectors/chatSelectors';
 import { useInvoices } from '@/contexts/InvoiceContext';
 import { useVendor } from '@/contexts/VendorContext';
 import type { InvoiceData } from '@/mocks/chatData';
-import * as Print from 'expo-print';
+import { File, Paths } from 'expo-file-system';
 import { Alert } from '@/utils/alert';
 import type { InvoicePaymentMethod, InvoicePaymentStatus } from '@/contexts/InvoiceContext';
 import { getAmountPaid, getBalanceDue } from '@/contexts/InvoiceContext';
@@ -126,7 +126,7 @@ const PAYMENT_METHODS: { id: InvoicePaymentMethod; label: string }[] = [
 ];
 
 export const InvoiceChatCard = React.memo(function InvoiceChatCard({ data, timestamp, role = 'vendor' }: Props) {
-  const { getInvoiceById, recordPayment } = useInvoices();
+  const { getInvoiceById, recordPayment, downloadInvoicePdf } = useInvoices();
   // The real signed-in vendor. This card used mockVendor for the business name
   // and currency, so a card in a live chat showed the demo business to whoever
   // was reading it.
@@ -187,32 +187,34 @@ export const InvoiceChatCard = React.memo(function InvoiceChatCard({ data, times
     }
     setIsDownloading(true);
     try {
-      const html = generateInvoiceHTMLMini({
-        invoiceNumber: invoice.invoiceNumber,
-        vendorName,
-        customerName: invoice.customerName,
-        issueDate: new Date(invoice.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
-        items: invoice.items.map(i => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice, total: i.total })),
-        subtotal: invoice.subtotal,
-        tax: invoice.tax,
-        discount: invoice.discount,
-        total: invoice.total,
-        paymentStatus: invoice.paymentStatus ?? 'unpaid',
-        notes: invoice.notes,
-        currency,
-      });
-      const { uri } = await Print.printToFileAsync({ html });
+      // Same entitlement-bypass fix as app/vendor/invoice/[orderId].tsx:
+      // local HTML generation never checked canDownloadInvoicePdf. This is
+      // the backend-gated equivalent, same PDF the detail screen produces.
+      const result = await downloadInvoicePdf(invoice.id);
+      if (!result) {
+        Alert.alert('Error', 'Could not generate PDF');
+        return;
+      }
+      const { pdfBase64, fileName } = result;
       if (Platform.OS === 'web') {
         const link = document.createElement('a');
-        link.href = uri;
-        link.download = `Invoice-${invoice.invoiceNumber}.pdf`;
+        link.href = `data:application/pdf;base64,${pdfBase64}`;
+        link.download = fileName;
         link.click();
       } else {
-        await Share.share({ url: uri, title: `Invoice ${invoice.invoiceNumber}` });
+        const pdfFile = new File(Paths.cache, fileName);
+        pdfFile.write(pdfBase64, { encoding: 'base64' });
+        await Share.share({ url: pdfFile.uri, title: `Invoice ${invoice.invoiceNumber}` });
       }
-    } catch (err) {
-      console.error('PDF generation failed:', err);
-      Alert.alert('Error', 'Could not generate PDF');
+    } catch (err: any) {
+      console.error('PDF download failed:', err);
+      const message = err?.message ?? 'Could not download PDF';
+      Alert.alert(
+        /permission-denied|not available on your current plan/i.test(message) ? 'Upgrade required' : 'Error',
+        /permission-denied|not available on your current plan/i.test(message)
+          ? 'Downloading invoice PDFs is available on Standard and above.'
+          : 'Could not generate PDF'
+      );
     } finally {
       setIsDownloading(false);
     }

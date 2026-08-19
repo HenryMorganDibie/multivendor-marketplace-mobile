@@ -1,7 +1,7 @@
 import type { OrderChangeRequest } from '@/types/orderChanges';
 
 export type MessageType = 'text' | 'system' | 'payment-request' | 'contact-card' | 'pickup-details' | 'catalog_item' | 'receipt' | 'invoice' | 'ai' | 'order_context' | 'new_inquiry' | 'change_request';
-export type MessageStatus = 'sent' | 'delivered' | 'read';
+export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
 
 export interface ContactCardData {
   label?: string;

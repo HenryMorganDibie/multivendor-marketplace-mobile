@@ -322,7 +322,13 @@ export const [ReviewsProvider, useReviews] = createContextHook(() => {
 
   const getVendorReviews = useCallback(
     (vendorId: string): CustomerReview[] => {
-      if (realRatingsVendorId) return reviews;
+      // Bug fixed: this used to return the signed-in vendor's own real
+      // reviews for ANY requested vendorId once real data had loaded, so a
+      // signed-in vendor browsing a different vendor's public ratings page
+      // saw their own ratings mislabeled as that vendor's. Now only returns
+      // real data when the requested vendorId actually matches the
+      // signed-in vendor's own id.
+      if (realRatingsVendorId && vendorId === realRatingsVendorId) return reviews;
       return reviews.filter((r) => r.vendorId === vendorId);
     },
     [reviews, realRatingsVendorId]

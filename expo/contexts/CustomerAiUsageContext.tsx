@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
 import { CUSTOMER_AI_MONTHLY_LIMIT } from '@/utils/the platformAiLimits';
+import { useAuth } from './AuthContext';
 
 /**
  * Customer-side the platform AI reply usage tracking — counts AI replies per
@@ -19,8 +20,7 @@ import { CUSTOMER_AI_MONTHLY_LIMIT } from '@/utils/the platformAiLimits';
  * need to change.
  */
 
-const STORAGE_KEY = 'customer_ai_usage_v1';
-const MOCK_CUSTOMER_ID = 'customer-001';
+const STORAGE_KEY_PREFIX = 'customer_ai_usage_v1';
 
 interface UsageRecord {
   /** ISO month key `YYYY-MM` this record belongs to. */
@@ -41,11 +41,21 @@ function currentMonthKey(): string {
 
 export const [CustomerAiUsageProvider, useCustomerAiUsage] = createContextHook(() => {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  // Scoped per authenticated customer — this used to be a single global
+  // AsyncStorage key shared by every account on the device, so a paid-plan
+  // AI-reply quota was trivially bypassed by signing into a second account
+  // (or defeated entirely by a reinstall), and two signed-in accounts on
+  // one device would silently share and interfere with each other's count.
+  const customerId = user?.id ?? '';
+  const storageKey = customerId ? `${STORAGE_KEY_PREFIX}:${customerId}` : null;
 
   const usageQuery = useQuery({
-    queryKey: ['customer-ai-usage', MOCK_CUSTOMER_ID],
+    queryKey: ['customer-ai-usage', customerId],
+    enabled: Boolean(storageKey),
     queryFn: async () => {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      if (!storageKey) return {} as UsageMap;
+      const stored = await AsyncStorage.getItem(storageKey);
       if (!stored) return {} as UsageMap;
       const parsed = JSON.parse(stored) as UsageMap;
       // Roll over stale month entries on read so expired counters reset.
@@ -60,7 +70,7 @@ export const [CustomerAiUsageProvider, useCustomerAiUsage] = createContextHook((
         }
       }
       if (needsPersist) {
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(rolled));
+        await AsyncStorage.setItem(storageKey, JSON.stringify(rolled));
       }
       return rolled;
     },
@@ -69,11 +79,12 @@ export const [CustomerAiUsageProvider, useCustomerAiUsage] = createContextHook((
 
   const saveMutation = useMutation({
     mutationFn: async (next: UsageMap) => {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      if (!storageKey) return next;
+      await AsyncStorage.setItem(storageKey, JSON.stringify(next));
       return next;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customer-ai-usage', MOCK_CUSTOMER_ID] });
+      queryClient.invalidateQueries({ queryKey: ['customer-ai-usage', customerId] });
     },
   });
 

@@ -13,7 +13,7 @@ import { Alert } from '@/utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { ChevronLeft, MoreVertical, Check, Share2, Download } from 'lucide-react-native';
-import { mockOrders } from '@/mocks/ordersData';
+import { useOrders } from '@/contexts/OrdersContext';
 import { formatCustomerNameFromFull } from '@/utils/formatCustomerName';
 import { formatVendorOrderId } from '@/utils/formatOrderId';
 import { formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
@@ -21,7 +21,8 @@ import { mockVendor } from '@/mocks/vendorData';
 
 export default function ReceiptScreen() {
   const { orderId } = useLocalSearchParams();
-  const order = mockOrders.find(o => o.id === orderId);
+  const { orders } = useOrders();
+  const order = orders.find(o => o.id === orderId);
   const [showMenu, setShowMenu] = useState(false);
 
   if (!order) {

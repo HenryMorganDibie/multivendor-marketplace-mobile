@@ -8,7 +8,7 @@ import { useResponsive } from '@/constants/layout';
 import { useCart } from '@/contexts/CartContext';
 import { useChats } from '@/contexts/ChatContext';
 import { useMessageVendor } from '@/features/chat/hooks/useMessageVendor';
-import { MOCK_CUSTOMER_ID } from '@/mocks/inboxData';
+import { useAuth } from '@/contexts/AuthContext';
 import { useVendorChatMode } from '@/contexts/VendorChatModeContext';
 import { useVendorStatusPermissions } from '@/components/VendorStatusGate';
 import { useVendorRelationships } from '@/contexts/VendorRelationshipContext';
@@ -30,6 +30,7 @@ export function useStorefrontViewModel(vendor: Vendor) {
   const { getOrCreateConversation: _getOrCreateConversation, getConversationByPair: _getConversationByPair, startNewInquiry: _startNewInquiry } = useChats();
   void _getOrCreateConversation; void _getConversationByPair; void _startNewInquiry;
   const { handleMessageVendorPress } = useMessageVendor();
+  const { user } = useAuth();
   const { data: menuData } = useVendorMenu(vendor.id);
   const menuItems = useMemo(() => menuData?.items ?? [], [menuData]);
   const categories = useMemo(() => menuData?.categories ?? [], [menuData]);
@@ -233,8 +234,15 @@ export function useStorefrontViewModel(vendor: Vendor) {
       Alert.alert('', 'You cannot initiate communication with this vendor.');
       return;
     }
+    if (!user?.id) {
+      // Real messaging requires a real signed-in customer — createCommerceConversation
+      // derives the thread's participant from the authenticated request, so there is
+      // nothing correct to do here for a signed-out user.
+      Alert.alert('', 'Please sign in to message this vendor.');
+      return;
+    }
     console.log('[STORE] Message vendor pressed, resolving thread for vendor:', vendor.id);
-    void handleMessageVendorPress(vendor.id, MOCK_CUSTOMER_ID);
+    void handleMessageVendorPress(vendor.id, user.id);
   };
 
   const handleItemPress = (itemId: string) => {

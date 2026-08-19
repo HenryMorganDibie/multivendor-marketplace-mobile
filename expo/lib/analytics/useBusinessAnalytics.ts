@@ -30,8 +30,10 @@ export function isPending<T>(value: T | Pending): value is Pending {
 export interface BusinessAnalytics {
   success: true;
   filterRange: string;
-  revenueTrend: { label: string; amountMinorUnits: number }[];
-  topCustomers: { customerId: string; name: string; orderCount: number }[];
+  /** date: 'YYYY-MM-DD', total: order total in the vendor's currency's major unit (matches orderSnapshot.total). */
+  revenueTrend: { date: string; total: number }[];
+  /** total: lifetime spend in the window, in the vendor's currency's major unit. No display name — the backend has no customer-name lookup for this endpoint. */
+  topCustomers: { customerId: string; total: number }[];
   ordersBySource: { internal: number; external: number };
   platformVsExternalAnalytics: { internal: number; external: number };
   conversionFunnel: Pending;

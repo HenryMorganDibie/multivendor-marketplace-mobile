@@ -66,6 +66,20 @@ interface TrendPoint {
   value: number;
 }
 
+// Static illustrative preview shown only in the locked (non-entitled) state
+// of the Revenue Trend chart — never real vendor data, matching the same
+// hardcoded-preview pattern already used for the locked Top Customers and
+// Customer Source Breakdown sections on this screen.
+const REVENUE_TREND_PREVIEW: TrendPoint[] = [
+  { label: 'Mon', value: 18500 },
+  { label: 'Tue', value: 24200 },
+  { label: 'Wed', value: 19800 },
+  { label: 'Thu', value: 31000 },
+  { label: 'Fri', value: 27600 },
+  { label: 'Sat', value: 39200 },
+  { label: 'Sun', value: 22400 },
+];
+
 const SOURCE_CONFIG: Record<string, { color: string; IconComponent: React.ComponentType<{ size: number; color: string; strokeWidth?: number }> }> = {
   'WhatsApp':           { color: '#25D366', IconComponent: MessageCircle },
   'Instagram':          { color: '#E1306C', IconComponent: Camera },
@@ -2061,7 +2075,7 @@ const lockedStyles = StyleSheet.create({
 export default function GrowthInsightsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { plan } = useVendorPlan();
+  const { plan, planLimits } = useVendorPlan();
   const { vendor: _vendor } = useVendor();
   const { verificationData } = useVerification();
   const { externalOrders } = useExternalOrders();
@@ -2171,7 +2185,12 @@ export default function GrowthInsightsScreen() {
    * The local calculation stays as the fallback — for the demo logins, and for
    * the moment before the call returns, so the panel does not flash empty.
    */
-  const { data: serverAnalytics } = useBusinessAnalytics();
+  // Explicit rather than relying on the backend's implicit default for an
+  // omitted filterRange — this screen's own local 1D/1W/1M/3M/6M tab
+  // selector does not map cleanly onto the backend's today/week/month/year
+  // range, so it intentionally does not drive this call; the vendor's own
+  // plan-clamped range (server-authoritative either way) does.
+  const { data: serverAnalytics } = useBusinessAnalytics(planLimits?.dashboardFilterRange);
 
   const customerMetrics = useMemo(() => {
     const server = serverAnalytics?.repeatCustomerAnalytics;
@@ -2250,40 +2269,40 @@ export default function GrowthInsightsScreen() {
     hasData: hasAnyData,
   }), [storefrontMetrics.conversionRate, customerMetrics.repeatRate, topSource, platformMetrics.totalOrders, hasAnyData]);
 
-  const revenueTrendData = useMemo(
-    () => getRevenueTrendData(filteredthe platform, filteredExternal, timeRange),
-    [filteredthe platform, filteredExternal, timeRange]
-  );
+  // Revenue Trend / Top Customers / Customer Source Breakdown are Pro+-gated
+  // advanced analytics (Phase 4 spec, canViewAdvancedAnalytics). They used to
+  // be computed locally from whatever orders the device had already loaded,
+  // with no entitlement check at all — a Basic/Standard vendor got the exact
+  // same numbers a Pro vendor paid for. They now come exclusively from
+  // getBusinessAnalytics (serverAnalytics, above), which is the one place
+  // canViewAdvancedAnalytics is actually enforced. `data` is null unless the
+  // call succeeded, which only happens on an entitled plan — so
+  // hasAdvancedAnalytics IS the gate, never a re-derived plan-string check.
+  //
+  // The backend's revenueTrend/topCustomers are windowed by the vendor's
+  // plan-clamped dashboardFilterRange (today/week/month/year), not this
+  // screen's local 1D/1W/1M/3M/6M tab — the two don't map onto each other,
+  // so these three sections intentionally ignore `timeRange`.
+  const hasAdvancedAnalytics = Boolean(serverAnalytics);
 
-  const customerSourceBreakdown = useMemo(() => {
-    return allSources
-      .map(s => ({ ...s, uniqueCustomers: s.customers.size }))
-      .sort((a, b) => b.uniqueCustomers - a.uniqueCustomers);
-  }, [allSources]);
+  const revenueTrendData = useMemo<TrendPoint[]>(() => {
+    if (!serverAnalytics) return [];
+    return serverAnalytics.revenueTrend.map(p => ({ label: p.date, value: p.total }));
+  }, [serverAnalytics]);
 
-  const maxCustomers = useMemo(
-    () => Math.max(...customerSourceBreakdown.map(s => s.uniqueCustomers), 1),
-    [customerSourceBreakdown]
-  );
+  const customerSourceBreakdownPending = !serverAnalytics || isPending(serverAnalytics.customerSourceBreakdown);
 
   const topCustomers = useMemo(() => {
-    const map = new Map<string, { name: string; orders: number; total: number }>();
-    [...filteredthe platform, ...filteredExternal].forEach(o => {
-      const rawName = (o.customerName?.trim()) || 'Walk-in';
-      const source = o.orderSource === 'external' ? 'external' : 'the platform';
-      const name = formatInvoiceCustomerName(rawName, source);
-      const existing = map.get(name);
-      if (existing) {
-        existing.orders += 1;
-        existing.total += o.total;
-      } else {
-        map.set(name, { name, orders: 1, total: o.total });
-      }
-    });
-    return [...map.values()]
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 10);
-  }, [filteredthe platform, filteredExternal]);
+    if (!serverAnalytics) return [];
+    // The backend has no customer-name lookup on this endpoint — only the
+    // raw uid and lifetime spend in the window. Labelling it honestly as a
+    // short id rather than inventing a display name.
+    return serverAnalytics.topCustomers.map(c => ({
+      name: `Customer ${c.customerId.slice(-6)}`,
+      orders: undefined as number | undefined,
+      total: c.total,
+    }));
+  }, [serverAnalytics]);
 
   const TIME_TABS: { key: TimeRange; label: string }[] = [
     { key: '1D', label: '1D' },
@@ -2336,7 +2355,7 @@ export default function GrowthInsightsScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* REVENUE TREND */}
+        {/* REVENUE TREND — Pro+ advanced analytics, gated by hasAdvancedAnalytics */}
         <View style={styles.trendCard}>
           <View style={styles.trendHeader}>
             <View>
@@ -2344,7 +2363,13 @@ export default function GrowthInsightsScreen() {
               <Text style={styles.trendSubtitle}>Your revenue over the selected period</Text>
             </View>
           </View>
-          <RevenueTrendChart data={revenueTrendData} isEmpty={!hasAnyData} />
+          {hasAdvancedAnalytics ? (
+            <RevenueTrendChart data={revenueTrendData} isEmpty={revenueTrendData.length === 0} />
+          ) : (
+            <LockedSection onUpgrade={handleUpgrade}>
+              <RevenueTrendChart data={REVENUE_TREND_PREVIEW} isEmpty={false} />
+            </LockedSection>
+          )}
         </View>
 
         {/* VERIFICATION WARNING — only for actionable states (not_started, rejected). Pending is passive and handled by Dashboard only. */}
@@ -2759,7 +2784,7 @@ export default function GrowthInsightsScreen() {
             title="Top Customers"
             subtitle="Ranked by total revenue generated"
           />
-          {isPro ? (
+          {hasAdvancedAnalytics ? (
             topCustomers.length > 0 ? (
               <View style={styles.topCustomersCard}>
                 {topCustomers.map((customer, index) => (
@@ -2784,9 +2809,11 @@ export default function GrowthInsightsScreen() {
                       </View>
                       <View style={styles.topCustomerInfo}>
                         <Text style={styles.topCustomerName} numberOfLines={1}>{customer.name}</Text>
-                        <Text style={styles.topCustomerOrders}>
-                          {customer.orders} {customer.orders === 1 ? 'order' : 'orders'}
-                        </Text>
+                        {customer.orders !== undefined && (
+                          <Text style={styles.topCustomerOrders}>
+                            {customer.orders} {customer.orders === 1 ? 'order' : 'orders'}
+                          </Text>
+                        )}
                       </View>
                       <Text style={styles.topCustomerTotal}>
                         {formatCompactCurrency(customer.total, currency)}
@@ -2842,36 +2869,19 @@ export default function GrowthInsightsScreen() {
             title="Customer Source Breakdown"
             subtitle="Unique customers acquired per channel"
           />
-          {isPro ? (
-            <>
-              {customerSourceBreakdown.filter(s => s.uniqueCustomers > 0).map((src, i) => (
-                <View key={src.source} style={styles.sourceRow}>
-                  <View style={[styles.sourceIconDot, { backgroundColor: `${src.color}20` }]}>
-                    <src.IconComponent size={14} color={src.color} strokeWidth={2} />
-                  </View>
-                  <View style={styles.sourceInfo}>
-                    <View style={styles.sourceNameRow}>
-                      <Text style={styles.sourceName} numberOfLines={1}>{src.source}</Text>
-                      <Text style={styles.sourceOrders}>{src.uniqueCustomers}</Text>
-                    </View>
-                    <AnimatedBar
-                      value={src.uniqueCustomers}
-                      max={maxCustomers}
-                      color={src.color}
-                      delay={i * 60}
-                    />
-                    <Text style={styles.sourceRevenue}>
-                      {formatCompactCurrency(src.revenue, currency)} revenue
-                    </Text>
-                  </View>
-                </View>
-              ))}
-              {customerSourceBreakdown.every(s => s.uniqueCustomers === 0) && (
-                <View style={styles.emptySection}>
-                  <Text style={styles.emptySectionText}>No customer data in this period</Text>
-                </View>
-              )}
-            </>
+          {hasAdvancedAnalytics ? (
+            // The backend genuinely does not compute this yet on any plan —
+            // getBusinessAnalytics always returns customerSourceBreakdown as
+            // { dataPending: true } (it has no acquisition-channel tracking,
+            // e.g. no record of "this customer came from WhatsApp"). Showing
+            // an honest pending state here, for an entitled vendor, instead
+            // of the fabricated internal/external-only numbers this screen
+            // used to invent locally.
+            customerSourceBreakdownPending ? (
+              <View style={styles.emptySection}>
+                <Text style={styles.emptySectionText}>Channel breakdown is coming soon</Text>
+              </View>
+            ) : null
           ) : (
             <LockedSection onUpgrade={handleUpgrade}>
               {[

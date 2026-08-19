@@ -21,7 +21,7 @@ import { useChats } from '@/contexts/ChatContext';
 import { useCatalog } from '@/contexts/CatalogContext';
 import { useInbox } from '@/contexts/InboxContext';
 import { useChatRead } from '@/contexts/ChatReadContext';
-import { MOCK_VENDOR_ID } from '@/mocks/inboxData';
+import { useVendor } from '@/contexts/VendorContext';
 import { useVendorPickup } from '@/contexts/VendorPickupContext';
 import { useVendorDrafts } from '@/contexts/VendorDraftContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -44,6 +44,7 @@ export default function VendorPreOrderChatScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const { getVendorPreOrderChatByCustomerId, addMessageToChat } = useChats();
   const { vendorInbox, updateInboxAfterMessage } = useInbox();
+  const { vendor } = useVendor();
 
   const preOrderChat = getVendorPreOrderChatByCustomerId(customerId);
   const customerName = formatVendorDisplayName(preOrderChat?.customerName);
@@ -171,7 +172,7 @@ export default function VendorPreOrderChatScreen() {
       updateInboxAfterMessage({
         conversationId: conv.conversationId,
         lastMessageText: messageContent,
-        lastSenderId: MOCK_VENDOR_ID,
+        lastSenderId: vendor?.id ?? '',
         senderRole: 'vendor',
       });
       console.log('[PRE-ORDER CHAT] Vendor inbox snapshot updated:', conv.conversationId);

@@ -1,4 +1,3 @@
-export * from './orderService';
 export * from './chatService';
 export * from './vendorService';
 export * from './catalogService';
@@ -7,7 +6,6 @@ export * from './customOrderService';
 export * from './authService';
 export * from './userService';
 export * from './cartService';
-export * from './notificationService';
 export * from './subscriptionService';
 export * from './verificationService';
 export * from './supportService';

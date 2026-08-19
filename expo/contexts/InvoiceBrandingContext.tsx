@@ -39,7 +39,7 @@ const STORAGE_KEY = 'vendor_invoice_branding_v1';
 
 export const [InvoiceBrandingProvider, useInvoiceBranding] = createContextHook(() => {
   const queryClient = useQueryClient();
-  const { plan } = useVendorPlan();
+  const { plan, planLimits } = useVendorPlan();
 
   // Live server branding, or null until the listener resolves. Wins over the
   // local copy once present, the same way backend invoices do.
@@ -157,7 +157,7 @@ export const [InvoiceBrandingProvider, useInvoiceBranding] = createContextHook((
    * time (Henry — please assess for MVP before external invoice sharing
    * goes live, not strictly a Phase 2 item).
    */
-  const effectiveBranding: EffectiveInvoiceBranding = getEffectiveInvoiceBranding(plan, settings);
+  const effectiveBranding: EffectiveInvoiceBranding = getEffectiveInvoiceBranding(plan, settings, planLimits);
 
   return {
     settings,

@@ -12,7 +12,8 @@ import { useRouter } from 'expo-router';
 import { Archive, MessageSquare } from 'lucide-react-native';
 import ListStateView from '@/components/ListStateView';
 import { ChatListSkeleton } from '@/components/SkeletonLoader';
-import { mockOrders } from '@/mocks/ordersData';
+import type { Order } from '@/mocks/ordersData';
+import { useOrders } from '@/contexts/OrdersContext';
 import { OrderConversationListItem, CircularAvatar } from '@/components/OrderConversationListItem';
 import { getVendorOrderStatusLabel } from '@/features/orders/selectors/orderStatusSelectors';
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
@@ -75,11 +76,11 @@ const getContextBarColor = (item: InboxSnapshot): string => {
  * For inquiry chats: returns undefined (badge label is sufficient).
  * Never uses customer-name-based public IDs as order references.
  */
-const getCustomerIdentifierLabel = (item: InboxSnapshot): string | undefined => {
+const getCustomerIdentifierLabel = (item: InboxSnapshot, orders: Order[]): string | undefined => {
   if (item.conversationType === 'order' || item.conversationType === 'custom_order') {
     if (item.publicOrderId) return `#${formatVendorOrderId(item.publicOrderId)}`;
     if (item.orderId) {
-      const order = mockOrders.find(o => o.id === item.orderId);
+      const order = orders.find(o => o.id === item.orderId);
       if (order?.publicOrderId) return `#${formatVendorOrderId(order.publicOrderId)}`;
     }
     return undefined;
@@ -96,7 +97,7 @@ const getChatTypeBadgeVariant = (
   return undefined;
 };
 
-const getOrderStatusLabel = (item: InboxSnapshot): string | undefined => {
+const getOrderStatusLabel = (item: InboxSnapshot, orders: Order[]): string | undefined => {
   if (item.conversationType === 'custom_order' || item.conversationType === 'inquiry') return undefined;
   if (item.conversationType !== 'order') return undefined;
 
@@ -119,7 +120,7 @@ const getOrderStatusLabel = (item: InboxSnapshot): string | undefined => {
     if (statusLabel && orderType) return `${orderType} \u00B7 ${statusLabel}`;
     return statusLabel;
   }
-  const order = mockOrders.find(o => o.id === item.orderId);
+  const order = orders.find(o => o.id === item.orderId);
   if (!order) return orderType || undefined;
   const label = getVendorOrderStatusLabel(order.status);
   return orderType ? `${orderType} \u00B7 ${label}` : label;
@@ -130,6 +131,7 @@ export default function VendorChatsScreen() {
   const insets = useSafeAreaInsets();
   const [selectedFilter, setSelectedFilter] = useState<ChatFilterType>('all');
   const { archivedChats, archiveChat } = useBlockedUsers();
+  const { orders } = useOrders();
   const { getDraft } = useVendorDrafts();
   const {
     getFilteredVendorInbox,
@@ -194,8 +196,8 @@ export default function VendorChatsScreen() {
     const isUnread = item.unreadCount > 0;
     const displayName = formatVendorDisplayName(item.title);
     const contextBarColor = getContextBarColor(item);
-    const customerIdLabel = getCustomerIdentifierLabel(item);
-    const orderStatusLabel = getOrderStatusLabel(item);
+    const customerIdLabel = getCustomerIdentifierLabel(item, orders);
+    const orderStatusLabel = getOrderStatusLabel(item, orders);
     const chatTypeBadge = getChatTypeBadgeVariant(item);
     const unreadBadgeColor = isUnread ? '#FF3B30' : undefined;
 

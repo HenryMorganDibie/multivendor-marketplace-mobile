@@ -44,6 +44,7 @@ import {
   ChevronDown,
 } from 'lucide-react-native';
 import * as Print from 'expo-print';
+import { File, Paths } from 'expo-file-system';
 import {
   useInvoices,
   canEditInvoice,
@@ -102,6 +103,7 @@ export default function VendorInvoiceDetailScreen() {
     deleteInvoice,
     duplicateInvoiceById,
     markInvoiceSharedExternally,
+    downloadInvoicePdf,
   } = useInvoices();
   // The signed-in vendor. The contact block, share text and PDF header all
   // read from here; they used the demo fixture, so a real vendor's invoice
@@ -280,42 +282,38 @@ export default function VendorInvoiceDetailScreen() {
     setShowMenu(false);
     setIsDownloading(true);
     try {
-      const html = generateInvoiceHTML({
-        invoiceNumber: invoice.invoiceNumber,
-        vendorName,
-        vendorPhone: vendor.phone,
-        vendorEmail: vendor.email,
-        vendorAddress: vendor.fullAddress,
-        vendorWebsite: vendor.contactLinks?.website,
-        customerName: displayCustomerName,
-        customerPhone: invoice.customerSource === 'external' ? invoice.customerPhone : undefined,
-        customerEmail: invoice.customerSource === 'external' ? invoice.customerEmail : undefined,
-        customerAddress: invoice.customerSource === 'external' ? invoice.customerAddress : undefined,
-        issueDate: issueDateStr,
-        dueDate: dueDateStr ?? undefined,
-        items: invoice.items.map((i) => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice, total: i.total, description: i.description })),
-        subtotal: invoice.subtotal,
-        tax: invoice.tax,
-        discount: invoice.discount,
-        total: invoice.total,
-        amountPaid,
-        balanceDue,
-        statusLabel: statusConfig.label,
-        notes: invoice.notes,
-        currency,
-      });
-      const { uri } = await Print.printToFileAsync({ html });
+      // Was generating the PDF entirely on-device from generateInvoiceHTML,
+      // which meant canDownloadInvoicePdf (Basic plan: false) was never
+      // actually enforced — a Basic vendor got the same download the
+      // backend independently refuses via downloadInvoicePdf. The real
+      // callable also applies the correct branding (frozen for a paid
+      // invoice, current plan for an unpaid one), which local generation
+      // could not replicate.
+      const result = await downloadInvoicePdf(invoice.id);
+      if (!result) {
+        Alert.alert('Error', 'Could not generate PDF');
+        return;
+      }
+      const { pdfBase64, fileName } = result;
       if (Platform.OS === 'web') {
         const link = document.createElement('a');
-        link.href = uri;
-        link.download = `Invoice-${invoice.invoiceNumber}.pdf`;
+        link.href = `data:application/pdf;base64,${pdfBase64}`;
+        link.download = fileName;
         link.click();
       } else {
-        await Share.share({ url: uri, title: `Invoice ${invoice.invoiceNumber}` });
+        const pdfFile = new File(Paths.cache, fileName);
+        pdfFile.write(pdfBase64, { encoding: 'base64' });
+        await Share.share({ url: pdfFile.uri, title: `Invoice ${invoice.invoiceNumber}` });
       }
-    } catch (err) {
-      console.error('PDF generation failed:', err);
-      Alert.alert('Error', 'Could not generate PDF');
+    } catch (err: any) {
+      console.error('PDF download failed:', err);
+      const message = err?.message ?? 'Could not download PDF';
+      Alert.alert(
+        /permission-denied|not available on your current plan/i.test(message) ? 'Upgrade required' : 'Error',
+        /permission-denied|not available on your current plan/i.test(message)
+          ? 'Downloading invoice PDFs is available on Standard and above.'
+          : 'Could not generate PDF'
+      );
     } finally {
       setIsDownloading(false);
     }

@@ -15,7 +15,8 @@ import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
 import { OrderConversationListItem, CircularAvatar } from '@/components/OrderConversationListItem';
 import { formatInternalCustomerFromFull } from '@/utils/internalCustomerName';
 import { formatVendorOrderId } from '@/utils/formatOrderId';
-import { mockOrders } from '@/mocks/ordersData';
+import type { Order } from '@/mocks/ordersData';
+import { useOrders } from '@/contexts/OrdersContext';
 import { getVendorOrderStatusLabel } from '@/features/orders/selectors/orderStatusSelectors';
 import type { InboxSnapshot, OrderStatusType } from '@/mocks/inboxData';
 import { Colors } from '@/constants/colors';
@@ -61,11 +62,11 @@ const getContextBarColor = (item: InboxSnapshot): string => {
   return '#FBBF24';
 };
 
-const getOrderIdentifier = (item: InboxSnapshot): string | undefined => {
+const getOrderIdentifier = (item: InboxSnapshot, orders: Order[]): string | undefined => {
   if (item.conversationType !== 'order' && item.conversationType !== 'custom_order') return undefined;
   if (item.publicOrderId) return `#${formatVendorOrderId(item.publicOrderId)}`;
   if (item.orderId) {
-    const order = mockOrders.find(o => o.id === item.orderId);
+    const order = orders.find(o => o.id === item.orderId);
     if (order?.publicOrderId) return `#${formatVendorOrderId(order.publicOrderId)}`;
   }
   return undefined;
@@ -77,7 +78,7 @@ const getChatTypeBadge = (item: InboxSnapshot): 'order_chat' | 'pre_order_inquir
   return undefined;
 };
 
-const getOrderStatusText = (item: InboxSnapshot): string | undefined => {
+const getOrderStatusText = (item: InboxSnapshot, orders: Order[]): string | undefined => {
   if (item.conversationType !== 'order' && item.conversationType !== 'custom_order') return undefined;
   const orderType = item.orderType ? (item.orderType === 'pickup' ? 'Pickup' : 'Delivery') : '';
   if (item.orderStatus) {
@@ -97,7 +98,7 @@ const getOrderStatusText = (item: InboxSnapshot): string | undefined => {
     if (label && orderType) return `${orderType} \u00B7 ${label}`;
     return label;
   }
-  const order = mockOrders.find(o => o.id === item.orderId);
+  const order = orders.find(o => o.id === item.orderId);
   if (!order) return orderType || undefined;
   const label = getVendorOrderStatusLabel(order.status);
   return orderType ? `${orderType} \u00B7 ${label}` : label;
@@ -121,6 +122,7 @@ export default function ConversationPickerModal({
   title = 'Select customer',
 }: ConversationPickerModalProps) {
   const { getFilteredVendorInbox } = useInbox();
+  const { orders } = useOrders();
   const { archivedChats } = useBlockedUsers();
   const [search, setSearch] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<PickerFilter>('all');
@@ -166,8 +168,8 @@ export default function ConversationPickerModal({
   const renderItem = ({ item }: { item: InboxSnapshot }) => {
     // Privacy: always "First L." for internal the platform customers.
     const displayName = formatInternalCustomerFromFull(item.title);
-    const orderIdLabel = getOrderIdentifier(item);
-    const statusLabel = getOrderStatusText(item);
+    const orderIdLabel = getOrderIdentifier(item, orders);
+    const statusLabel = getOrderStatusText(item, orders);
     const chatTypeBadge = getChatTypeBadge(item);
     const isUnread = item.unreadCount > 0;
 

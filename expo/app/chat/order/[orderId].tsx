@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Colors } from '@/constants/colors';
+import { Alert } from '@/utils/alert';
 import {
   View,
   Text,
@@ -24,7 +25,7 @@ import { ChatMessage, MessageStatus, getChatByOrderId } from '@/mocks/chatData';
 import { chatService } from '@/services/chatService';
 import { CustomerInvoiceChatCard } from '@/features/chat/components/CustomerInvoiceChatCard';
 import { useChatSubscription, mergeChatMessages } from '@/hooks/useChatMessages';
-import { mockOrders, OrderStatus, Order } from '@/mocks/ordersData';
+import { OrderStatus, Order } from '@/mocks/ordersData';
 import { mockVendors, type Vendor } from '@/mocks/vendorData';
 import { vendorRepository } from '@/services/repositories/vendorRepository';
 import { useOrders } from '@/contexts/OrdersContext';
@@ -33,7 +34,7 @@ import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
 import { useCustomOrders } from '@/contexts/CustomOrderContext';
 import { useInbox } from '@/contexts/InboxContext';
 import { useChatRead } from '@/contexts/ChatReadContext';
-import { MOCK_CUSTOMER_ID } from '@/mocks/inboxData';
+import { useAuth } from '@/contexts/AuthContext';
 
 import { getChatAvailability } from '@/utils/chatAvailability';
 import OrderChangesCard from '@/components/OrderChangesCard';
@@ -141,11 +142,11 @@ export default function OrderChatScreen() {
   const { proposals } = useCustomOrders();
   const { chatMode } = useVendorChatMode();
   const { customerInbox, updateInboxAfterMessage } = useInbox();
+  const { user } = useAuth();
   const { markChatAsRead } = useChatRead();
 
-  const { getOrder, setOrderPendingChanges } = useOrders();
-  const orderFromContext = getOrder(orderId);
-  const order = orderFromContext || mockOrders.find((o) => o.id === orderId);
+  const { orders, getOrder, setOrderPendingChanges } = useOrders();
+  const order = getOrder(orderId);
   const resolvedChat = getChatByOrderId(orderId);
   const chatId = resolvedChat?.id ?? '';
   const blockedUser = chatId ? getBlockedUserByChatId(chatId) : undefined;
@@ -205,7 +206,7 @@ export default function OrderChatScreen() {
   };
 
   const activeOrders = order && order.customerId
-    ? getActiveOrdersForChat(mockOrders, order.vendorId, order.customerId)
+    ? getActiveOrdersForChat(orders, order.vendorId, order.customerId)
     : [];
 
   console.log('📌 CUSTOMER CHAT - Pinned Active Orders:');
@@ -243,6 +244,7 @@ export default function OrderChatScreen() {
     markChatAsRead(chatId, 'customer');
   }, [chatId, chatVersion, markChatAsRead]);
   const [messageText, setMessageText] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showChatActionsMenu, setShowChatActionsMenu] = useState(false);
   const [showContactCardPicker, setShowContactCardPicker] = useState(false);
@@ -293,8 +295,8 @@ export default function OrderChatScreen() {
     }
   };
 
-  const handleSendMessage = () => {
-    if (messageText.trim() === '') return;
+  const handleSendMessage = async () => {
+    if (messageText.trim() === '' || isSendingMessage) return;
 
     const messageContent = messageText.trim();
 
@@ -305,42 +307,38 @@ export default function OrderChatScreen() {
       return;
     }
 
-    setMessageText('');
+    if (!chatId) {
+      Alert.alert('Could not send', 'This conversation could not be found. Please go back and try again.');
+      return;
+    }
 
-    if (chatId) {
-      chatService
-        .sendMessage({
-          chatId,
-          type: 'text',
-          content: messageContent,
-          sender: 'customer',
-        })
-        .then((m) => console.log('[ORDER CHAT] Message persisted via chatService:', m.id))
-        .catch((err) => console.log('[ORDER CHAT] sendMessage failed:', err));
-    } else {
-      const newMessage: ChatMessage = {
-        id: `m${Date.now()}`,
+    setIsSendingMessage(true);
+    try {
+      const sent = await chatService.sendMessage({
+        chatId,
         type: 'text',
         content: messageContent,
         sender: 'customer',
-        timestamp: new Date().toISOString(),
-        status: 'sent',
-      };
-      setMessages((prev) => [...prev, newMessage]);
-      console.log('[ORDER CHAT] No chatId resolved, message not persisted to chatService');
-    }
-
-    console.log('[ORDER CHAT] Customer message sent:', messageContent);
-
-    const conv = customerInbox.find(item => item.orderId === orderId);
-    if (conv) {
-      updateInboxAfterMessage({
-        conversationId: conv.conversationId,
-        lastMessageText: messageContent,
-        lastSenderId: MOCK_CUSTOMER_ID,
-        senderRole: 'customer',
       });
-      console.log('[ORDER CHAT] Inbox snapshot updated:', conv.conversationId);
+      console.log('[ORDER CHAT] Message persisted via chatService:', sent.id);
+      setMessageText('');
+
+      const conv = customerInbox.find(item => item.orderId === orderId);
+      if (conv) {
+        updateInboxAfterMessage({
+          conversationId: conv.conversationId,
+          lastMessageText: messageContent,
+          lastSenderId: user?.id ?? '',
+          senderRole: 'customer',
+        });
+        console.log('[ORDER CHAT] Inbox snapshot updated:', conv.conversationId);
+      }
+    } catch (err) {
+      console.error('[ORDER CHAT] sendMessage failed:', err);
+      const message = err instanceof Error ? err.message : 'Could not send your message.';
+      Alert.alert('Message not sent', message);
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -1216,10 +1214,10 @@ export default function OrderChatScreen() {
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (messageText.trim() === '' || isBlocked || chatAvailability.isCustomerInputDisabled || isVendorSuspendedOnActiveOrder) && styles.sendButtonDisabled,
+              (messageText.trim() === '' || isBlocked || chatAvailability.isCustomerInputDisabled || isVendorSuspendedOnActiveOrder || isSendingMessage) && styles.sendButtonDisabled,
             ]}
             onPress={handleSendMessage}
-            disabled={messageText.trim() === '' || isBlocked || chatAvailability.isCustomerInputDisabled || isChatDisabledByVendor || isVendorSuspendedOnActiveOrder}
+            disabled={messageText.trim() === '' || isBlocked || chatAvailability.isCustomerInputDisabled || isChatDisabledByVendor || isVendorSuspendedOnActiveOrder || isSendingMessage}
             activeOpacity={0.7}
           >
             <Send

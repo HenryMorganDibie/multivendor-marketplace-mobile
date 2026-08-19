@@ -1,4 +1,4 @@
-import type { VendorPlan } from '@/contexts/VendorPlanContext';
+import type { VendorPlan, PlanLimits } from '@/contexts/VendorPlanContext';
 
 /**
  * Plan-based document branding capabilities for invoices and receipts.
@@ -85,8 +85,38 @@ const PRO_PLUS: DocumentBranding = {
   allowPrintableDocs: true,
 };
 
-/** Resolve the document branding capabilities for a vendor plan. */
-export function getDocumentBranding(plan: VendorPlan): DocumentBranding {
+/**
+ * Resolve the document branding capabilities for a vendor plan.
+ *
+ * When the real PlanLimits object (getSubscriptionStatus, VendorPlanContext)
+ * is available, capabilities are read directly from it — canUploadLogo,
+ * canSetBrandColor, etc. — rather than this file's hardcoded per-plan
+ * tables, which the file's own header comment already flagged as a
+ * manual-sync liability ("must not drift from it"). The hardcoded tables
+ * remain only as the fallback for the brief window before the first
+ * getSubscriptionStatus response lands (app boot, signed-out preview), so
+ * the UI still has something reasonable to render immediately.
+ */
+export function getDocumentBranding(plan: VendorPlan, realLimits?: PlanLimits | null): DocumentBranding {
+  if (realLimits) {
+    const fallback = getDocumentBrandingFallback(plan);
+    return {
+      templateId: fallback.templateId,
+      showVendorName: true,
+      allowLogo: realLimits.canUploadLogo,
+      allowBrandColor: realLimits.canSetBrandColor,
+      allowThankYouMessage: realLimits.canSetThankYouMessage,
+      allowBrandedHeader: realLimits.canSetBrandColor,
+      allowCustomFooter: realLimits.canSetFooterText,
+      allowPremiumTemplates: realLimits.canUsePremiumTemplates,
+      allowPrintableDocs: realLimits.canUsePrintLayout,
+      poweredBythe platform: realLimits.canSetBrandColor ? 'subtle' : 'visible',
+    };
+  }
+  return getDocumentBrandingFallback(plan);
+}
+
+function getDocumentBrandingFallback(plan: VendorPlan): DocumentBranding {
   switch (plan) {
     case 'basic': return BASIC;
     case 'standard': return STANDARD;
@@ -257,9 +287,10 @@ export interface EffectiveInvoiceBranding {
 
 export function getEffectiveInvoiceBranding(
   plan: VendorPlan,
-  settings: InvoiceBrandingSettings
+  settings: InvoiceBrandingSettings,
+  realLimits?: PlanLimits | null
 ): EffectiveInvoiceBranding {
-  const caps = getDocumentBranding(plan);
+  const caps = getDocumentBranding(plan, realLimits);
   const isPremiumTemplate = settings.templateId !== 'default';
   const templateId: DocumentTemplateId =
     isPremiumTemplate && !caps.allowPremiumTemplates ? 'default' : settings.templateId;

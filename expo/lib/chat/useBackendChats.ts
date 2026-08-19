@@ -1,9 +1,20 @@
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { chatService } from '@/services/chatService';
 import { mapChatThreadDoc, mapMessageDoc } from './mapChatDoc';
 import type { Chat, ChatMessage } from '@/mocks/chatData';
+
+// Was orderBy('createdAt','asc') with no limit, per thread, for EVERY thread
+// the signed-in user is in simultaneously — a customer with a dozen vendor
+// conversations opened a dozen live listeners, each pulling that thread's
+// entire message history just to populate an inbox preview. Reads the most
+// recent MESSAGE_PAGE_SIZE messages (descending, reversed below back to
+// chronological order) instead. Realtime for new messages is unaffected —
+// they land within the most-recent window and this snapshot fires again.
+// Loading older messages beyond this window is not built by this pass; the
+// screens read whatever chatService.getByIdSync returns, same as before.
+const MESSAGE_PAGE_SIZE = 50;
 
 /**
  * Keeps chatService's store filled with the signed-in user's real threads.
@@ -67,12 +78,11 @@ export function useBackendChats(): { ready: boolean } {
 
             if (!messageUnsubs.has(d.id)) {
               const unsub = onSnapshot(
-                query(collection(db, 'chatThreads', d.id, 'messages'), orderBy('createdAt', 'asc')),
+                query(collection(db, 'chatThreads', d.id, 'messages'), orderBy('createdAt', 'desc'), limit(MESSAGE_PAGE_SIZE)),
                 (msgSnap) => {
-                  messagesByChat.set(
-                    d.id,
-                    msgSnap.docs.map((m) => mapMessageDoc(m.id, m.data())),
-                  );
+                  const mapped = msgSnap.docs.map((m) => mapMessageDoc(m.id, m.data()));
+                  mapped.reverse(); // desc query, back to ascending chronological order
+                  messagesByChat.set(d.id, mapped);
                   push();
                 },
                 (err) => console.error('[Chat] Message subscription failed:', err),

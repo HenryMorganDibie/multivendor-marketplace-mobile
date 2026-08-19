@@ -1,7 +1,8 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useState, useEffect, useCallback, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { notificationService } from '@/services/notificationService';
+import { useState, useEffect, useCallback } from 'react';
+import { collection, doc, onSnapshot, orderBy, query, limit as fbLimit, updateDoc, writeBatch, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import { useAuth } from './AuthContext';
 
 export type VendorNotificationType =
   | 'new_order'
@@ -13,9 +14,10 @@ export type VendorNotificationType =
   | 'verification_approved'
   | 'verification_rejected'
   | 'account_warning'
-  | 'account_restriction';
+  | 'account_restriction'
+  | (string & {});
 
-export type NotificationDomain = 'order' | 'vendor_chat' | 'support';
+export type NotificationDomain = 'order' | 'vendor_chat' | 'customer_chat' | 'support' | 'verification' | 'system' | (string & {});
 
 export interface VendorNotification {
   id: string;
@@ -28,107 +30,101 @@ export interface VendorNotification {
   fullOrderId?: string;
   orderId?: string;
   actorName: string;
+  deepLink?: string | null;
 }
 
-const AUTH_STORAGE_KEY = '@the platform_auth_user';
-const VENDOR_NOTIFICATIONS_STORAGE_KEY = '@the platform_vendor_notifications';
+const NOTIFICATION_PAGE_SIZE = 50;
+
+function toIsoString(value: unknown): string {
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  if (typeof value === 'string') return value;
+  return new Date().toISOString();
+}
 
 /**
- * Notifications are owned per-user, mirroring the backend's
- * `users/{uid}/notifications/{notificationId}` structure. The on-device list is
- * namespaced by the signed-in user id so two accounts on one device never share
- * a notification feed. Falls back to the legacy global key when no user id is
- * available (e.g. signed-out state).
+ * Vendor-side counterpart to CustomerNotificationContext — same real
+ * users/{uid}/notifications subcollection, same recipientUid (the vendor
+ * owner's own authenticated uid, not the business/vendorId). See that file
+ * for why the client-generated notifyNewOrder/notifyCustomerCancelledOrder/
+ * etc. functions were removed rather than ported: notification documents
+ * are Cloud-Functions-only to create.
  */
-async function getVendorNotificationsKey(): Promise<string> {
-  try {
-    const stored = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-    if (stored) {
-      const user = JSON.parse(stored);
-      if (user?.id) return `${VENDOR_NOTIFICATIONS_STORAGE_KEY}:${user.id}`;
-    }
-  } catch (error) {
-    console.error('[VendorNotifications] Failed to resolve per-user key:', error);
-  }
-  return VENDOR_NOTIFICATIONS_STORAGE_KEY;
-}
-
 export const [VendorNotificationProvider, useVendorNotifications] = createContextHook(() => {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<VendorNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadNotifications();
-  }, []);
-
-  const loadNotifications = async () => {
-    try {
-      // Read path: notificationService -> notificationRepository -> notificationMapper.
-      const feed = await notificationService.getForCurrentUser('vendor');
-      setNotifications(feed as VendorNotification[]);
-    } catch (error) {
-      console.error('[VendorNotifications] Failed to load:', error);
-    } finally {
+    const uid = user?.id ?? auth.currentUser?.uid;
+    if (!uid) {
+      setNotifications([]);
       setIsLoading(false);
+      return;
     }
-  };
 
-  const notificationsRef = useRef(notifications);
-  notificationsRef.current = notifications;
+    setIsLoading(true);
+    const q = query(
+      collection(db, 'users', uid, 'notifications'),
+      orderBy('createdAt', 'desc'),
+      fbLimit(NOTIFICATION_PAGE_SIZE)
+    );
 
-  const saveNotifications = useCallback(async (updatedNotifications: VendorNotification[]) => {
-    try {
-      const key = await getVendorNotificationsKey();
-      await AsyncStorage.setItem(key, JSON.stringify(updatedNotifications));
-    } catch (error) {
-      console.error('[VendorNotifications] Failed to save:', error);
-    }
-  }, []);
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const list: VendorNotification[] = snap.docs.map((d) => {
+          const data = d.data();
+          const metadata = data.metadata as Record<string, unknown> | undefined;
+          return {
+            id: d.id,
+            type: (data.type as string) ?? 'system',
+            domain: (data.domain as string) ?? 'system',
+            title: (data.title as string) ?? '',
+            message: (data.body as string) ?? '',
+            timestamp: toIsoString(data.createdAt),
+            read: Boolean(data.read),
+            fullOrderId: metadata?.orderId as string | undefined,
+            orderId: metadata?.orderId as string | undefined,
+            actorName: (data.title as string) ?? '',
+            deepLink: (data.deepLink as string | null | undefined) ?? null,
+          };
+        });
+        setNotifications(list);
+        setIsLoading(false);
+      },
+      (error) => {
+        console.error('[VendorNotifications] Live subscription failed:', error);
+        setIsLoading(false);
+      }
+    );
 
-  const addNotification = useCallback((notification: Omit<VendorNotification, 'id' | 'timestamp' | 'read'>) => {
-    const newNotification: VendorNotification = {
-      ...notification,
-      id: `vendor_notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      read: false,
-    };
-
-    console.log('[VendorNotifications] Adding notification:', newNotification.type, newNotification.message);
-
-    setNotifications(prev => {
-      const updated = [newNotification, ...prev];
-      saveNotifications(updated);
-      return updated;
-    });
-  }, [saveNotifications]);
+    return () => unsubscribe();
+  }, [user?.id]);
 
   const markAsRead = useCallback((notificationId: string) => {
-    setNotifications(prev => {
-      const updated = prev.map(notif =>
-        notif.id === notificationId ? { ...notif, read: true } : notif
-      );
-      saveNotifications(updated);
-      return updated;
-    });
-  }, [saveNotifications]);
+    const uid = user?.id ?? auth.currentUser?.uid;
+    if (!uid) return;
+    void updateDoc(doc(db, 'users', uid, 'notifications', notificationId), {
+      read: true,
+      readAt: serverTimestamp(),
+    }).catch((error) => console.error('[VendorNotifications] Failed to mark read:', error));
+  }, [user?.id]);
 
   const markAllAsRead = useCallback(() => {
-    setNotifications(prev => {
-      const updated = prev.map(notif => ({ ...notif, read: true }));
-      saveNotifications(updated);
-      return updated;
-    });
-  }, [saveNotifications]);
-
-  const clearNotifications = useCallback(async () => {
-    setNotifications([]);
-    const key = await getVendorNotificationsKey();
-    await AsyncStorage.removeItem(key);
-  }, []);
+    const uid = user?.id ?? auth.currentUser?.uid;
+    if (!uid) return;
+    const unread = notifications.filter((n) => !n.read);
+    if (unread.length === 0) return;
+    const batch = writeBatch(db);
+    for (const n of unread) {
+      batch.update(doc(db, 'users', uid, 'notifications', n.id), { read: true, readAt: serverTimestamp() });
+    }
+    void batch.commit().catch((error) => console.error('[VendorNotifications] Failed to mark all read:', error));
+  }, [user?.id, notifications]);
 
   const getUnreadCount = useCallback(() => {
-    return notificationsRef.current.filter(n => !n.read).length;
-  }, []);
+    return notifications.filter(n => !n.read).length;
+  }, [notifications]);
 
   const unreadHighPriorityCount = notifications.filter(
     n => !n.read && (n.type === 'new_order' || n.type === 'customer_cancelled_order')
@@ -139,145 +135,27 @@ export const [VendorNotificationProvider, useVendorNotifications] = createContex
   );
 
   const clearOrderBadges = useCallback(() => {
-    setNotifications(prev => {
-      const hasUnread = prev.some(n => 
-        !n.read && (n.type === 'new_order' || n.type === 'customer_cancelled_order')
-      );
-      if (!hasUnread) return prev;
-      const updated = prev.map(notif => 
-        (notif.type === 'new_order' || notif.type === 'customer_cancelled_order') 
-          ? { ...notif, read: true } 
-          : notif
-      );
-      saveNotifications(updated);
-      return updated;
-    });
-  }, [saveNotifications]);
-
-  const notifyNewOrder = useCallback((fullOrderId: string, customerName: string) => {
-    addNotification({
-      type: 'new_order',
-      domain: 'order',
-      title: 'New order received',
-      message: `${customerName} has placed an order.`,
-      fullOrderId,
-      actorName: customerName,
-    });
-  }, [addNotification]);
-
-  const notifyCustomerCancelledOrder = useCallback((fullOrderId: string, customerName: string) => {
-    addNotification({
-      type: 'customer_cancelled_order',
-      domain: 'order',
-      title: 'Order cancelled',
-      message: `${customerName} has cancelled their order.`,
-      fullOrderId,
-      actorName: customerName,
-    });
-  }, [addNotification]);
-
-  const notifyOrderExpired = useCallback((fullOrderId: string) => {
-    addNotification({
-      type: 'order_expired',
-      domain: 'order',
-      title: 'Order expired',
-      message: `Order ${fullOrderId} has expired.`,
-      fullOrderId,
-      actorName: 'the platform',
-    });
-  }, [addNotification]);
-
-  const notifyNewCustomerMessage = useCallback((customerName: string, fullOrderId?: string) => {
-    addNotification({
-      type: 'new_customer_message',
-      domain: 'vendor_chat',
-      title: 'New message',
-      message: `${customerName} has sent you a message.`,
-      fullOrderId,
-      actorName: customerName,
-    });
-  }, [addNotification]);
-
-  const notifyNewSupportMessage = useCallback(() => {
-    addNotification({
-      type: 'new_support_message',
-      domain: 'support',
-      title: 'New message',
-      message: 'the platform Support has sent you a message.',
-      actorName: 'the platform Support',
-    });
-  }, [addNotification]);
-
-  const notifyVerificationRequested = useCallback(() => {
-    addNotification({
-      type: 'verification_requested',
-      domain: 'support',
-      title: 'Verification requested',
-      message: 'the platform has requested additional verification.',
-      actorName: 'the platform',
-    });
-  }, [addNotification]);
-
-  const notifyVerificationApproved = useCallback(() => {
-    addNotification({
-      type: 'verification_approved',
-      domain: 'support',
-      title: 'Verification approved',
-      message: 'the platform has approved your verification.',
-      actorName: 'the platform',
-    });
-  }, [addNotification]);
-
-  const notifyVerificationRejected = useCallback((reason: string) => {
-    addNotification({
-      type: 'verification_rejected',
-      domain: 'support',
-      title: 'Verification rejected',
-      message: `the platform has rejected your verification: ${reason}`,
-      actorName: 'the platform',
-    });
-  }, [addNotification]);
-
-  const notifyAccountWarning = useCallback((warningMessage: string) => {
-    addNotification({
-      type: 'account_warning',
-      domain: 'support',
-      title: 'Account warning',
-      message: `the platform has issued a warning: ${warningMessage}`,
-      actorName: 'the platform',
-    });
-  }, [addNotification]);
-
-  const notifyAccountRestriction = useCallback((restrictionMessage: string) => {
-    addNotification({
-      type: 'account_restriction',
-      domain: 'support',
-      title: 'Account restriction',
-      message: `the platform has applied restrictions: ${restrictionMessage}`,
-      actorName: 'the platform',
-    });
-  }, [addNotification]);
+    const uid = user?.id ?? auth.currentUser?.uid;
+    if (!uid) return;
+    const targets = notifications.filter(
+      n => !n.read && (n.type === 'new_order' || n.type === 'customer_cancelled_order')
+    );
+    if (targets.length === 0) return;
+    const batch = writeBatch(db);
+    for (const n of targets) {
+      batch.update(doc(db, 'users', uid, 'notifications', n.id), { read: true, readAt: serverTimestamp() });
+    }
+    void batch.commit().catch((error) => console.error('[VendorNotifications] Failed to clear order badges:', error));
+  }, [user?.id, notifications]);
 
   return {
     notifications,
     isLoading,
-    addNotification,
     markAsRead,
     markAllAsRead,
-    clearNotifications,
     getUnreadCount,
     unreadHighPriorityCount,
     hasUnreadMediumPriority,
     clearOrderBadges,
-    notifyNewOrder,
-    notifyCustomerCancelledOrder,
-    notifyOrderExpired,
-    notifyNewCustomerMessage,
-    notifyNewSupportMessage,
-    notifyVerificationRequested,
-    notifyVerificationApproved,
-    notifyVerificationRejected,
-    notifyAccountWarning,
-    notifyAccountRestriction,
   };
 });

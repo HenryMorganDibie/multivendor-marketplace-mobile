@@ -1,20 +1,90 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Star } from 'lucide-react-native';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { mockVendors } from '@/mocks/vendorData';
-import { useReviews } from '@/contexts/ReviewsContext';
 import { Colors } from '@/constants/colors';
+
+interface PublicRatingStats {
+  average: number;
+  total: number;
+  breakdown: { stars: number; count: number; percentage: number }[];
+}
+
+const EMPTY_STATS: PublicRatingStats = {
+  average: 0,
+  total: 0,
+  breakdown: [5, 4, 3, 2, 1].map((s) => ({ stars: s, count: 0, percentage: 0 })),
+};
+
+/**
+ * Public storefront ratings summary — reads the real, public
+ * vendorRatingStats/{vendorId} aggregate (Phase 4 spec: `allow read: if
+ * true`), for the specific vendorId this page was opened for.
+ *
+ * This screen used to source both the summary and a "Recent ratings" list
+ * from ReviewsContext, which is built around the SIGNED-IN vendor's own
+ * private ratings (getVendorRatings) — once any vendor was signed in, this
+ * page silently showed their own ratings mislabeled as whichever vendor was
+ * being viewed. There is no real backend equivalent for a per-review public
+ * list at all: privateFeedback/submittedAt/orderReference are only ever
+ * visible to the rating's author, the rated vendor (via a stripped
+ * projection), or an admin — never to the public. The "Recent ratings"
+ * section is removed rather than wired to something that can't be real; the
+ * aggregate (average/total/breakdown) is the only genuinely public rating
+ * data that exists.
+ */
+function useVendorPublicRatingStats(vendorId: string | undefined): { stats: PublicRatingStats; isLoading: boolean } {
+  const [stats, setStats] = useState<PublicRatingStats>(EMPTY_STATS);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!vendorId) {
+      setStats(EMPTY_STATS);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    const unsubscribe = onSnapshot(
+      doc(db, 'vendorRatingStats', vendorId),
+      (snap) => {
+        if (!snap.exists()) {
+          setStats(EMPTY_STATS);
+          setIsLoading(false);
+          return;
+        }
+        const data = snap.data();
+        const total = (data.total as number) ?? 0;
+        const breakdownMap = (data.breakdown as Record<string, number>) ?? {};
+        setStats({
+          average: (data.average as number) ?? 0,
+          total,
+          breakdown: [5, 4, 3, 2, 1].map((s) => {
+            const count = breakdownMap[String(s)] ?? 0;
+            return { stars: s, count, percentage: total > 0 ? Math.round((count / total) * 100) : 0 };
+          }),
+        });
+        setIsLoading(false);
+      },
+      (error) => {
+        console.error('[VendorRatingsScreen] Failed to read public rating stats:', error);
+        setIsLoading(false);
+      }
+    );
+    return () => unsubscribe();
+  }, [vendorId]);
+
+  return { stats, isLoading };
+}
 
 export default function VendorRatingsScreen() {
   const { vendorId } = useLocalSearchParams<{ vendorId: string }>();
-  const { getVendorRatingStats, getVendorReviews } = useReviews();
+  const { stats } = useVendorPublicRatingStats(vendorId);
 
   const vendor = mockVendors.find((v) => v.id === vendorId);
-  const stats = getVendorRatingStats(vendorId ?? '');
-  const reviews = getVendorReviews(vendorId ?? '');
-  const recentRatings = reviews.slice(0, 10);
 
   const renderStars = (count: number) => {
     return (
@@ -69,33 +139,6 @@ export default function VendorRatingsScreen() {
               </View>
             ))}
           </View>
-
-          {recentRatings.length > 0 && (
-            <View style={styles.recentSection}>
-              <View style={styles.recentHeader}>
-                <Text style={styles.recentTitle}>Recent ratings</Text>
-              </View>
-              <View style={styles.ratingsCard}>
-                {recentRatings.map((review, index) => (
-                  <View key={review.id}>
-                    <View style={styles.ratingItem}>
-                      <View style={styles.ratingStars}>{renderStars(review.stars)}</View>
-                      <View style={styles.ratingDetails}>
-                        <Text style={styles.ratingDate}>
-                          {new Date(review.submittedAt).toLocaleDateString('en-US', {
-                            month: 'long',
-                            year: 'numeric',
-                          })}
-                        </Text>
-                        <Text style={styles.orderRef}>{review.orderReference}</Text>
-                      </View>
-                    </View>
-                    {index < recentRatings.length - 1 && <View style={styles.ratingDivider} />}
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
 
           <View style={styles.infoCard}>
             <Text style={styles.infoText}>
@@ -214,60 +257,6 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 20,
     textAlign: 'center' as const,
-  },
-  recentSection: {
-    marginTop: 16,
-  },
-  recentHeader: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    marginHorizontal: 16,
-    marginBottom: 12,
-  },
-  recentTitle: {
-    fontSize: 20,
-    fontWeight: '600' as const,
-    color: '#000',
-  },
-  seeAllText: {
-    fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '500' as const,
-  },
-  ratingsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  ratingItem: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-  },
-  ratingStars: {
-    marginBottom: 8,
-  },
-  ratingDetails: {
-    gap: 4,
-  },
-  ratingDate: {
-    fontSize: 15,
-    color: '#000',
-    fontWeight: '500' as const,
-  },
-  orderRef: {
-    fontSize: 14,
-    color: '#666',
-  },
-  ratingDivider: {
-    height: 1,
-    backgroundColor: '#F0F0F0',
-    marginHorizontal: 20,
   },
   bottomSpacer: {
     height: 40,

@@ -5,7 +5,8 @@ import { useRouter, Stack } from 'expo-router';
 import { useSafeBack } from '@/utils/useSafeBack';
 import { ChevronLeft, Archive } from 'lucide-react-native';
 import { mockChats, Chat } from '@/mocks/chatData';
-import { mockOrders } from '@/mocks/ordersData';
+import type { Order } from '@/mocks/ordersData';
+import { useOrders } from '@/contexts/OrdersContext';
 import { mockVendors } from '@/mocks/vendorData';
 import { OrderConversationListItem, CircularAvatar } from '@/components/OrderConversationListItem';
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
@@ -45,13 +46,13 @@ const getLastMessagePreview = (chat: Chat): string => {
   return `${prefix}${lastMessage.content}`;
 };
 
-const getFulfillmentAndStatus = (chat: Chat): string => {
+const getFulfillmentAndStatus = (chat: Chat, orders: Order[]): string => {
   if (chat.chatType === 'pre_order_inquiry') {
     return 'Pre-order inquiry';
   }
-  
+
   if (!chat.customerId || !chat.vendorId) return 'Order';
-  const order = mockOrders
+  const order = orders
     .filter(o => o.vendorId === chat.vendorId && o.customerId === chat.customerId)
     .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())[0];
   if (!order) return 'Order';
@@ -92,6 +93,7 @@ export default function ArchivedChatsScreen() {
   const router = useRouter();
   const safeBack = useSafeBack();
   const { archivedChats, unarchiveChat, getBlockedUserByChatId } = useBlockedUsers();
+  const { orders } = useOrders();
 
   const archivedChatsList = useMemo(() => {
     return mockChats
@@ -108,7 +110,7 @@ export default function ArchivedChatsScreen() {
     if (chat.chatType === 'pre_order_inquiry') {
       router.push(`/chat/pre-order/${chat.vendorId}` as any);
     } else {
-      const latestOrder = mockOrders
+      const latestOrder = orders
         .filter(o => o.vendorId === chat.vendorId && o.customerId === chat.customerId)
         .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())[0];
       if (latestOrder) {
@@ -130,7 +132,7 @@ export default function ArchivedChatsScreen() {
 
   const renderChatItem = ({ item }: { item: Chat }) => {
     const lastMessagePreview = getLastMessagePreview(item);
-    const fulfillmentAndStatus = getFulfillmentAndStatus(item);
+    const fulfillmentAndStatus = getFulfillmentAndStatus(item, orders);
     const timestamp = formatTimestamp(item.lastActivityAt);
     const blockedUser = getBlockedUserByChatId(item.id);
     const isBlocked = !!blockedUser;

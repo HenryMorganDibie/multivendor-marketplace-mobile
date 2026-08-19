@@ -37,6 +37,47 @@ interface UsernameChangeRecord {
   newUsername: string;
 }
 
+/**
+ * Mirrors the backend's PlanLimits object (functions/src/types4.ts,
+ * resolveEffectivePlan) exactly — this is the ONE canonical entitlement
+ * shape getSubscriptionStatus already returns and the frontend previously
+ * discarded (only effectivePlan/reason/currentPeriodEnd were read). Booleans
+ * and dashboardFilterRange were instead re-derived client-side from the
+ * plan string in several places (documentBranding.ts's hardcoded tables,
+ * the dashboard screen's own canAccessTimeRange), which is exactly the
+ * "recreate backend business rules in the client" pattern that drifts.
+ */
+export interface PlanLimits {
+  planLimitsVersion: string;
+  catalogItemLimit: number;
+  photosPerItemLimit: number;
+  canAccessExternalOrders: boolean;
+  canSetMinimumOrderAmount: boolean;
+  canSetBusinessPolicies: boolean;
+  canAutoSendPickupDetails: boolean;
+  canAutoAcceptOrders: boolean;
+  canShowAIButton: boolean;
+  aiRepliesPerMonth: number;
+  aiInsightsLimit: number;
+  activePromotionsLimit: number;
+  dashboardFilterRange: 'today' | 'week' | 'month' | 'year';
+  canViewBestSellerWidget: boolean;
+  canViewRevenueCard: boolean;
+  canViewAdvancedAnalytics: boolean;
+  invoicesPerMonth: number;
+  invoiceHistoryDays: number;
+  canDownloadInvoicePdf: boolean;
+  canDuplicateInvoice: boolean;
+  canUploadLogo: boolean;
+  canSetBrandColor: boolean;
+  canSetThankYouMessage: boolean;
+  canSetFooterText: boolean;
+  canUsePremiumTemplates: boolean;
+  canUseSeasonalThemes: boolean;
+  canAddQrCode: boolean;
+  canUsePrintLayout: boolean;
+}
+
 /** Mirrors resolveEffectivePlan's `reason` union on the backend. */
 export type SubscriptionReason =
   | 'vendor_suspended'
@@ -97,6 +138,12 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
   // the real, already-live plan config the moment that config changed on the
   // backend — this is what actually keeps them in step.
   const [realPlanLimits, setRealPlanLimits] = useState<Record<PlanId, RealPlanLimits> | null>(null);
+
+  // The current vendor's own full PlanLimits, from getSubscriptionStatus —
+  // distinct from realPlanLimits above (numeric limits for ALL four plans,
+  // used by upgrade-comparison screens). This is the one object other
+  // screens should read for "what can I, right now, actually do."
+  const [planLimits, setPlanLimits] = useState<PlanLimits | null>(null);
 
   useEffect(() => {
     loadPlan();
@@ -177,10 +224,12 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
           effectivePlan: BackendPlanTier;
           reason: SubscriptionReason;
           subscription: { currentPeriodEnd?: { toDate?: () => Date } } | null;
+          planLimits: PlanLimits;
         }
       >('getSubscriptionStatus');
       const res = await getStatus({});
       const newPlan = fromBackendPlanTier(res.data.effectivePlan);
+      setPlanLimits(res.data.planLimits ?? null);
 
       setPlanData((prev) => {
         const cancellationScheduled = res.data.reason === 'cancelled_before_period_end';
@@ -383,6 +432,7 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
     isLoading,
     isPlanConfirmed,
     realPlanLimits,
+    planLimits,
     refreshSubscriptionStatus,
     toggleBranding,
     scheduleCancellation,

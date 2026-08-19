@@ -7,7 +7,8 @@ import { useRouter } from 'expo-router';
 import { Archive, MessageSquare } from 'lucide-react-native';
 import ListStateView from '@/components/ListStateView';
 import { ChatListSkeleton } from '@/components/SkeletonLoader';
-import { mockOrders } from '@/mocks/ordersData';
+import type { Order } from '@/mocks/ordersData';
+import { useOrders } from '@/contexts/OrdersContext';
 import { OrderConversationListItem, CircularAvatar } from '@/components/OrderConversationListItem';
 import { getOrderStatusColor, getOrderStatusLabel } from '@/features/orders/selectors/orderStatusSelectors';
 import { formatVendorOrderId } from '@/utils/formatOrderId';
@@ -66,11 +67,11 @@ const getVendorIdentifierLabel = (item: InboxSnapshot): string | undefined => {
  * For order-chat rows, optionally also surface a short order reference
  * (formatted public order id) as tertiary context next to the type badge.
  */
-const getOrderReferenceLabel = (item: InboxSnapshot): string | undefined => {
+const getOrderReferenceLabel = (item: InboxSnapshot, orders: Order[]): string | undefined => {
   if (item.conversationType !== 'order' && item.conversationType !== 'custom_order') return undefined;
   if (item.publicOrderId) return formatVendorOrderId(item.publicOrderId);
   if (item.orderId) {
-    const order = mockOrders.find(o => o.id === item.orderId);
+    const order = orders.find(o => o.id === item.orderId);
     if (order?.publicOrderId) return formatVendorOrderId(order.publicOrderId);
   }
   return undefined;
@@ -90,6 +91,7 @@ export default function CustomerChatsScreen() {
   const [selectedFilter, setSelectedFilter] = useState<ChatFilterType>('all');
 
   const { archivedChats, archiveChat } = useBlockedUsers();
+  const { orders } = useOrders();
   const { getDraft } = useCustomerDrafts();
   const { getFilteredCustomerInbox, markConversationRead, loadMoreCustomer, hasMoreCustomer, customerInbox } = useInbox();
   const { markChatAsRead } = useChatRead();
@@ -157,7 +159,7 @@ export default function CustomerChatsScreen() {
 
   const getOrderStatusChip = (item: InboxSnapshot): StatusChip | undefined => {
     if ((item.conversationType !== 'order' && item.conversationType !== 'custom_order') || !item.orderId) return undefined;
-    const order = mockOrders.find(o => o.id === item.orderId);
+    const order = orders.find(o => o.id === item.orderId);
     if (!order) return undefined;
     const colors = getOrderStatusColor(order.status);
     return {
@@ -174,7 +176,7 @@ export default function CustomerChatsScreen() {
     const statusChip = getOrderStatusChip(item);
     const unreadBadgeColor = isUnread ? Colors.primary : undefined;
     const vendorIdLabel = getVendorIdentifierLabel(item);
-    const orderRef = getOrderReferenceLabel(item);
+    const orderRef = getOrderReferenceLabel(item, orders);
     const chatTypeBadge = getChatTypeBadgeVariant(item);
 
     return (

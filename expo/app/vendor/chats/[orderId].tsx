@@ -21,6 +21,7 @@ import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { ChevronLeft, Send, Plus, ArrowUp, User, X, Award, ShoppingBag, DollarSign, MapPin, MessageSquare, ClipboardList, FileText, Receipt, Copy, Package, ChevronRight, Check, AlertCircle, Search, Pencil, Flag, Star, Images, ChevronUp, ChevronDown } from 'lucide-react-native';
 import { PaymentRequestCard } from '@/components/PaymentRequestCard';
 import type { ChatMessage, ContactCardData } from '@/mocks/chatData';
+import { getChatByOrderId } from '@/mocks/chatData';
 
 import { useOrders } from '@/contexts/OrdersContext';
 import { useChats } from '@/contexts/ChatContext';
@@ -30,7 +31,6 @@ import { useChangeRequests } from '@/contexts/ChangeRequestsContext';
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
 import { useVendorCustomerNotes } from '@/contexts/VendorCustomerNotesContext';
 import { useCatalog } from '@/contexts/CatalogContext';
-import { useVendorPickup } from '@/contexts/VendorPickupContext';
 import { useCustomOrders } from '@/contexts/CustomOrderContext';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
 import { useInvoices, getInvoiceStatusDisplayLabel } from '@/contexts/InvoiceContext';
@@ -129,10 +129,6 @@ export default function VendorOrderChatScreen() {
   const insets = useSafeAreaInsets();
   const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [selectedCatalogItems, setSelectedCatalogItems] = useState<string[]>([]);
-  const [showPickupModal, setShowPickupModal] = useState(false);
-  const [editingPickup, setEditingPickup] = useState(false);
-  const [pickupAddress, setPickupAddress] = useState('');
-  const [pickupInstructions, setPickupInstructions] = useState('');
   const [showQuickRepliesModal, setShowQuickRepliesModal] = useState(false);
   const [quickReplies, setQuickReplies] = useState<{id: string; shortcut: string; message: string}[]>([]);
   const [showOrderSelectionModal, setShowOrderSelectionModal] = useState(false);
@@ -148,7 +144,6 @@ export default function VendorOrderChatScreen() {
   const { blockUser, getBlockedUserByChatId, archiveChat } = useBlockedUsers();
   const { getNote, saveNote } = useVendorCustomerNotes();
   const { items: catalogItems, categories } = useCatalog();
-  const { pickupDetails, isLoaded: isPickupLoaded } = useVendorPickup();
   const { proposals } = useCustomOrders();
   const { plan } = useVendorPlan();
   const { getInvoiceById: getInvoiceRecordById } = useInvoices();
@@ -163,7 +158,14 @@ export default function VendorOrderChatScreen() {
   const { vendor } = useVendor();
   const { requests: changeRequests } = useChangeRequests();
 
-  const chat = chats.find((c) => c.orderId === orderId);
+  // Real commerce threads never set a scalar `orderId` (only the backend's
+  // relatedOrderIds[] array, via injectOrderContext), so `c.orderId ===
+  // orderId` silently matched nothing for every real order — a vendor
+  // opened an empty/wrong chat. getChatByOrderId resolves the same
+  // hydrated chat store via the real `order_context` message every order
+  // gets injected with, the same working path app/chat/[vendorId].tsx and
+  // app/chat/order/[orderId].tsx already use.
+  const chat = getChatByOrderId(orderId as string) ?? chats.find((c) => c.id === (orderId as string));
   const orderFromContext = getOrder(orderId as string);
   const order = orderFromContext || orders.find(o => o.id === orderId);
   const isCompleted = order?.status === 'completed';
@@ -255,16 +257,6 @@ export default function VendorOrderChatScreen() {
       loadQuickReplies();
     }
   }, [showQuickRepliesModal]);
-
-  useEffect(() => {
-    if (showPickupModal && !editingPickup && isPickupLoaded) {
-      const fullAddress = pickupDetails.unit 
-        ? `${pickupDetails.streetAddress}, ${pickupDetails.unit}`
-        : pickupDetails.streetAddress;
-      setPickupAddress(fullAddress);
-      setPickupInstructions(pickupDetails.instructions);
-    }
-  }, [showPickupModal, editingPickup, pickupDetails, isPickupLoaded]);
 
   useEffect(() => {
     if (latestChangeRequest?.status === 'accepted' && !changeAcceptedMsgRef.current) {
@@ -477,37 +469,6 @@ export default function VendorOrderChatScreen() {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not send catalog items.';
-      Alert.alert('Could not send', message);
-    }
-  };
-
-  const handlePickupDetailsPress = () => {
-    setShowPickupModal(true);
-    setEditingPickup(false);
-  };
-
-  const handleSendPickupDetails = async () => {
-    setShowPickupModal(false);
-    setEditingPickup(false);
-
-    // This used to construct the message object and then drop it on the
-    // floor — the modal closed, nothing was sent, and the customer never
-    // received the pickup details.
-    try {
-      await chatService.sendMessage({
-        chatId,
-        type: 'pickup-details',
-        content: 'Pickup details sent',
-        sender: 'vendor',
-        pickupDetailsData: {
-          address: pickupAddress,
-          instructions: pickupInstructions,
-          scheduledDate: order?.scheduledDate,
-          scheduledTime: order?.scheduledTime,
-        },
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not send pickup details.';
       Alert.alert('Could not send', message);
     }
   };
@@ -1707,20 +1668,6 @@ export default function VendorOrderChatScreen() {
                 style={styles.actionsMenuGridItem}
                 onPress={() => {
                   setShowActionsMenu(false);
-                  setTimeout(() => handlePickupDetailsPress(), 300);
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.actionsMenuIconCircle}>
-                  <MapPin size={24} color={Colors.primary} strokeWidth={2} />
-                </View>
-                <Text style={styles.actionsMenuGridItemText}>Pickup</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.actionsMenuGridItem}
-                onPress={() => {
-                  setShowActionsMenu(false);
                   setTimeout(() => handleCatalogPress(), 300);
                 }}
                 activeOpacity={0.7}
@@ -1869,86 +1816,6 @@ export default function VendorOrderChatScreen() {
                 </View>
               );
             })}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      <Modal
-        visible={showPickupModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowPickupModal(false)}
-      >
-        <SafeAreaView style={styles.modalContainer} edges={['top', 'bottom']}>
-          <View style={styles.catalogModalHeader}>
-            <TouchableOpacity onPress={() => setShowPickupModal(false)}>
-              <Text style={styles.catalogCancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <Text style={styles.catalogModalTitle}>Pickup Details</Text>
-            <TouchableOpacity 
-              onPress={() => {
-                setShowPickupModal(false);
-                router.push('/vendor/settings/pickup-details' as any);
-              }}
-            >
-              <Text style={styles.catalogSendText}>Settings</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.pickupContent} showsVerticalScrollIndicator={false}>
-            {!pickupAddress.trim() ? (
-              <View style={styles.pickupEmptyState}>
-                <View style={styles.pickupEmptyIcon}>
-                  <MapPin size={48} color={Colors.textMuted} strokeWidth={1.5} />
-                </View>
-                <Text style={styles.pickupEmptyTitle}>No pickup details saved</Text>
-                <Text style={styles.pickupEmptyDescription}>
-                  Set up your pickup address and instructions in Settings to quickly share them with customers.
-                </Text>
-                <TouchableOpacity
-                  style={styles.pickupSetupButton}
-                  onPress={() => {
-                    setShowPickupModal(false);
-                    router.push('/vendor/settings/pickup-details' as any);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.pickupSetupButtonText}>Set up pickup details</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                <View style={styles.pickupInfoBanner}>
-                  <Text style={styles.pickupInfoText}>
-                    📍 Saved from Settings · Tap Settings to update
-                  </Text>
-                </View>
-
-                <View style={styles.pickupSection}>
-                  <Text style={styles.pickupLabel}>Pickup Address</Text>
-                  <View style={styles.pickupValueCard}>
-                    <Text style={styles.pickupValue}>{pickupAddress}</Text>
-                  </View>
-                </View>
-
-                {pickupInstructions.trim() && (
-                  <View style={styles.pickupSection}>
-                    <Text style={styles.pickupLabel}>Pickup Instructions</Text>
-                    <View style={styles.pickupValueCard}>
-                      <Text style={styles.pickupValue}>{pickupInstructions}</Text>
-                    </View>
-                  </View>
-                )}
-
-                <TouchableOpacity
-                  style={styles.sendPickupButton}
-                  onPress={handleSendPickupDetails}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.sendPickupButtonText}>Send to chat</Text>
-                </TouchableOpacity>
-              </>
-            )}
           </ScrollView>
         </SafeAreaView>
       </Modal>

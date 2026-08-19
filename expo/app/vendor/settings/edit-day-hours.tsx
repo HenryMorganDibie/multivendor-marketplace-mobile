@@ -16,6 +16,7 @@ import { Plus, Trash2 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useVendor } from '@/contexts/VendorContext';
 import { TimeRange, DayHoursConfig } from '@/mocks/vendorData';
+import { callable } from '@/lib/firebase';
 import * as Haptics from 'expo-haptics';
 import EditScreenHeader from '@/components/EditScreenHeader';
 
@@ -103,7 +104,7 @@ export default function EditDayHoursScreen() {
     setTimeout(() => setShowToast(false), 2200);
   }, []);
 
-  const autoSave = useCallback((open: boolean, ranges: TimeRange[]) => {
+  const autoSave = useCallback(async (open: boolean, ranges: TimeRange[]) => {
     const currentHours = vendor.weeklyHours ?? {};
     const updatedConfig: DayHoursConfig = {
       closed: !open,
@@ -116,12 +117,24 @@ export default function EditDayHoursScreen() {
     };
 
     console.log('[EditDayHours] Auto-saving:', dayName, updatedConfig);
-    updateVendor({ weeklyHours: updatedHours as any });
-    hasAutoSaved.current = true;
-    showSavedToast();
-
-    if (Platform.OS !== 'web') {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      // weeklyHours is already an accepted field on the real
+      // updateVendorSettings callable (Store Status & Availability) — this
+      // screen was the one caller still writing it to AsyncStorage only via
+      // updateVendor(), so a saved day's hours never reached the backend and
+      // were never seen by customers or the vendor on another device.
+      const update = callable<{ weeklyHours: Record<string, DayHoursConfig> }, { success: true }>('updateVendorSettings');
+      await update({ weeklyHours: updatedHours });
+      // Optimistic local merge — the live vendor listener will confirm this
+      // with the real document moments later, so this never fights it.
+      updateVendor({ weeklyHours: updatedHours as any });
+      hasAutoSaved.current = true;
+      showSavedToast();
+      if (Platform.OS !== 'web') {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    } catch (err) {
+      console.error('[EditDayHours] updateVendorSettings failed:', err);
     }
   }, [dayName, vendor.weeklyHours, updateVendor, showSavedToast]);
 

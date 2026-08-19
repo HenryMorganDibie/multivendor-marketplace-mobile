@@ -1,28 +1,13 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Chat, ChatMessage, ChatType, OrderContextData, normalizeChatType, toPushChatType } from '@/mocks/chatData';
-import { MOCK_CUSTOMER_ID, MOCK_VENDOR_ID } from '@/mocks/inboxData';
 import { useBackendChats } from '@/lib/chat/useBackendChats';
 import { chatService } from '@/services/chatService';
+import { useAuth } from './AuthContext';
+import { useVendor } from './VendorContext';
 import { useVendorPushNotifications } from './VendorPushNotificationContext';
 import { useBlockedUsers } from './BlockedUsersContext';
 import { useVendorAwayMessage } from './VendorAwayMessageContext';
-
-/**
- * TEMPORARY mock current-user identity.
- *
- * Single source of truth for the customer identity used by ChatContext until
- * auth/session wiring lands. Replace this object — and only this object — when
- * the real user/session provider is plugged in (e.g. Supabase / Firebase auth).
- * Vendor-side flows resolve their own vendorId from the active vendor account
- * and should not depend on this constant.
- */
-const mockCurrentUser = {
-  customerId: MOCK_CUSTOMER_ID,
-  customerName: 'Jane Smith',
-  /** Default vendor identity for vendor-side helpers when no explicit vendorId is wired yet. */
-  vendorId: MOCK_VENDOR_ID,
-};
 
 /**
  * ChatContext is a thin wrapper over `chatService`.
@@ -57,6 +42,22 @@ export const [ChatProvider, useChats] = createContextHook(() => {
   const { isUserBlocked } = useBlockedUsers();
   const awayMessage = useVendorAwayMessage() ?? null;
 
+  // Real authenticated identity — every local lookup/scaffold below used to
+  // key off a hardcoded mock customer/vendor id, which is how the storefront's
+  // real "Message Vendor" button (useMessageVendor -> createCommerceConversation)
+  // could create the correct thread server-side under the real customer's uid
+  // while this file's own local fallback scaffolding for the same thread kept
+  // using a different, fake id — two divergent local records for one real
+  // conversation. currentCustomerId/currentCustomerName are now sourced from
+  // the same useAuth() session every other real-data context in this app uses
+  // (OrdersContext, InboxContext), and currentVendorId from the active
+  // vendor's own account (useVendor()), never a shared constant.
+  const { user } = useAuth();
+  const { vendor } = useVendor();
+  const currentCustomerId = user?.id ?? '';
+  const currentCustomerName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() || 'Customer';
+  const currentVendorId = vendor?.id ?? '';
+
   const getConversationByPair = useCallback((vendorId: string, customerId: string): Chat | undefined => {
     return chatService.getAllSync().find(c => c.vendorId === vendorId && c.customerId === customerId);
   }, []);
@@ -69,7 +70,7 @@ export const [ChatProvider, useChats] = createContextHook(() => {
 
     const all = chatService.getAllSync();
     const existing = all.find(
-      c => c.vendorId === vendorId && c.customerId === mockCurrentUser.customerId
+      c => c.vendorId === vendorId && c.customerId === currentCustomerId
     );
 
     let chatId: string;
@@ -81,11 +82,11 @@ export const [ChatProvider, useChats] = createContextHook(() => {
       console.log('[ChatContext] Reusing existing conversation:', existing.id, 'type:', existing.chatType);
     } else {
       const newChat: Chat = {
-        id: `chat-${vendorId}-${mockCurrentUser.customerId}-${Date.now()}`,
+        id: `chat-${vendorId}-${currentCustomerId}-${Date.now()}`,
         vendorId,
         vendorName,
-        customerId: mockCurrentUser.customerId,
-        customerName: mockCurrentUser.customerName,
+        customerId: currentCustomerId,
+        customerName: currentCustomerName,
         chatType: 'pre_order_inquiry',
         messages: [],
         createdAt: new Date().toISOString(),
@@ -113,7 +114,7 @@ export const [ChatProvider, useChats] = createContextHook(() => {
     });
 
     return chatService.getByIdSync(chatId) ?? null;
-  }, [isUserBlocked, vendorPush]);
+  }, [isUserBlocked, vendorPush, currentCustomerId, currentCustomerName]);
 
   const addMessageToChat = useCallback((chatId: string, message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const chatBefore = chatService.getByIdSync(chatId);
@@ -172,34 +173,34 @@ export const [ChatProvider, useChats] = createContextHook(() => {
 
   const getPreOrderChat = useCallback((vendorId: string): Chat | undefined => {
     return chatService.getAllSync().find(
-      c => c.vendorId === vendorId && c.customerId === mockCurrentUser.customerId
+      c => c.vendorId === vendorId && c.customerId === currentCustomerId
     );
-  }, []);
+  }, [currentCustomerId]);
 
   const getChatByPair = useCallback((vendorId: string, customerId: string): Chat | undefined => {
     return chatService.getAllSync().find(c => c.vendorId === vendorId && c.customerId === customerId);
   }, []);
 
   const getCustomerChats = useCallback((): Chat[] => {
-    return chatService.getAllSync().filter(c => c.customerId === mockCurrentUser.customerId || !c.customerId);
-  }, []);
+    return chatService.getAllSync().filter(c => c.customerId === currentCustomerId || !c.customerId);
+  }, [currentCustomerId]);
 
   const getVendorPreOrderChats = useCallback((): Chat[] => {
     return chatService.getAllSync().filter(
-      c => normalizeChatType(c.chatType) === 'pre_order_inquiry' && c.vendorId === mockCurrentUser.vendorId
+      c => normalizeChatType(c.chatType) === 'pre_order_inquiry' && c.vendorId === currentVendorId
     );
-  }, []);
+  }, [currentVendorId]);
 
   const getVendorPreOrderChatByCustomerId = useCallback((customerId: string): Chat | undefined => {
     return chatService.getAllSync().find(
-      c => normalizeChatType(c.chatType) === 'pre_order_inquiry' && c.customerId === customerId && c.vendorId === mockCurrentUser.vendorId
+      c => normalizeChatType(c.chatType) === 'pre_order_inquiry' && c.customerId === customerId && c.vendorId === currentVendorId
     );
-  }, []);
+  }, [currentVendorId]);
 
   const getOrCreateConversation = useCallback((vendorId: string, vendorName: string, chatType: ChatType = 'pre_order_inquiry'): Chat => {
     const all = chatService.getAllSync();
     const existing = all.find(
-      c => c.vendorId === vendorId && c.customerId === mockCurrentUser.customerId
+      c => c.vendorId === vendorId && c.customerId === currentCustomerId
     );
 
     if (existing) {
@@ -208,11 +209,11 @@ export const [ChatProvider, useChats] = createContextHook(() => {
     }
 
     const newChat: Chat = {
-      id: `chat-${vendorId}-${mockCurrentUser.customerId}-${Date.now()}`,
+      id: `chat-${vendorId}-${currentCustomerId}-${Date.now()}`,
       vendorId,
       vendorName,
-      customerId: mockCurrentUser.customerId,
-      customerName: mockCurrentUser.customerName,
+      customerId: currentCustomerId,
+      customerName: currentCustomerName,
       chatType,
       messages: [],
       createdAt: new Date().toISOString(),
@@ -226,11 +227,11 @@ export const [ChatProvider, useChats] = createContextHook(() => {
     chatService.updateChat(newChat.id, {});
     console.log('[ChatContext] Created new conversation:', newChat.id, 'type:', chatType);
     return newChat;
-  }, []);
+  }, [currentCustomerId, currentCustomerName]);
 
   const startNewInquiry = useCallback((vendorId: string): Chat | null => {
     const existing = chatService.getAllSync().find(
-      c => c.vendorId === vendorId && c.customerId === mockCurrentUser.customerId
+      c => c.vendorId === vendorId && c.customerId === currentCustomerId
     );
 
     if (!existing) {
@@ -253,7 +254,7 @@ export const [ChatProvider, useChats] = createContextHook(() => {
 
     console.log('[ChatContext] New inquiry started in existing conversation:', existing.id);
     return chatService.getByIdSync(existing.id) ?? null;
-  }, []);
+  }, [currentCustomerId]);
 
   const convertToOrderChat = useCallback((vendorId: string, customerId: string, orderContextData: OrderContextData): void => {
     const existing = chatService.getAllSync().find(
@@ -291,7 +292,7 @@ export const [ChatProvider, useChats] = createContextHook(() => {
   const getOrCreateOrderChat = useCallback((vendorId: string, vendorName: string, _orderId: string, _publicOrderId: string, _orderStatus: string): Chat => {
     const all = chatService.getAllSync();
     const existing = all.find(
-      c => c.vendorId === vendorId && c.customerId === mockCurrentUser.customerId
+      c => c.vendorId === vendorId && c.customerId === currentCustomerId
     );
 
     const systemContent = 'Your order request has been sent. The vendor will review and confirm availability.';
@@ -309,11 +310,11 @@ export const [ChatProvider, useChats] = createContextHook(() => {
     }
 
     const newChat: Chat = {
-      id: `chat-${vendorId}-${mockCurrentUser.customerId}-${Date.now()}`,
+      id: `chat-${vendorId}-${currentCustomerId}-${Date.now()}`,
       vendorId,
       vendorName,
-      customerId: mockCurrentUser.customerId,
-      customerName: mockCurrentUser.customerName,
+      customerId: currentCustomerId,
+      customerName: currentCustomerName,
       chatType: 'order_chat',
       messages: [],
       createdAt: new Date().toISOString(),
@@ -331,7 +332,7 @@ export const [ChatProvider, useChats] = createContextHook(() => {
 
     console.log('[ChatContext] Created single conversation thread:', newChat.id);
     return chatService.getByIdSync(newChat.id) ?? newChat;
-  }, []);
+  }, [currentCustomerId, currentCustomerName]);
 
   return useMemo(() => ({
     chats,

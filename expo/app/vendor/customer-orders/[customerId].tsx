@@ -10,8 +10,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { ChevronLeft, ShoppingBag } from 'lucide-react-native';
-import { mockOrders } from '@/mocks/ordersData';
 import type { Order, OrderStatus } from '@/mocks/ordersData';
+import { useOrders } from '@/contexts/OrdersContext';
 import { formatVendorOrderId } from '@/utils/formatOrderId';
 import { getOrderStatusColor, getVendorOrderStatusLabel } from '@/features/orders/selectors/orderStatusSelectors';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
@@ -151,19 +151,20 @@ export default function CustomerOrdersScreen() {
 
   const [activeTab, setActiveTab] = useState<TabType>('active');
   const [activeFilter, setActiveFilter] = useState('all');
+  const { orders } = useOrders();
 
   const displayName = customerName ?? 'Customer';
   const shortName = displayName.split(' ')[0] ?? displayName;
 
   const allCustomerOrders = useMemo(() => {
-    return mockOrders
+    return orders
       .filter((o) => {
         const matchDirect = o.customerId === customerId;
         const matchLegacy = `customer-${o.id}` === customerId;
         return matchDirect || matchLegacy;
       })
       .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
-  }, [customerId]);
+  }, [customerId, orders]);
 
   const activeOrders = useMemo(
     () => allCustomerOrders.filter((o) => ACTIVE_STATUSES.includes(o.status)),
