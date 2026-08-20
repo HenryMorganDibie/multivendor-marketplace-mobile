@@ -937,7 +937,7 @@ export default function VendorDashboardScreen() {
               <StickyNote size={20} color={Colors.primary} />
             </View>
             <View style={styles.noteCardTextWrap}>
-              <Text style={styles.noteCardTitle}>{"Today's Note"}</Text>
+              <Text style={styles.noteCardTitle}>{"Quick Note"}</Text>
               <Text style={styles.noteCardPreview} numberOfLines={2}>
                 {todaysNote.trim() ? todaysNote.trim().slice(0, 80) + (todaysNote.trim().length > 80 ? '...' : '') : 'Add today\u0027s note...'}
               </Text>

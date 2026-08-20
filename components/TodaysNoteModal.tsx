@@ -122,7 +122,7 @@ const isAtLimit = charCount === MAX_CHARS;
               <Text style={styles.cancel}>Cancel</Text>
             </TouchableOpacity>
 
-            <Text style={styles.title}>Quick Note</Text>
+            <Text style={styles.title} pointerEvents="none">Quick Note</Text>
 
             <TouchableOpacity
               onPress={handleSave}
