@@ -8,8 +8,8 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
+import { Alert } from '@/utils/alert';
 import { Trash2 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useTodaysNote } from '@/contexts/TodaysNoteContext';
@@ -122,7 +122,7 @@ const isAtLimit = charCount === MAX_CHARS;
               <Text style={styles.cancel}>Cancel</Text>
             </TouchableOpacity>
 
-            <Text style={styles.title}>Today's Note</Text>
+            <Text style={styles.title}>Quick Note</Text>
 
             <TouchableOpacity
               onPress={handleSave}
