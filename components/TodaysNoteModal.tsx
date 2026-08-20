@@ -10,7 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { Alert } from '@/utils/alert';
-import { Trash2 } from 'lucide-react-native';
+import { Trash2, X } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useTodaysNote } from '@/contexts/TodaysNoteContext';
 
@@ -118,8 +118,9 @@ const isAtLimit = charCount === MAX_CHARS;
             <TouchableOpacity
               onPress={handleCancel}
               activeOpacity={0.7}
+              style={styles.closeButton}
             >
-              <Text style={styles.cancel}>Cancel</Text>
+              <X size={22} color={Colors.textSecondary} />
             </TouchableOpacity>
 
             <Text style={styles.title} pointerEvents="none">Quick Note</Text>
