@@ -1,7 +1,8 @@
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { CatalogItem, Category } from '@/contexts/CatalogContext';
-import { mockMenuItems, mockCategories } from '@/mocks/vendorData';
+import type { MenuItem, Category as StorefrontCategory } from '@/mocks/vendorData';
 import type { VendorMenuData } from '@/types/domain';
-import { catalogMapper } from '@/services/mappers/catalogMapper';
 
 /**
  * catalogRepository — data-access boundary for the vendor's catalog.
@@ -114,16 +115,80 @@ export const catalogRepository = {
   /**
    * Storefront vendor menu read path.
    *
-   * TODO(Henry): replace with Firestore `vendors/{vendorId}/catalogItems` +
-   * `.../categories` queries scoped to the storefront. Output shape
-   * (`VendorMenuData`) must stay stable so storefront screens don't break.
+   * CatalogContext already reads this same vendor/catalogItems +
+   * catalogCategories data live for the vendor's own management screens —
+   * this ignored vendorId entirely and always returned the mock menu, so
+   * every customer storefront showed the same four fixture items regardless
+   * of which vendor they were actually browsing. Mirrors CatalogContext's
+   * field mapping (fromBackendItem), but into the storefront's MenuItem/
+   * Category shape rather than the vendor-management CatalogItem shape, and
+   * filtered to what a customer should actually see: approved and not
+   * hidden. A one-shot read rather than a live subscription — a customer
+   * browsing a menu re-opens the screen for updates, unlike the vendor's own
+   * always-open editing view.
    */
   async getVendorMenu(vendorId: string): Promise<VendorMenuData> {
-    console.log('[catalogRepository] getVendorMenu vendorId:', vendorId);
-    return catalogMapper.vendorMenuFromRaw(
-      mockMenuItems as unknown as Record<string, unknown>[],
-      mockCategories as unknown as Record<string, unknown>[],
+    const [itemsSnap, categoriesSnap] = await Promise.all([
+      getDocs(collection(db, 'vendors', vendorId, 'catalogItems')),
+      getDocs(collection(db, 'vendors', vendorId, 'catalogCategories')),
+    ]);
+
+    const categoryNameById = new Map<string, string>();
+    categoriesSnap.docs.forEach((d) => {
+      const data = d.data();
+      categoryNameById.set((data.categoryId as string) ?? d.id, (data.name as string) ?? '');
+    });
+
+    const itemCountByCategory = new Map<string, number>();
+    const menuItems: MenuItem[] = [];
+
+    itemsSnap.docs.forEach((d) => {
+      const data = d.data();
+      const isApproved = data.moderationStatus === 'approved';
+      const isHidden = Boolean(data.isHidden);
+      if (!isApproved || isHidden) return;
+
+      const categoryId = (data.categoryId as string | null) ?? 'uncategorized';
+      itemCountByCategory.set(categoryId, (itemCountByCategory.get(categoryId) ?? 0) + 1);
+
+      const addOnGroups = Array.isArray(data.addOnGroups) ? (data.addOnGroups as Record<string, unknown>[]) : [];
+      const addOns = addOnGroups.flatMap((group) => {
+        const options = Array.isArray(group.options) ? (group.options as Record<string, unknown>[]) : [];
+        return options
+          .filter((opt) => opt.isAvailable !== false)
+          .map((opt) => ({
+            id: (opt.id as string) ?? '',
+            name: (opt.name as string) ?? '',
+            price: (opt.price as number) ?? 0,
+          }));
+      });
+
+      menuItems.push({
+        id: (data.itemId as string) ?? d.id,
+        name: (data.name as string) ?? '',
+        description: (data.description as string | null) ?? undefined,
+        price: (data.basePrice as number) ?? 0,
+        salePrice: (data.salePrice as number | null) ?? undefined,
+        image: Array.isArray(data.photos) ? (data.photos as string[])[0] : undefined,
+        inStock: !Boolean(data.isOutOfStock) && Boolean(data.isAvailable),
+        categoryId,
+        stockCount: (data.inventoryQuantity as number | undefined) ?? undefined,
+        addOns,
+        orderCount: (data.orderCount as number | undefined) ?? 0,
+        isFeatured: Boolean(data.isFeatured),
+        highlightLabel: (data.highlightLabel as MenuItem['highlightLabel']) ?? undefined,
+      });
+    });
+
+    const storefrontCategories: StorefrontCategory[] = Array.from(categoryNameById.entries()).map(
+      ([id, name]) => ({
+        id,
+        name,
+        itemCount: itemCountByCategory.get(id) ?? 0,
+      }),
     );
+
+    return { items: menuItems, categories: storefrontCategories };
   },
 
   async getAllCategories(): Promise<Category[]> {

@@ -1,4 +1,5 @@
 import type { Order, OrderStatus, OrderItem, PaymentStatus } from '@/mocks/ordersData';
+import type { PaymentState } from '@/constants/paymentStates';
 
 /**
  * Turns a Firestore order document into the Order shape the app already uses.
@@ -85,6 +86,26 @@ function toItems(raw: unknown): OrderItem[] {
   });
 }
 
+/**
+ * The app's payment banner logic (order/[id].tsx, vendor/chats/[orderId].tsx)
+ * reads order.paymentState — a field only ever set by the mock data and the
+ * local-only vendorConfirmPayment/vendorMarkNotPaid state updates. Real
+ * orders only carry the backend's own paymentStatus enum (set by
+ * submitPaymentProof/reviewPaymentProof), under different names and values.
+ * Translated here so those screens' existing paymentState checks work
+ * unmodified for real orders too, same "map onto the existing shape in one
+ * place" approach as the rest of this file.
+ */
+function toPaymentState(paymentStatus: string | undefined): PaymentState | undefined {
+  switch (paymentStatus) {
+    case 'PROOF_SUBMITTED': return 'CUSTOMER_MARKED_PAID';
+    case 'PROOF_ACCEPTED': return 'VENDOR_PAYMENT_CONFIRMED';
+    case 'PROOF_REJECTED': return 'PAYMENT_REJECTED';
+    case 'PROOF_LOCKED': return 'PAYMENT_REJECTED';
+    default: return undefined;
+  }
+}
+
 export function mapOrderDoc(id: string, data: Record<string, unknown>): Order {
   const snapshot = (data.orderSnapshot ?? {}) as Record<string, number | string>;
   const vendorSnapshot = (data.vendorSnapshot ?? {}) as Record<string, string>;
@@ -113,6 +134,7 @@ export function mapOrderDoc(id: string, data: Record<string, unknown>): Order {
     total: Number(snapshot.total ?? 0),
     currency: (snapshot.currency as string) ?? 'NGN',
     paymentStatus: (data.paymentStatus as PaymentStatus) ?? undefined,
+    paymentState: toPaymentState(data.paymentStatus as string | undefined),
     orderSource: (data.orderSource as Order['orderSource']) ?? 'internal',
     orderNote: (data.orderNote as string) ?? undefined,
   } as Order;

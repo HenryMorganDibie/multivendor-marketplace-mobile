@@ -71,7 +71,7 @@ export function mapVendorDoc(id: string, data: Record<string, unknown>): Vendor 
     category: (data.category as string) ?? '',
     categoryId: (data.categoryId as string) ?? undefined,
 
-    rating: (data.averageRating as number) ?? 0,
+    rating: (data.ratingAverage as number) ?? 0,
     reviewCount: (data.ratingCount as number) ?? 0,
 
     region: location.stateName ?? (data.region as string) ?? '',

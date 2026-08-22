@@ -5,7 +5,7 @@ import { ChevronLeft, ShieldOff, Ban, Clock3 } from 'lucide-react-native';
 import { useSafeBack } from '@/utils/useSafeBack';
 import { Colors } from '@/constants/colors';
 
-export type VendorStatus = 'ACTIVE' | 'UNVERIFIED' | 'WAITLISTED' | 'SUSPENDED' | 'DEACTIVATED';
+export type VendorStatus = 'ACTIVE' | 'UNVERIFIED' | 'WAITLISTED' | 'SUSPENDED' | 'DEACTIVATED' | 'FROZEN';
 
 export interface VendorStatusPermissions {
   canViewStorefront: boolean;
@@ -16,7 +16,7 @@ export interface VendorStatusPermissions {
   canAccessAI: boolean;
   canMakePayment: boolean;
   isBlocked: boolean;
-  blockType: 'WAITLISTED' | 'SUSPENDED' | 'DEACTIVATED' | null;
+  blockType: 'WAITLISTED' | 'SUSPENDED' | 'DEACTIVATED' | 'FROZEN' | null;
   vendorStatus: VendorStatus;
 }
 
@@ -38,6 +38,9 @@ export function normalizeVendorStatus(raw?: string): VendorStatus {
     case 'DEACTIVATED':
     case 'deactivated':
       return 'DEACTIVATED';
+    case 'FROZEN':
+    case 'frozen':
+      return 'FROZEN';
     default:
       return 'ACTIVE';
   }
@@ -110,6 +113,19 @@ export function getVendorStatusPermissions(status: VendorStatus): VendorStatusPe
         blockType: 'DEACTIVATED',
         vendorStatus: 'DEACTIVATED',
       };
+    case 'FROZEN':
+      return {
+        canViewStorefront: false,
+        canChat: false,
+        canAddToCart: false,
+        canSubmitOrder: false,
+        canCreateCustomOrder: false,
+        canAccessAI: false,
+        canMakePayment: false,
+        isBlocked: true,
+        blockType: 'FROZEN',
+        vendorStatus: 'FROZEN',
+      };
   }
 }
 
@@ -124,7 +140,7 @@ export function useVendorStatusPermissions(): VendorStatusPermissions {
   return ctx;
 }
 
-type BlockType = 'WAITLISTED' | 'SUSPENDED' | 'DEACTIVATED';
+type BlockType = 'WAITLISTED' | 'SUSPENDED' | 'DEACTIVATED' | 'FROZEN';
 
 const BLOCK_CONFIG: Record<BlockType, {
   Icon: React.ComponentType<{ size: number; color: string; strokeWidth: number }>;
@@ -157,6 +173,14 @@ const BLOCK_CONFIG: Record<BlockType, {
     title: 'This store is no longer available on the platform.',
     message: 'This vendor has been removed from the platform.\nPlease contact support if you have an active order.',
     accentColor: '#6B7280',
+  },
+  FROZEN: {
+    Icon: ShieldOff,
+    iconColor: '#DC2626',
+    bgColor: 'rgba(220,38,38,0.08)',
+    title: 'This store is temporarily frozen.',
+    message: 'This vendor is currently unavailable on the platform.\nPlease contact support if you have an active order.',
+    accentColor: '#DC2626',
   },
 };
 

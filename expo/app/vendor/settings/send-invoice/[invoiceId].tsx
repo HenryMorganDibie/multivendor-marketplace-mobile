@@ -12,10 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { MessageCircle, Share2, ChevronRight, AlertCircle } from 'lucide-react-native';
 import { useInvoices, getInvoiceShareUrl } from '@/contexts/InvoiceContext';
-import { useChats } from '@/contexts/ChatContext';
 import type { InboxSnapshot } from '@/mocks/inboxData';
 import { formatVendorDisplayName } from '@/utils/vendorDisplayHelpers';
-import { formatInvoiceCustomerName } from '@/utils/internalCustomerName';
 import { formatPrice } from '@/utils/formatPrice';
 import { useVendor } from '@/contexts/VendorContext';
 import EditScreenHeader from '@/components/EditScreenHeader';
@@ -28,7 +26,6 @@ export default function SendInvoiceScreen() {
   const { vendor } = useVendor();
   const { invoiceId } = useLocalSearchParams();
   const { getInvoiceById, sendInvoiceInChat, markInvoiceSharedExternally } = useInvoices();
-  const { addMessageToChat } = useChats();
   const invoice = getInvoiceById(invoiceId as string);
 
   const [showConversationPicker, setShowConversationPicker] = useState<boolean>(false);
@@ -51,25 +48,14 @@ export default function SendInvoiceScreen() {
   /** Deliver into a the platform chat thread and drop the invoice card into the timeline. */
   const deliverToChat = async (chatId: string, customerId?: string, customerName?: string) => {
     try {
+      // sendInvoiceInChat already writes the real chat message server-side
+      // (type: "invoice", full invoiceData assembled from the trusted
+      // invoice doc) — a second client-side addMessageToChat used to run
+      // here too, but the backend only accepts text/contact-card/
+      // catalog_item from clients, so it was silently rejected on every
+      // real send. The live chat listener picks up the real message on its
+      // own; nothing else needs to happen here.
       await sendInvoiceInChat(invoice.id, chatId, customerId);
-      addMessageToChat(chatId, {
-        type: 'invoice',
-        content: `Invoice ${invoice.invoiceNumber}`,
-        sender: 'vendor',
-        invoiceData: {
-          invoiceId: invoice.id,
-          invoiceNumber: invoice.invoiceNumber,
-          shareCode: invoice.shareCode,
-          amountDue: invoice.total,
-          paymentStatus: invoice.paymentStatus ?? 'unpaid',
-          currency: invoice.currency,
-          itemCount: invoice.items.length,
-          // Privacy: privacy-safe display name for internal customers; vendor-typed
-          // display name for external customers. Never the raw full surname.
-          customerName: formatInvoiceCustomerName(customerName ?? invoice.customerName, invoice.customerSource),
-          status: 'sent_in_chat',
-        },
-      });
       router.replace({
         pathname: '/vendor/(tabs)/chats',
       } as any);

@@ -62,7 +62,7 @@ import { useInvoiceBranding } from '@/contexts/InvoiceBrandingContext';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
 import { useVendor } from '@/contexts/VendorContext';
 import { formatInvoiceCustomerName } from '@/utils/internalCustomerName';
-import { formatPriceWithCommas as formatPrice, type Currency } from '@/utils/formatPrice';
+import { formatPriceWithCommas as formatPrice, getMinorUnitMultiplier, type Currency } from '@/utils/formatPrice';
 import InvoiceRenderer, { type InvoiceRendererData } from '@/components/InvoiceRenderer';
 import { Colors } from '@/constants/colors';
 
@@ -104,6 +104,7 @@ export default function VendorInvoiceDetailScreen() {
     duplicateInvoiceById,
     markInvoiceSharedExternally,
     downloadInvoicePdf,
+    ledgerFor,
   } = useInvoices();
   // The signed-in vendor. The contact block, share text and PDF header all
   // read from here; they used the demo fixture, so a real vendor's invoice
@@ -148,13 +149,21 @@ export default function VendorInvoiceDetailScreen() {
 
   // ─── Derived state ──────────────────────────────────────────────────────
   const currency: Currency = (invoice.currency as Currency) || 'NGN';
-  const amountPaid = getAmountPaid(invoice.payments);
-  const balanceDue = getBalanceDue(invoice.total, invoice.payments);
-  const effectivePaymentStatus = resolvePaymentStatus(
-    invoice.total,
-    invoice.payments,
-    invoice.paymentStatus,
-  );
+
+  // Real invoices never populate invoice.payments — the backend derives
+  // paid/balance from its own ledger (paymentLedger.ts), exposed separately
+  // via ledgerFor so mapInvoiceDoc's shape stays untouched. Falling through
+  // to the payments-array computation only for invoices with no ledger
+  // entry yet (mock/demo seed data, or a real invoice with zero payments
+  // recorded — ledgerFor still returns a view in that case with amountPaid
+  // 0, so this fallback is effectively demo-only).
+  const ledger = ledgerFor(invoice.id);
+  const minorUnitMultiplier = getMinorUnitMultiplier(currency);
+  const amountPaid = ledger ? ledger.amountPaidMinorUnits / minorUnitMultiplier : getAmountPaid(invoice.payments);
+  const balanceDue = ledger ? ledger.balanceMinorUnits / minorUnitMultiplier : getBalanceDue(invoice.total, invoice.payments);
+  const effectivePaymentStatus = ledger
+    ? (ledger.paymentStatus === 'partial' ? 'partially_paid' : ledger.paymentStatus === 'overpaid' ? 'paid' : ledger.paymentStatus === 'cancelled' ? 'unpaid' : ledger.paymentStatus)
+    : resolvePaymentStatus(invoice.total, invoice.payments, invoice.paymentStatus);
   const isInternal = invoice.customerSource !== 'external';
 
   // Derived overdue: issued AND balance > 0 AND due date in the past.

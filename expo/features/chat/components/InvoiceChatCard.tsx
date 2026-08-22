@@ -13,7 +13,7 @@ import {
 import { router } from 'expo-router';
 import { Eye, Download, CheckCircle2, X, ChevronRight } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
-import { formatPriceWithCommas as formatPrice, type Currency } from '@/utils/formatPrice';
+import { formatPriceWithCommas as formatPrice, getMinorUnitMultiplier, type Currency } from '@/utils/formatPrice';
 import { formatTime } from '@/features/chat/selectors/chatSelectors';
 import { useInvoices } from '@/contexts/InvoiceContext';
 import { useVendor } from '@/contexts/VendorContext';
@@ -126,7 +126,7 @@ const PAYMENT_METHODS: { id: InvoicePaymentMethod; label: string }[] = [
 ];
 
 export const InvoiceChatCard = React.memo(function InvoiceChatCard({ data, timestamp, role = 'vendor' }: Props) {
-  const { getInvoiceById, recordPayment, downloadInvoicePdf } = useInvoices();
+  const { getInvoiceById, recordPayment, downloadInvoicePdf, ledgerFor } = useInvoices();
   // The real signed-in vendor. This card used mockVendor for the business name
   // and currency, so a card in a live chat showed the demo business to whoever
   // was reading it.
@@ -153,9 +153,22 @@ export const InvoiceChatCard = React.memo(function InvoiceChatCard({ data, times
    */
   const invoice = getInvoiceById(data.invoiceId);
   const currency = (invoice?.currency ?? data.currency ?? vendor.currency ?? 'NGN') as Currency;
-  const amountPaid = invoice ? getAmountPaid(invoice.payments) : 0;
-  const balanceDue = invoice ? getBalanceDue(invoice.total, invoice.payments) : (data.amountDue ?? 0);
-  const currentStatus = invoice?.paymentStatus ?? data.paymentStatus ?? 'unpaid';
+
+  // Real invoices never populate invoice.payments/paymentStatus — the
+  // backend derives paid/balance from its own ledger, exposed separately
+  // via ledgerFor. Without this, every real invoice showed "unpaid" here
+  // regardless of what had actually been paid.
+  const ledger = invoice ? ledgerFor(invoice.id) : undefined;
+  const minorUnitMultiplier = getMinorUnitMultiplier(currency);
+  const amountPaid = ledger
+    ? ledger.amountPaidMinorUnits / minorUnitMultiplier
+    : invoice ? getAmountPaid(invoice.payments) : 0;
+  const balanceDue = ledger
+    ? ledger.balanceMinorUnits / minorUnitMultiplier
+    : invoice ? getBalanceDue(invoice.total, invoice.payments) : (data.amountDue ?? 0);
+  const currentStatus = ledger
+    ? (ledger.paymentStatus === 'partial' ? 'partially_paid' : ledger.paymentStatus === 'overpaid' ? 'paid' : ledger.paymentStatus === 'cancelled' ? 'unpaid' : ledger.paymentStatus)
+    : invoice?.paymentStatus ?? data.paymentStatus ?? 'unpaid';
   const statusConfig = STATUS_CONFIG[currentStatus] ?? STATUS_CONFIG.unpaid;
   const isPaid = currentStatus === 'paid';
 

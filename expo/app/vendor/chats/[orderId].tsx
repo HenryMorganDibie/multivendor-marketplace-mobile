@@ -23,6 +23,9 @@ import { PaymentRequestCard } from '@/components/PaymentRequestCard';
 import type { ChatMessage, ContactCardData } from '@/mocks/chatData';
 import { getChatByOrderId } from '@/mocks/chatData';
 
+import { collection, onSnapshot, orderBy, limit as firestoreLimit, query } from 'firebase/firestore';
+import { ref, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '@/lib/firebase';
 import { useOrders } from '@/contexts/OrdersContext';
 import { useChats } from '@/contexts/ChatContext';
 import { chatService } from '@/services/chatService';
@@ -181,6 +184,56 @@ export default function VendorOrderChatScreen() {
   const isPaymentSubmitted = order?.paymentState === 'CUSTOMER_MARKED_PAID';
   const isPaymentConfirmed = order?.paymentState === 'VENDOR_PAYMENT_CONFIRMED';
   const isPaymentRejected = order?.paymentState === 'PAYMENT_REJECTED';
+
+  // The real payment proof (image storagePaths, proofId) lives in a
+  // Firestore subcollection, not on the order doc, so it isn't part of the
+  // mapOrderDoc shape above. Confirm/Reject need the real proofId to call
+  // reviewPaymentProof, and "View proof" needs real download URLs — both
+  // resolved here. Demo orders have no such subcollection, so this just
+  // stays null and every screen below falls back to the existing mock
+  // order.paymentProof array, unchanged.
+  const [realProof, setRealProof] = useState<{
+    proofId: string;
+    status: string;
+    notes: string | null;
+    images: { storagePath: string; url: string }[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (!orderId) {
+      setRealProof(null);
+      return;
+    }
+    const q = query(
+      collection(db, 'orders', orderId as string, 'paymentProofs'),
+      orderBy('createdAt', 'desc'),
+      firestoreLimit(1)
+    );
+    const unsubscribe = onSnapshot(q, async (snap) => {
+      if (snap.empty) {
+        setRealProof(null);
+        return;
+      }
+      const doc = snap.docs[0];
+      const data = doc.data() as { proofId: string; status: string; notes?: string | null; images?: { storagePath: string }[] };
+      const images = await Promise.all(
+        (data.images ?? []).map(async (img) => {
+          try {
+            const url = await getDownloadURL(ref(storage, img.storagePath));
+            return { storagePath: img.storagePath, url };
+          } catch (err) {
+            console.error('[VendorOrderChat] Failed to resolve proof image URL:', err);
+            return { storagePath: img.storagePath, url: '' };
+          }
+        })
+      );
+      setRealProof({ proofId: data.proofId ?? doc.id, status: data.status, notes: data.notes ?? null, images });
+    }, (err) => {
+      console.error('[VendorOrderChat] paymentProofs listener failed:', err);
+      setRealProof(null);
+    });
+    return unsubscribe;
+  }, [orderId]);
 
   const chatAvailability = getChatAvailability(
     order?.status || 'requested',
@@ -1384,7 +1437,11 @@ export default function VendorOrderChatScreen() {
             <Text style={styles.paymentStatusBlockLabel}>Payment status</Text>
             <View style={styles.paymentStatusBlockRow}>
               <Text style={styles.paymentStatusBlockValue}>Customer marked as paid</Text>
-              {order?.paymentProof && order.paymentProof.length > 0 ? (
+              {realProof && realProof.images.length > 0 ? (
+                <TouchableOpacity onPress={() => setShowViewProofModal(true)} activeOpacity={0.7}>
+                  <Text style={styles.viewProofLink}>View proof ({realProof.images.length})</Text>
+                </TouchableOpacity>
+              ) : order?.paymentProof && order.paymentProof.length > 0 ? (
                 <TouchableOpacity onPress={() => setShowViewProofModal(true)} activeOpacity={0.7}>
                   <Text style={styles.viewProofLink}>View proof ({order.paymentProof.length})</Text>
                 </TouchableOpacity>
@@ -1406,7 +1463,7 @@ export default function VendorOrderChatScreen() {
                       text: 'Not Paid',
                       style: 'destructive',
                       onPress: () => {
-                        const success = vendorMarkNotPaid(orderId as string);
+                        const success = vendorMarkNotPaid(orderId as string, realProof?.proofId);
                         if (success) {
                           setSystemActionMessages(prev => [...prev, {
                             id: `action-notpaid-${Date.now()}`,
@@ -1434,7 +1491,7 @@ export default function VendorOrderChatScreen() {
                     {
                       text: 'Confirm',
                       onPress: () => {
-                        const success = vendorConfirmPayment(orderId as string);
+                        const success = vendorConfirmPayment(orderId as string, realProof?.proofId);
                         if (success) {
                           setSystemActionMessages(prev => [...prev, {
                             id: `action-confirmed-${Date.now()}`,
@@ -2445,7 +2502,17 @@ export default function VendorOrderChatScreen() {
             <View style={{ width: 60 }} />
           </View>
           <ScrollView style={styles.proofContent} showsVerticalScrollIndicator={false}>
-            {order?.paymentProof && order.paymentProof.length > 0 ? (
+            {realProof && realProof.images.length > 0 ? (
+              realProof.images.map((img) => (
+                <View key={img.storagePath} style={styles.proofItem}>
+                  <Image
+                    source={{ uri: img.url }}
+                    style={styles.proofImage}
+                    contentFit="contain"
+                  />
+                </View>
+              ))
+            ) : order?.paymentProof && order.paymentProof.length > 0 ? (
               order.paymentProof.map((proof) => (
                 <View key={proof.id} style={styles.proofItem}>
                   {proof.type === 'image' ? (

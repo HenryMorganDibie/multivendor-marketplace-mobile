@@ -63,6 +63,14 @@ export function useBackendChats(): { ready: boolean } {
 
       if (!fbUser) { setReady(false); return; }
 
+      // mockChats starts pre-seeded with ~20 fixture conversations (module
+      // load runs before this listener resolves), and a real signed-in user
+      // could see that fixture inbox for a moment before the first snapshot
+      // below lands — the same "empty beats fixture" reasoning as the error
+      // handler further down, just applied before the wait too, not only
+      // after a failure.
+      chatService.hydrateFromBackend([]);
+
       unsubscribeThreads = onSnapshot(
         query(
           collection(db, 'chatThreads'),

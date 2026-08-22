@@ -5,6 +5,31 @@ import { mockOrders, type Order, type OrderStatus, type OrderEvent, type OrderSn
 import { useAuth } from '@/contexts/AuthContext';
 import { auth, db, callable } from '@/lib/firebase';
 import { mapOrderDoc } from '@/lib/orders/mapOrderDoc';
+import { uploadPaymentProofImage } from '@/lib/orders/uploadPaymentProofImage';
+
+/**
+ * Uploads each local proof image to Storage, then submits the resulting
+ * storagePaths in one submitPaymentProof call — one call per submission,
+ * whatever the image count, matching the backend's one-doc-per-submission
+ * model (MAX_SUBMISSIONS = 2). Never call submitPaymentProof once per image;
+ * that would burn a submission per photo and lock the customer out after
+ * one multi-photo "I've Paid" tap.
+ */
+async function uploadAndSubmitPaymentProof(
+  orderId: string,
+  vendorId: string,
+  proofs: PaymentProof[],
+  notes?: string,
+): Promise<void> {
+  const images = await Promise.all(
+    proofs.map(async (p) => {
+      const { storagePath } = await uploadPaymentProofImage(p.uri, vendorId, orderId);
+      return { storagePath };
+    })
+  );
+  const submit = callable<Record<string, unknown>, { success: true; proofId: string }>('submitPaymentProof');
+  await submit({ orderId, images, notes });
+}
 
 /**
  * The transitions this app will attempt.
@@ -426,8 +451,18 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
       })
     );
     console.log(`[OrdersContext] Customer marked paid: ${orderId}`);
+
+    // The vendor has to see the proof to review it, so it cannot stay on the
+    // customer's device. Uploads each image to Storage first, then submits
+    // the real storagePaths — submitPaymentProof rejects any payload without
+    // one. Demo orders have no backend order to attach this to.
+    if (!DEMO_ORDER_ACCOUNTS[accountId ?? ''] && proofs && proofs.length > 0) {
+      void uploadAndSubmitPaymentProof(orderId, order.vendorId, proofs).catch((err) => {
+        console.error('[Orders] submitPaymentProof rejected:', err);
+      });
+    }
     return true;
-  }, [orders]);
+  }, [orders, accountId]);
 
   const addPaymentProof = useCallback((orderId: string, proof: PaymentProof): boolean => {
     const order = orders.find((o) => o.id === orderId);
@@ -445,23 +480,17 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
       })
     );
 
-    // The vendor has to see the proof to review it, so it cannot stay on the
-    // customer's device. submitPaymentProof records it against the order and
-    // notifies the vendor.
+    // Same upload-then-submit path as markCustomerPaid, for the "upload
+    // proof later" flow — one image, one submission.
     if (!DEMO_ORDER_ACCOUNTS[accountId ?? '']) {
-      const submit = callable<Record<string, unknown>, { success: true }>('submitPaymentProof');
-      void submit({
-        orderId,
-        proofType: proof.type,
-        proofUrl: proof.uri,
-      }).catch((err) => {
+      void uploadAndSubmitPaymentProof(orderId, order.vendorId, [proof]).catch((err) => {
         console.error('[Orders] submitPaymentProof rejected:', err);
       });
     }
     return true;
-  }, [orders]);
+  }, [orders, accountId]);
 
-  const vendorConfirmPayment = useCallback((orderId: string): boolean => {
+  const vendorConfirmPayment = useCallback((orderId: string, proofId?: string): boolean => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) {
       console.error(`[OrdersContext] Order not found for vendorConfirmPayment: ${orderId}`);
@@ -496,8 +525,20 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
       })
     );
     console.log(`[OrdersContext] Vendor confirmed payment: ${orderId}`);
+
+    // This button used to only touch local state — the order in Firestore
+    // never changed, so the customer's app never learned the vendor had
+    // confirmed. proofId comes from the real paymentProofs subcollection
+    // doc the screen is listening to; without one there's nothing real to
+    // review (demo order, or the listener hasn't resolved yet).
+    if (proofId && !DEMO_ORDER_ACCOUNTS[accountId ?? '']) {
+      const review = callable<Record<string, unknown>, { success: true }>('reviewPaymentProof');
+      void review({ orderId, proofId, decision: 'accept' }).catch((err) => {
+        console.error('[Orders] reviewPaymentProof (accept) rejected:', err);
+      });
+    }
     return true;
-  }, [orders]);
+  }, [orders, accountId]);
 
   const vendorRequestPaymentProof = useCallback((orderId: string): boolean => {
     const order = orders.find((o) => o.id === orderId);
@@ -519,7 +560,7 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     return true;
   }, [orders]);
 
-  const vendorMarkNotPaid = useCallback((orderId: string): boolean => {
+  const vendorMarkNotPaid = useCallback((orderId: string, proofId?: string): boolean => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) {
       console.error(`[OrdersContext] Order not found for vendorMarkNotPaid: ${orderId}`);
@@ -549,8 +590,20 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
       })
     );
     console.log(`[OrdersContext] Vendor marked not paid: ${orderId}`);
+
+    if (proofId && !DEMO_ORDER_ACCOUNTS[accountId ?? '']) {
+      const review = callable<Record<string, unknown>, { success: true }>('reviewPaymentProof');
+      void review({
+        orderId,
+        proofId,
+        decision: 'reject',
+        reviewReason: 'Vendor marked payment as not received.',
+      }).catch((err) => {
+        console.error('[Orders] reviewPaymentProof (reject) rejected:', err);
+      });
+    }
     return true;
-  }, [orders]);
+  }, [orders, accountId]);
 
   const setOrderPendingChanges = useCallback((orderId: string, hasPending: boolean) => {
     setOrderPendingChangesState(prev => ({ ...prev, [orderId]: hasPending }));

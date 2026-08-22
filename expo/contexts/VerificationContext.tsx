@@ -1,10 +1,11 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 import { verificationService } from '@/services/verificationService';
 import type { MockVerificationProviderData } from '@/utils/vendorDiscovery';
-import { auth, callable } from '@/lib/firebase';
+import { auth, callable, db } from '@/lib/firebase';
 import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 import { uploadVerificationDocument } from '@/lib/verification/uploadVerificationDocument';
 
@@ -186,6 +187,60 @@ export const [VerificationProvider, useVerification] = createContextHook(() => {
   useEffect(() => {
     loadVerificationData();
   }, [loadVerificationData]);
+
+  /**
+   * The real admin decision, live.
+   *
+   * submitForReview's own comment already says the local pending_review
+   * status "moves off that only when the backend says so" — but nothing
+   * ever checked what the backend said. approveVendorVerification /
+   * rejectVendorVerification (admin-only, vendorModeration.ts) write the
+   * real decision to vendorVerification/{vendorId}, and this device never
+   * read it: loadVerificationData above only ever reads the local
+   * AsyncStorage record, so an admin's approval or rejection never reached
+   * the vendor's own screens. Only overrides status once the backend has an
+   * actual decision (approved/rejected) — pending_review/not_started stay
+   * locally driven, since those are legitimately client-side states before
+   * a decision exists.
+   */
+  useEffect(() => {
+    let unsubscribeDoc: (() => void) | null = null;
+
+    const unsubscribeAuth = auth.onIdTokenChanged(async (fbUser) => {
+      unsubscribeDoc?.();
+      unsubscribeDoc = null;
+      if (!fbUser) return;
+
+      const token = await fbUser.getIdTokenResult();
+      const vendorId = token.claims.vendorId as string | undefined;
+      if (!vendorId) return;
+
+      unsubscribeDoc = onSnapshot(
+        doc(db, 'vendorVerification', vendorId),
+        (snap) => {
+          if (!snap.exists()) return;
+          const data = snap.data();
+          const backendStatus = data.verificationStatus as string | undefined;
+          if (backendStatus !== 'approved' && backendStatus !== 'rejected') return;
+
+          const reviewedAt = (data.reviewedAt as { toDate?: () => Date } | undefined)?.toDate?.().toISOString();
+          setVerificationData((prev) => ({
+            ...prev,
+            status: backendStatus,
+            reviewedAt: reviewedAt ?? prev.reviewedAt,
+            rejectionReason: backendStatus === 'rejected' ? (data.rejectionReason as string | undefined) ?? prev.rejectionReason : undefined,
+            retryAllowed: backendStatus === 'rejected',
+          }));
+        },
+        (err) => console.error('[VERIFICATION] Live decision subscription failed:', err),
+      );
+    });
+
+    return () => {
+      unsubscribeDoc?.();
+      unsubscribeAuth();
+    };
+  }, []);
 
   const saveVerificationData = async (data: VerificationData) => {
     if (!user?.id) return;

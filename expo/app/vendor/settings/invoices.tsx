@@ -29,7 +29,8 @@ import {
 } from 'lucide-react-native';
 import { useInvoices } from '@/contexts/InvoiceContext';
 import type { Invoice, InvoiceStatus, InvoiceCustomerSource } from '@/contexts/InvoiceContext';
-import { formatPrice, type Currency } from '@/utils/formatPrice';
+import { formatPrice, getMinorUnitMultiplier, type Currency } from '@/utils/formatPrice';
+import type { InvoiceLedgerView } from '@/lib/invoices/mapInvoiceDoc';
 import { formatInvoiceCustomerName } from '@/utils/internalCustomerName';
 import { useVendor } from '@/contexts/VendorContext';
 import { Alert } from '@/utils/alert';
@@ -101,7 +102,19 @@ const AMOUNT_OPTIONS: { key: AmountSort; label: string }[] = [
  *  Real due-date logic is a Phase 2 TODO when Henry adds a dueDate field to the backend. */
 const OVERDUE_AGE_DAYS = 7;
 
-function isOverdue(inv: Invoice): boolean {
+// All six functions below take an optional ledger view (from
+// InvoiceContext's ledgerFor, keyed off the backend's real payment ledger —
+// see lib/invoices/mapInvoiceDoc.ts). Real invoices never populate
+// inv.payments/inv.paymentStatus, so without a ledger every real invoice
+// silently read as "unpaid" here regardless of what was actually paid. The
+// ledger's amountPaidMinorUnits/balanceMinorUnits are compared as-is
+// (unconverted minor units) for these >0/=== boolean checks — a boolean
+// crossing zero doesn't care which unit it's counted in, only the actual
+// displayed amounts (getAmountPaid/getBalanceDue) need currency conversion.
+// The inv.payments-based path remains the fallback for invoices with no
+// ledger entry (mock/demo seed data).
+
+function isOverdue(inv: Invoice, ledger?: InvoiceLedgerView): boolean {
   if (inv.status === 'paid' || inv.status === 'draft' || inv.status === 'cancelled' || inv.status === 'expired' || inv.status === 'void') {
     return false;
   }
@@ -110,7 +123,9 @@ function isOverdue(inv: Invoice): boolean {
   if (inv.dueDate) {
     const dueMs = new Date(inv.dueDate).getTime();
     if (!Number.isNaN(dueMs) && dueMs < Date.now()) {
-      const balance = Math.max(0, inv.total - (inv.payments ?? []).reduce((s, p) => s + p.amount, 0));
+      const balance = ledger
+        ? ledger.balanceMinorUnits
+        : Math.max(0, inv.total - (inv.payments ?? []).reduce((s, p) => s + p.amount, 0));
       return balance > 0;
     }
   }
@@ -121,17 +136,19 @@ function isOverdue(inv: Invoice): boolean {
 }
 
 /** Fully paid only — partially paid invoices are NOT counted as Paid. */
-function isFullyPaid(inv: Invoice): boolean {
+function isFullyPaid(inv: Invoice, ledger?: InvoiceLedgerView): boolean {
+  if (ledger) return ledger.paymentStatus === 'paid' || ledger.paymentStatus === 'overpaid';
   return inv.status === 'paid';
 }
 
 /** Partially paid: vendor has recorded a partial payment but balance remains. */
-function isPartiallyPaid(inv: Invoice): boolean {
+function isPartiallyPaid(inv: Invoice, ledger?: InvoiceLedgerView): boolean {
+  if (ledger) return ledger.paymentStatus === 'partial';
   return inv.paymentStatus === 'partially_paid' && inv.status !== 'paid' && inv.status !== 'cancelled' && inv.status !== 'expired' && inv.status !== 'void';
 }
 
-function isUnpaid(inv: Invoice): boolean {
-  if (isFullyPaid(inv) || isPartiallyPaid(inv) || isOverdue(inv)) return false;
+function isUnpaid(inv: Invoice, ledger?: InvoiceLedgerView): boolean {
+  if (isFullyPaid(inv, ledger) || isPartiallyPaid(inv, ledger) || isOverdue(inv, ledger)) return false;
   if (inv.status === 'draft' || inv.status === 'cancelled' || inv.status === 'expired' || inv.status === 'void') return false;
   return true;
 }
@@ -140,13 +157,15 @@ function isDraft(inv: Invoice): boolean {
   return inv.status === 'draft';
 }
 
-/** Amount paid across recorded payments (mock). */
-function getAmountPaid(inv: Invoice): number {
+/** Amount paid, in the invoice's own currency's major units. */
+function getAmountPaid(inv: Invoice, ledger?: InvoiceLedgerView): number {
+  if (ledger) return ledger.amountPaidMinorUnits / getMinorUnitMultiplier((inv.currency as Currency) || 'NGN');
   return (inv.payments ?? []).reduce((s, p) => s + p.amount, 0);
 }
 
-/** Remaining balance (never negative). */
-function getBalanceDue(inv: Invoice): number {
+/** Remaining balance (never negative), in the invoice's own currency's major units. */
+function getBalanceDue(inv: Invoice, ledger?: InvoiceLedgerView): number {
+  if (ledger) return Math.max(0, ledger.balanceMinorUnits / getMinorUnitMultiplier((inv.currency as Currency) || 'NGN'));
   return Math.max(0, inv.total - getAmountPaid(inv));
 }
 
@@ -181,8 +200,8 @@ interface CardStatusConfig {
   pillBg: string;
 }
 
-function getCardStatusConfig(inv: Invoice): CardStatusConfig {
-  if (isFullyPaid(inv)) {
+function getCardStatusConfig(inv: Invoice, ledger?: InvoiceLedgerView): CardStatusConfig {
+  if (isFullyPaid(inv, ledger)) {
     return {
       icon: <CheckCircle2 size={22} color={Colors.success} />,
       pillLabel: 'Paid',
@@ -190,7 +209,7 @@ function getCardStatusConfig(inv: Invoice): CardStatusConfig {
       pillBg: Colors.successLight,
     };
   }
-  if (isPartiallyPaid(inv)) {
+  if (isPartiallyPaid(inv, ledger)) {
     return {
       icon: <CheckCircle2 size={22} color={Colors.warning} />,
       pillLabel: 'Partial',
@@ -198,7 +217,7 @@ function getCardStatusConfig(inv: Invoice): CardStatusConfig {
       pillBg: Colors.warningLight,
     };
   }
-  if (isOverdue(inv)) {
+  if (isOverdue(inv, ledger)) {
     return {
       icon: <AlertTriangle size={22} color={Colors.error} />,
       pillLabel: 'Overdue',
@@ -259,6 +278,9 @@ function SwipeableInvoiceCard({
   // than passed down: the row is rendered in a list and threading it through
   // props would mean touching every call site for one field.
   const { vendor } = useVendor();
+  // Same reasoning as vendor above — the real payment ledger, read directly
+  // rather than threaded through props.
+  const { ledgerFor } = useInvoices();
   const translateX = useRef(new Animated.Value(0)).current;
   const isOpen = useRef(false);
 
@@ -319,15 +341,16 @@ function SwipeableInvoiceCard({
     onDeleteDraft();
   };
 
-  const status = getCardStatusConfig(invoice);
+  const ledger = ledgerFor(invoice.id);
+  const status = getCardStatusConfig(invoice, ledger);
   // Privacy: internal the platform customers always render as "First L."; external
   // customers use the vendor-typed display name verbatim. Never the full surname.
   const customerLabel = formatInvoiceCustomerName(invoice.customerName, invoice.customerSource);
   const sourceLabel: string = invoice.customerSource === 'external' ? 'External' : 'Internal';
   const vendorCurrency = (invoice.currency as Currency) || (vendor.currency as Currency) || 'NGN';
-  const paidAmount = getAmountPaid(invoice);
-  const balanceAmount = getBalanceDue(invoice);
-  const showPartialLine = isPartiallyPaid(invoice) && paidAmount > 0;
+  const paidAmount = getAmountPaid(invoice, ledger);
+  const balanceAmount = getBalanceDue(invoice, ledger);
+  const showPartialLine = isPartiallyPaid(invoice, ledger) && paidAmount > 0;
 
   const renderCardBody = () => (
     <TouchableOpacity
@@ -438,7 +461,7 @@ function FilterSection({
 }
 
 export default function InvoicesScreen() {
-  const { invoices, deleteInvoice } = useInvoices();
+  const { invoices, deleteInvoice, ledgerFor } = useInvoices();
   // Currency falls back to the signed-in vendor's, not the demo one's.
   const { vendor } = useVendor();
 
@@ -456,12 +479,12 @@ export default function InvoicesScreen() {
     return {
       all: invoices.length,
       drafts: invoices.filter(isDraft).length,
-      paid: invoices.filter(isFullyPaid).length,
-      unpaid: invoices.filter(isUnpaid).length,
-      partially_paid: invoices.filter(isPartiallyPaid).length,
-      overdue: invoices.filter(isOverdue).length,
+      paid: invoices.filter((i) => isFullyPaid(i, ledgerFor(i.id))).length,
+      unpaid: invoices.filter((i) => isUnpaid(i, ledgerFor(i.id))).length,
+      partially_paid: invoices.filter((i) => isPartiallyPaid(i, ledgerFor(i.id))).length,
+      overdue: invoices.filter((i) => isOverdue(i, ledgerFor(i.id))).length,
     } as Record<StatusPillKey, number>;
-  }, [invoices]);
+  }, [invoices, ledgerFor]);
 
   const filteredInvoices = useMemo(() => {
     let list = invoices.slice();
@@ -470,21 +493,21 @@ export default function InvoicesScreen() {
     if (activePill === 'drafts') {
       list = list.filter(isDraft);
     } else if (activePill === 'paid') {
-      list = list.filter(isFullyPaid);
+      list = list.filter((i) => isFullyPaid(i, ledgerFor(i.id)));
     } else if (activePill === 'unpaid') {
-      list = list.filter(isUnpaid);
+      list = list.filter((i) => isUnpaid(i, ledgerFor(i.id)));
     } else if (activePill === 'partially_paid') {
-      list = list.filter(isPartiallyPaid);
+      list = list.filter((i) => isPartiallyPaid(i, ledgerFor(i.id)));
     } else if (activePill === 'overdue') {
-      list = list.filter(isOverdue);
+      list = list.filter((i) => isOverdue(i, ledgerFor(i.id)));
     }
 
     // Modal filters
     if (filters.status !== 'all') {
       if (filters.status === 'overdue') {
-        list = list.filter(isOverdue);
+        list = list.filter((i) => isOverdue(i, ledgerFor(i.id)));
       } else if (filters.status === 'partially_paid') {
-        list = list.filter(isPartiallyPaid);
+        list = list.filter((i) => isPartiallyPaid(i, ledgerFor(i.id)));
       } else if (filters.status === 'drafts') {
         list = list.filter(isDraft);
       } else {
@@ -525,7 +548,7 @@ export default function InvoicesScreen() {
     }
 
     return list;
-  }, [invoices, activePill, filters, searchQuery]);
+  }, [invoices, activePill, filters, searchQuery, ledgerFor]);
 
   const activeFilterCount = useMemo(() => {
     let n = 0;

@@ -37,7 +37,7 @@ export default function CreateInvoiceScreen() {
   const routerNav = useRouter();
   const { invoiceId } = useLocalSearchParams<{ invoiceId?: string }>();
   const { createInvoice, updateInvoice, getInvoiceById, sendInvoiceInChat, markInvoiceSharedExternally } = useInvoices();
-  const { chats, addMessageToChat } = useChats();
+  const { chats } = useChats();
   const { vendorInbox } = useInbox();
 
   const editingInvoice: Invoice | undefined = invoiceId ? getInvoiceById(invoiceId) : undefined;
@@ -522,25 +522,14 @@ export default function CreateInvoiceScreen() {
         const created = await createInvoice({ ...buildInvoiceFields(chat), status: 'draft' });
         invoiceForMessage = created;
       }
+      // sendInvoiceInChat already writes the real chat message server-side
+      // (type: "invoice", full invoiceData assembled from the trusted
+      // invoice doc) — a second client-side addMessageToChat used to run
+      // here too, but the backend only accepts text/contact-card/
+      // catalog_item from clients, so it was silently rejected on every
+      // real send. The live chat listener picks up the real message on its
+      // own; nothing else needs to happen here.
       await sendInvoiceInChat(invoiceForMessage.id, chat.id, chat.customerId);
-      addMessageToChat(chat.id, {
-        type: 'invoice',
-        content: `Invoice ${invoiceForMessage.invoiceNumber}`,
-        sender: 'vendor',
-        invoiceData: {
-          invoiceId: invoiceForMessage.id,
-          invoiceNumber: invoiceForMessage.invoiceNumber,
-          shareCode: invoiceForMessage.shareCode,
-          amountDue: invoiceForMessage.total,
-          paymentStatus: 'unpaid',
-          currency,
-          itemCount: items.length,
-          // Privacy: store the privacy-safe display name on the chat payload so
-          // the vendor never sees the customer's full surname on the invoice card.
-          customerName: formatInvoiceCustomerName(resolveCustomerName(chat) || chat.customerName, effectiveCustomerSource),
-          status: 'sent_in_chat',
-        },
-      });
       unsavedChanges.resetChanges();
       // Privacy: confirmation copy uses the privacy-safe "First L." form.
       const confirmationName = formatInvoiceCustomerName(resolveCustomerName(chat) || chat.customerName, effectiveCustomerSource);
