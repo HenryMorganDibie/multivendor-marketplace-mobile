@@ -273,8 +273,14 @@ export default function ReportsScreen() {
     }
   };
 
+  // Every other upgrade entry point in the app (dashboard, chats,
+  // growth-insights, invoice-branding) goes through the vendor-portal
+  // handoff at /vendor/settings/subscription — this was the one screen
+  // still pointing at the separate in-app checkout screen
+  // (/vendor/settings/upgrade-plan), a leftover from before that handoff
+  // existed. Matches the dominant, currently-maintained pattern.
   const handleUpgrade = () => {
-    router.push('/vendor/settings/upgrade-plan' as any);
+    router.push('/vendor/settings/subscription' as any);
   };
 
   // Locked / upgrade gate
