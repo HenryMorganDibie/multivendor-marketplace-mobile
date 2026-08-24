@@ -9,7 +9,6 @@ import {
   Modal,
   Pressable,
   Share,
-  Linking,
   Dimensions,
   FlatList,
 } from 'react-native';
@@ -43,13 +42,6 @@ import { Alert } from '@/utils/alert';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Learn more opens the the platform website rather than an in-app screen, so the
-// moderation policy is explained in one place that can be updated without
-// shipping an app release. Env-overridable so staging can point elsewhere.
-const CATALOG_MODERATION_HELP_URL =
-  process.env.EXPO_PUBLIC_CATALOG_MODERATION_HELP_URL ??
-  'https://the platform.com/help/item-review';
-
 export default function ItemDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { getItemById, getCategoryById } = useCatalog();
@@ -70,6 +62,19 @@ export default function ItemDetailsScreen() {
   const currency = (mockVendor.currency as Currency) || 'NGN';
 
   if (!item) return null;
+
+  /**
+   * A vendor who uploads a new photo on an already-approved item sees a
+   * blank gallery until an admin reviews it — the live item.photos is still
+   * whatever was approved before (nothing, in the common case of a first
+   * photo being added), and the actual new photo only exists in the pending
+   * revision. Per the client: this reads as broken, not as "under review" — the
+   * vendor should see what they just submitted. Customers are unaffected,
+   * since the storefront reads the live approved item directly, never this
+   * screen's moderation state.
+   */
+  const pendingPhotos = moderationState?.pendingRevision?.proposedChanges?.photos;
+  const displayPhotos = Array.isArray(pendingPhotos) ? (pendingPhotos as string[]) : item.photos;
 
   const category = getCategoryById(item.categoryId);
   const isPromo =
@@ -177,14 +182,14 @@ export default function ItemDetailsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Photo Gallery */}
-        {item.photos.length > 0 ? (
+        {displayPhotos.length > 0 ? (
           <View style={[
             styles.galleryContainer,
             (isPending || isHidden) && styles.galleryContainerMuted,
           ]}>
             <FlatList
               ref={flatListRef}
-              data={item.photos}
+              data={displayPhotos}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
@@ -209,9 +214,9 @@ export default function ItemDetailsScreen() {
                 </View>
               )}
             />
-            {item.photos.length > 1 && (
+            {displayPhotos.length > 1 && (
               <View style={styles.paginationDots}>
-                {item.photos.map((_, i) => (
+                {displayPhotos.map((_, i) => (
                   <View
                     key={i}
                     style={[
@@ -250,9 +255,7 @@ export default function ItemDetailsScreen() {
         <View style={styles.body}>
           <CatalogItemModerationCard
             itemId={String(id)}
-            currency={currency}
             onEdit={() => router.push(`/vendor/catalog/item/${id}/edit` as never)}
-            onLearnMore={() => void Linking.openURL(CATALOG_MODERATION_HELP_URL)}
             onStateLoaded={setModerationState}
           />
           {/* Name + Price */}

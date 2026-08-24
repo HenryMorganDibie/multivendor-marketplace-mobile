@@ -55,6 +55,22 @@ function isOpenNow(hours: Record<string, { open?: string; close?: string; closed
     : minutes >= openAt && minutes <= closeAt;
 }
 
+/**
+ * Derives the legacy uppercase gate status (VendorStatusGate, and
+ * vendorMapper.isDiscoverable's fallback path) from the two real backend
+ * fields. accountState wins over verification, matching what a vendor
+ * actually experiences: a suspended account is suspended regardless of
+ * verification standing.
+ */
+function toGateVendorStatus(
+  accountState: string | undefined,
+  verificationStatus: string | undefined,
+): 'ACTIVE' | 'UNVERIFIED' | 'SUSPENDED' | 'DEACTIVATED' {
+  if (accountState === 'suspended') return 'SUSPENDED';
+  if (accountState === 'deactivated' || accountState === 'frozen') return 'DEACTIVATED';
+  return verificationStatus === 'approved' ? 'ACTIVE' : 'UNVERIFIED';
+}
+
 export function mapVendorDoc(id: string, data: Record<string, unknown>): Vendor {
   // businessLocation is the newer field; location is what older vendors have.
   const location = (data.businessLocation ?? data.location ?? {}) as Record<string, string>;
@@ -62,6 +78,21 @@ export function mapVendorDoc(id: string, data: Record<string, unknown>): Vendor 
   const fulfillmentTypes = Array.isArray(data.fulfillmentTypes)
     ? (data.fulfillmentTypes as string[])
     : [];
+
+  // vendorMapper.isDiscoverable (the gate behind Home/Explore/Search) checks
+  // vendor.verificationStatus and vendor.accountState directly, with a
+  // fallback onto vendor.vendorStatus === 'ACTIVE' (uppercase) for mock
+  // data. None of these three were ever set here, so every real vendor's
+  // verification/account state read as undefined and isDiscoverable()
+  // always returned false — no real vendor, however verified, could ever
+  // appear in public discovery. accountState and verificationStatus are a
+  // direct passthrough: the backend's real enums already match these
+  // fields' types exactly. isDiscoverable itself is also passed through
+  // directly, since onVendorWrite already computes the authoritative
+  // answer server-side (isPublished && isVerified && vendorStatus ===
+  // 'active' && country active) — no need to re-derive it client-side too.
+  const verificationStatus = (data.verificationStatus as Vendor['verificationStatus']) ?? undefined;
+  const accountState = (data.vendorStatus as Vendor['accountState']) ?? undefined;
 
   return {
     id,
@@ -85,6 +116,10 @@ export function mapVendorDoc(id: string, data: Record<string, unknown>): Vendor 
     phone: (data.phoneNumber as string) ?? undefined,
 
     isVerified: data.isVerified === true,
+    isDiscoverable: data.isDiscoverable === true,
+    verificationStatus,
+    accountState,
+    vendorStatus: toGateVendorStatus(accountState, verificationStatus),
     logoImage: (data.logoUrl as string) ?? undefined,
     bannerImage: (data.coverImageUrl as string) ?? undefined,
     description: (data.description as string) ?? undefined,
