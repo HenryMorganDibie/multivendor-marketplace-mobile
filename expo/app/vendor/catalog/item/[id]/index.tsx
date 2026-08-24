@@ -11,6 +11,7 @@ import {
   Share,
   Dimensions,
   FlatList,
+  Linking,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
@@ -41,6 +42,13 @@ import { shareItem, checkShareable } from '@/lib/storefront/shareStorefront';
 import { Alert } from '@/utils/alert';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Learn more opens the the platform website rather than an in-app screen, so the
+// moderation policy is explained in one place that can be updated without
+// shipping an app release. Env-overridable so staging can point elsewhere.
+const CATALOG_MODERATION_HELP_URL =
+  process.env.EXPO_PUBLIC_CATALOG_MODERATION_HELP_URL ??
+  'https://the platform.com/help/item-review';
 
 export default function ItemDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -256,6 +264,7 @@ export default function ItemDetailsScreen() {
           <CatalogItemModerationCard
             itemId={String(id)}
             onEdit={() => router.push(`/vendor/catalog/item/${id}/edit` as never)}
+            onLearnMore={() => void Linking.openURL(CATALOG_MODERATION_HELP_URL)}
             onStateLoaded={setModerationState}
           />
           {/* Name + Price */}

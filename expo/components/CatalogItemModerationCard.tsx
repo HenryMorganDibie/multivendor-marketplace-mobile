@@ -18,11 +18,13 @@ import { callable } from '@/lib/firebase';
  * that customers cannot read.
  *
  * Deliberately does not show a field-by-field comparison of live vs. proposed
- * values, or a "Learn more" link (per the client, 2026-08-24): this is a vendor
- * tool, not an admin/debugging interface — a vendor already knows what they
- * submitted, and the two-line status message is enough to answer "what's
- * happening with my item?" The detailed current-vs-proposed comparison stays
- * an admin-side concern, in the moderation queue, not here.
+ * values (per the client, 2026-08-24): this is a vendor tool, not an admin/
+ * debugging interface — a vendor already knows what they submitted, and the
+ * two-line status message is enough to answer "what's happening with my
+ * item?" The detailed current-vs-proposed comparison stays an admin-side
+ * concern, in the moderation queue, not here. The "Learn more" link stays,
+ * though — it points at the moderation policy explanation, which is a
+ * different thing from the comparison and vendors do ask for it.
  */
 
 type BackendModerationStatus = 'pending' | 'approved' | 'rejected' | 'flagged';
@@ -46,10 +48,12 @@ export interface ItemModerationState {
 export default function CatalogItemModerationCard({
   itemId,
   onEdit,
+  onLearnMore,
   onStateLoaded,
 }: {
   itemId: string;
   onEdit?: () => void;
+  onLearnMore?: () => void;
   /** Lets the host screen disable actions that don't apply yet. Critically,
    * this differs by state: a brand-new item under review must not be shared,
    * but an approved item with a pending edit stays fully shareable and
@@ -137,7 +141,8 @@ export default function CatalogItemModerationCard({
         <View style={styles.textCol}>
           <Text style={styles.title}>Your changes are under review.</Text>
           <Text style={styles.body}>
-            Customers can still see the currently approved version while we review your changes.
+            Customers can still see the currently approved version while we review your changes.{' '}
+            {onLearnMore ? <Text style={styles.link} onPress={onLearnMore}>Learn more</Text> : null}
           </Text>
         </View>
       </View>
@@ -174,7 +179,8 @@ export default function CatalogItemModerationCard({
         <View style={styles.textCol}>
           <Text style={styles.title}>Your item is under review</Text>
           <Text style={styles.body}>
-            We'll notify you when your item has been approved or if changes are needed.
+            We'll notify you when your item has been approved or if changes are needed.{' '}
+            {onLearnMore ? <Text style={styles.link} onPress={onLearnMore}>Learn more</Text> : null}
           </Text>
         </View>
       </View>

@@ -6,17 +6,19 @@ import { Star, ChevronRight, Lock } from 'lucide-react-native';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { Colors } from '@/constants/colors';
 import { useReviews } from '@/contexts/ReviewsContext';
+import { useVendor } from '@/contexts/VendorContext';
 
 export default function RatingsScreen() {
   const router = useRouter();
+  const { vendor } = useVendor();
   const { getVendorReviews, getVendorRatingStats, markReviewRead, ratingsStatus } = useReviews();
 
   // This is the vendor's own settings screen — unlike the public storefront
   // ratings view, it must never show the seed/fixture reviews. Only render
   // once the real fetch has actually resolved.
   const isReady = ratingsStatus === 'ready';
-  const reviews = isReady ? getVendorReviews('') : [];
-  const stats = isReady ? getVendorRatingStats('') : { average: 0, total: 0, breakdown: [5, 4, 3, 2, 1].map((s) => ({ stars: s, count: 0, percentage: 0 })) };
+  const reviews = isReady ? getVendorReviews(vendor.id) : [];
+  const stats = isReady ? getVendorRatingStats(vendor.id) : { average: 0, total: 0, breakdown: [5, 4, 3, 2, 1].map((s) => ({ stars: s, count: 0, percentage: 0 })) };
   const recentReviews = reviews.slice(0, 8);
 
   const renderStars = (count: number, size = 15) => (

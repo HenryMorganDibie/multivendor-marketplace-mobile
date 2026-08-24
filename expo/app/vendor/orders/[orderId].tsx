@@ -334,8 +334,14 @@ export default function VendorOrderDetailsScreen() {
   };
 
   const handleMarkInProgress = () => {
-    const paymentStatus = order.paymentStatus;
-    const isPaymentSufficient = paymentStatus === 'payment_received' || paymentStatus === 'partially_received';
+    // Real orders carry the backend's payment-proof workflow state in
+    // paymentState (mapOrderDoc.ts), not the amount-based paymentStatus
+    // values external orders use — paymentStatus never holds
+    // 'payment_received'/'partially_received' for a real order, so checking
+    // it here always failed and blocked every real order from progressing.
+    const isPaymentSufficient = isExternal
+      ? order.paymentStatus === 'payment_received' || order.paymentStatus === 'partially_received'
+      : order.paymentState === 'VENDOR_PAYMENT_CONFIRMED';
     if (!isPaymentSufficient) {
       setShowPaymentNotRecordedModal(true);
       return;
@@ -810,7 +816,11 @@ export default function VendorOrderDetailsScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Payment</Text>
               <View style={styles.paymentCard}>
-                {order.paymentStatus === 'payment_received' && balanceDue <= 0 && (
+                {/* This section only renders for real (non-external) orders — see
+                    the !isExternal guard above — so paymentState is always the
+                    right field to read; paymentStatus here would be the raw,
+                    untranslated backend enum and never match. */}
+                {order.paymentState === 'VENDOR_PAYMENT_CONFIRMED' && balanceDue <= 0 && (
                   <View style={styles.paymentConfirmedBanner}>
                     <CheckCircle2 size={20} color={Colors.success} strokeWidth={2.5} />
                     <Text style={styles.paymentConfirmedText}>Payment confirmed</Text>

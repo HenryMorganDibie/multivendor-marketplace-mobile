@@ -5,14 +5,16 @@ import { Stack, useRouter } from 'expo-router';
 import { Star, ChevronRight } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useReviews } from '@/contexts/ReviewsContext';
+import { useVendor } from '@/contexts/VendorContext';
 
 export default function AllRatingsScreen() {
   const router = useRouter();
+  const { vendor } = useVendor();
   const { getVendorReviews, ratingsStatus } = useReviews();
   // Vendor's own settings screen — same rule as ratings.tsx, never fall
   // through to the seed/fixture reviews here.
   const isReady = ratingsStatus === 'ready';
-  const reviews = isReady ? getVendorReviews('') : [];
+  const reviews = isReady ? getVendorReviews(vendor.id) : [];
 
   const renderStars = (count: number) => (
     <View style={styles.starsRow}>

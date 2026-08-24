@@ -385,19 +385,32 @@ export default function VendorOrderChatScreen() {
     );
   }
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (messageText.trim()) {
       const messageContent = messageText.trim();
-      
+
       const validation = validateChatMessage(messageContent);
       if (!validation.isValid) {
         setValidationError(validation.errorMessage || 'Invalid message');
         setTimeout(() => setValidationError(null), 4000);
         return;
       }
-      
+
       clearDraft(chatId);
       setMessageText('');
+
+      try {
+        await chatService.sendMessage({
+          chatId,
+          type: 'text',
+          content: messageContent,
+          sender: 'vendor',
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Could not send message.';
+        Alert.alert('Could not send', message);
+        return;
+      }
 
       const orderIdStr = orderId as string;
       const conv = vendorInbox.find(item => item.orderId === orderIdStr);
