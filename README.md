@@ -2,7 +2,7 @@
 
 A cross-platform (iOS / Android / Web) multi-vendor marketplace app: customers discover and order from vendors, vendors manage catalog/orders/invoices/subscriptions, and there's an in-app admin surface. Built with Expo + Expo Router on top of the [Rork](https://rork.com) platform.
 
-**Backend:** [`the platform-backend`](https://github.com/the platformTech/the platform-backend) — Firebase (Firestore, Cloud Functions, Auth, Storage). This repo is currently **not wired to it yet** — see [Backend integration status](#backend-integration-status) below before assuming any screen reflects real data.
+**Backend:** [`the platform-backend`](https://github.com/the platformTech/the platform-backend) — Firebase (Firestore, Cloud Functions, Auth, Storage). Most of the app is now wired to it for real — see [Backend integration status](#backend-integration-status) below for exactly what's live versus what's still mock, screen by screen.
 
 **Brand color:** `#FF7A28` — canonical the platform orange, defined in `expo/constants/colors.ts` and `expo/constants/theme.ts`. Use this consistently across the landing page and any new web interfaces; don't introduce a second orange.
 
@@ -87,17 +87,21 @@ Domain types       expo/types/domain/*
 
 13 services / 11 repositories / 10 mappers exist today, covering vendor, catalog, cart, order, chat, notification, subscription, verification, support, auth, and user domains. Full coverage table and the Firestore collection-path mapping the repositories are expected to target: see `expo/BACKEND_INTEGRATION_GUIDE.md` §1–6.
 
-### What's already routed through the full stack (read paths)
-Vendor discovery, vendor storefront menu, vendor verification status, notifications (read), subscription/plan tier (read). Swapping these repositories' internals to Firestore is a pure, isolated change.
+### What's routed through the full stack, read and write
+Auth (real Firebase Auth, not a local session), vendor discovery and storefront, cart pricing (`repriceCart` — the backend prices the basket, not the client), placing an order (`createOrderFromCart`/`createExternalOrder`) and the order lifecycle (accept/reject/status), chat send and receive, catalog (create/update/moderation/category management, including real category deletion), vendor verification (submission and admin decisions), ratings, payment proof submission, invoices, and subscriptions (read). Order-status changes and verification decisions also trigger real in-app notifications now, not just a local toast.
 
-### What's NOT yet routed (still reads mock/AsyncStorage/context state directly)
-Cart, orders (list/detail), chat, support, auth — and **every write/mutation flow across the whole app** (place order, send message, upgrade plan, submit verification, etc. all still mutate local state directly). See `BACKEND_INTEGRATION_GUIDE.md` §14 for the full list and recommended integration order.
+### What's still incomplete or unmerged
+- **External Orders** — recording a basic order (customer name, catalog items, pickup/delivery) is real and live. Manual/custom line items, delivery/service fee, discount, tax, fulfillment date/time, and screenshot attachments are all still blocked at Save with an honest "not supported yet" message, because the backend doesn't accept them. A full fix for this plus two real display bugs (external orders were invisible in the vendor's own Orders list and in Business Insights) exists on the unmerged branch `claude/partner-program-mobile` — not yet on `main`.
+- **Partner Program** — a complete, production-quality frontend (customer + vendor) exists on that same unmerged branch, with zero backend behind it yet; see `docs/PARTNER_PROGRAM_MOBILE_HANDOFF.md` on that branch for the exact backend gap.
+- **Admin Console (Milestone 5)** — separate repo, backend not started; see `the platform-backend`'s README.
+
+This list reflects what's been directly verified as of 2026-08-26, not an exhaustive line-by-line re-audit of every screen — if you find something here that's stale, it's worth a quick grep before trusting it either way. See `BACKEND_INTEGRATION_GUIDE.md` for the fuller per-repository breakdown, which predates most of the wiring above and is due its own refresh.
 
 ---
 
 ## Backend integration status
 
-**Nothing in this app talks to `the platform-backend`/Firebase yet.** All data is mock data or AsyncStorage-persisted local state. This matters for anyone reviewing screens expecting real behavior — a screen looking "done" visually does not mean it's connected to anything real.
+Most of the app now talks to `the platform-backend`/Firebase for real — see the two lists directly above for what's live versus what's still mock or unmerged. This matters for anyone reviewing screens expecting real behavior: a screen looking "done" visually still doesn't guarantee it's wired, so check the lists above (or grep for the relevant repository/service file) rather than assume from the UI alone.
 
 A few contract details worth knowing before wiring begins (from a joint review against `the platform-backend`'s actual Cloud Functions contracts, Feb 2026):
 
