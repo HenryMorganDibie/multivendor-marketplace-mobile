@@ -1,11 +1,10 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Chat, ChatMessage, ChatType, OrderContextData, normalizeChatType, toPushChatType } from '@/mocks/chatData';
+import { Chat, ChatMessage, ChatType, OrderContextData, normalizeChatType } from '@/mocks/chatData';
 import { useBackendChats } from '@/lib/chat/useBackendChats';
 import { chatService } from '@/services/chatService';
 import { useAuth } from './AuthContext';
 import { useVendor } from './VendorContext';
-import { useVendorPushNotifications } from './VendorPushNotificationContext';
 import { useBlockedUsers } from './BlockedUsersContext';
 import { useVendorAwayMessage } from './VendorAwayMessageContext';
 
@@ -38,7 +37,6 @@ export const [ChatProvider, useChats] = createContextHook(() => {
 
   const chats: Chat[] = chatService.getAllSync();
 
-  const vendorPush = useVendorPushNotifications() ?? null;
   const { isUserBlocked } = useBlockedUsers();
   const awayMessage = useVendorAwayMessage() ?? null;
 
@@ -74,11 +72,9 @@ export const [ChatProvider, useChats] = createContextHook(() => {
     );
 
     let chatId: string;
-    let chatTypeForPush: 'PREORDER_CHAT' | 'ORDER_CHAT';
 
     if (existing) {
       chatId = existing.id;
-      chatTypeForPush = toPushChatType(existing.chatType);
       console.log('[ChatContext] Reusing existing conversation:', existing.id, 'type:', existing.chatType);
     } else {
       const newChat: Chat = {
@@ -95,10 +91,14 @@ export const [ChatProvider, useChats] = createContextHook(() => {
       };
       chatService.getAllSync().push(newChat);
       chatId = newChat.id;
-      chatTypeForPush = 'PREORDER_CHAT';
       console.log('[ChatContext] New inquiry chat created:', newChat.id);
     }
 
+    // Push and the in-app notification both fire server-side, from
+    // sendChatMessage's own createNotificationInternal call — nothing
+    // client-side needs to trigger a push here. A client-scheduled "push"
+    // would fire as a local notification on whichever device runs this
+    // code, not the recipient's device.
     void chatService.sendMessage({
       chatId,
       type: 'text',
@@ -106,15 +106,8 @@ export const [ChatProvider, useChats] = createContextHook(() => {
       sender: 'customer',
     });
 
-    void vendorPush?.sendChatMessagePush({
-      vendorId,
-      chatId,
-      chatType: chatTypeForPush,
-      senderRole: 'customer',
-    });
-
     return chatService.getByIdSync(chatId) ?? null;
-  }, [isUserBlocked, vendorPush, currentCustomerId, currentCustomerName]);
+  }, [isUserBlocked, currentCustomerId, currentCustomerName]);
 
   const addMessageToChat = useCallback((chatId: string, message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const chatBefore = chatService.getByIdSync(chatId);
@@ -155,21 +148,11 @@ export const [ChatProvider, useChats] = createContextHook(() => {
         chatService.updateChat(chatId, { lastAwayMessageSentAt: new Date().toISOString() });
       }
 
-      const chatType = toPushChatType(chatBefore.chatType);
-      console.log('[ChatContext] Customer message sent, triggering vendor push:', {
-        chatId,
-        chatType,
-        vendorId: chatBefore.vendorId,
-      });
-
-      void vendorPush?.sendChatMessagePush({
-        vendorId: chatBefore.vendorId,
-        chatId,
-        chatType,
-        senderRole: 'customer',
-      });
+      // Push and the in-app notification both fire server-side from
+      // sendChatMessage's own createNotificationInternal call (see the
+      // comment in startPreOrderChat above) — nothing to trigger here.
     }
-  }, [vendorPush, awayMessage]);
+  }, [awayMessage]);
 
   const getPreOrderChat = useCallback((vendorId: string): Chat | undefined => {
     return chatService.getAllSync().find(

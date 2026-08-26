@@ -126,19 +126,27 @@ export const [VendorNotificationProvider, useVendorNotifications] = createContex
     return notifications.filter(n => !n.read).length;
   }, [notifications]);
 
+  // 'new_order' and 'order_cancelled' are the real backend type strings
+  // (createOrderFromCart / updateOrderStatus.ts) — this used to check
+  // 'customer_cancelled_order', which the backend has never written, so a
+  // cancellation notice never counted toward the badge.
   const unreadHighPriorityCount = notifications.filter(
-    n => !n.read && (n.type === 'new_order' || n.type === 'customer_cancelled_order')
+    n => !n.read && (n.type === 'new_order' || n.type === 'order_cancelled')
   ).length;
 
+  // domain, not type, discriminates a vendor chat message — the backend
+  // writes the same type: 'new_message' for every chat regardless of who
+  // it's for (sendChatMessage.ts), so 'new_customer_message' never matched
+  // anything real.
   const hasUnreadMediumPriority = notifications.some(
-    n => !n.read && (n.type === 'new_customer_message' || n.type === 'verification_requested')
+    n => !n.read && (n.domain === 'vendor_chat' || n.type === 'verification_requested')
   );
 
   const clearOrderBadges = useCallback(() => {
     const uid = user?.id ?? auth.currentUser?.uid;
     if (!uid) return;
     const targets = notifications.filter(
-      n => !n.read && (n.type === 'new_order' || n.type === 'customer_cancelled_order')
+      n => !n.read && (n.type === 'new_order' || n.type === 'order_cancelled')
     );
     if (targets.length === 0) return;
     const batch = writeBatch(db);

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { notificationThrottleService } from '@/utils/notificationThrottle';
+import { getDeviceId } from '@/utils/deviceId';
 import { auth, callable } from '@/lib/firebase';
 
 const VENDOR_PUSH_TOKEN_KEY = '@the platform_vendor_push_token';
@@ -95,11 +95,12 @@ export const [VendorPushNotificationProvider, useVendorPushNotifications] = crea
        */
       if (auth.currentUser) {
         try {
+          const deviceId = await getDeviceId();
           const register = callable<
-            { token: string; platform: 'ios' | 'android' | 'web'; appVersion?: string },
+            { token: string; platform: 'ios' | 'android' | 'web'; deviceId: string; appVersion?: string },
             { success: true; tokenId: string }
           >('registerPushToken');
-          await register({ token, platform: Platform.OS === 'ios' ? 'ios' : 'android' });
+          await register({ token, platform: Platform.OS === 'ios' ? 'ios' : 'android', deviceId });
         } catch (err) {
           console.error('[VendorPush] registerPushToken failed:', err);
         }
@@ -115,103 +116,10 @@ export const [VendorPushNotificationProvider, useVendorPushNotifications] = crea
     console.log('[VendorPush] App state updated:', appState.current);
   };
 
-  const shouldSuppressPush = (chatId: string): boolean => {
-    if (!appState.current.isInApp) {
-      return false;
-    }
-
-    if (appState.current.currentChatId === chatId) {
-      console.log('[VendorPush] Suppressing: vendor viewing this chat');
-      return true;
-    }
-
-    return false;
-  };
-
-  const sendChatMessagePush = async (params: {
-    vendorId: string;
-    chatId: string;
-    chatType: 'PREORDER_CHAT' | 'ORDER_CHAT';
-    senderRole: 'customer' | 'vendor';
-    notificationType?: string;
-    shouldSuppressQuietHours?: (notificationType: string) => boolean;
-  }) => {
-    console.log('[VendorPush] sendChatMessagePush called:', params);
-
-    if (params.senderRole !== 'customer') {
-      console.log('[VendorPush] Skipped: sender is not customer');
-      return;
-    }
-
-    if (shouldSuppressPush(params.chatId)) {
-      console.log('[VendorPush] Suppressed: vendor viewing chat');
-      return;
-    }
-
-    const throttleCheck = notificationThrottleService.shouldSendPush(
-      params.chatId,
-      params.vendorId
-    );
-
-    if (!throttleCheck.allowed) {
-      console.log('[VendorPush] Throttled:', throttleCheck.reason);
-      return;
-    }
-
-    if (params.shouldSuppressQuietHours && params.notificationType) {
-      const shouldSuppress = params.shouldSuppressQuietHours(params.notificationType);
-      if (shouldSuppress) {
-        console.log('[VendorPush] Quiet hours active, message suppressed');
-        return;
-      }
-    }
-
-    const title =
-      params.chatType === 'PREORDER_CHAT'
-        ? 'New customer inquiry'
-        : 'Customer message';
-
-    const body =
-      params.chatType === 'PREORDER_CHAT'
-        ? 'You received a new preorder message.'
-        : 'Regarding an active order.';
-
-    console.log('[VendorPush] Sending notification:', { title, body });
-
-    if (Platform.OS !== 'web' && expoPushToken) {
-      try {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title,
-            body,
-            data: {
-              chatId: params.chatId,
-              chatType: params.chatType,
-              vendorId: params.vendorId,
-            },
-            sound: true,
-            priority: Notifications.AndroidNotificationPriority.HIGH,
-          },
-          trigger: null,
-        });
-
-        notificationThrottleService.recordPush(params.chatId, params.vendorId);
-
-        console.log('[VendorPush] Push sent successfully');
-      } catch (error) {
-        console.error('[VendorPush] Failed to send:', error);
-      }
-    } else {
-      console.log('[VendorPush] Simulated (web or no token)');
-      notificationThrottleService.recordPush(params.chatId, params.vendorId);
-    }
-  };
-
   return {
     expoPushToken,
     permissionGranted,
     registerForPushNotifications,
-    sendChatMessagePush,
     updateAppState,
   };
 });
