@@ -24,9 +24,10 @@ const queryClient = new QueryClient();
  * it, so tapping any real chat push did nothing. The dominant real chatId
  * shape is `commerce_{customerId}_{vendorId}` (createCommerceConversation.ts),
  * which is parsed below to route a customer to the existing canonical chat
- * screen. Vendor-side deep links fall back to the vendor chats list, since
- * there is no single existing route keyed by an arbitrary chatId for a
- * vendor to open a specific customer's thread directly.
+ * screen. Vendor-side deep links route to /vendor/chats/{chatId} — that
+ * screen's [orderId] param doubles as a thread id via its
+ * `chats.find(c => c.id === orderId)` fallback (see that screen), so it
+ * opens the right customer thread even without a real order id.
  */
 function handleChatDeepLink(deepLink: string, role: string | undefined, router: ReturnType<typeof useRouter>): boolean {
   const prefix = 'the platform://chat/';
@@ -39,7 +40,7 @@ function handleChatDeepLink(deepLink: string, role: string | undefined, router: 
     if (separatorIndex > 0) {
       const vendorId = rest.slice(separatorIndex + 1);
       if (role === 'vendor') {
-        router.push('/vendor/(tabs)/chats' as any);
+        router.push(`/vendor/chats/${chatId}` as any);
         return true;
       }
       if (vendorId) {

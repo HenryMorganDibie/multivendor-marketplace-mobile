@@ -15,6 +15,7 @@ export interface OrderItem {
     id: string;
     name: string;
     price: number;
+    groupId: string;
   }[];
 }
 
@@ -210,7 +211,7 @@ export const mockOrders: Order[] = [
         quantity: 2,
         image: 'https://images.unsplash.com/photo-1587314168485-3236d6710814?w=400&q=80',
         addOns: [
-          { id: 'addon1', name: 'Extra spice', price: 500 },
+          { id: 'addon1', name: 'Extra spice', price: 500, groupId: 'group1' },
         ],
       },
       {

@@ -25,7 +25,7 @@ const BACKEND_TO_APP_STATUS: Record<string, ModerationStatus> = {
   flagged: 'rejected',
 };
 
-function fromBackendItem(docId: string, d: Record<string, unknown>): CatalogItem {
+export function fromBackendItem(docId: string, d: Record<string, unknown>): CatalogItem {
   return {
     id: (d.itemId as string) ?? docId,
     name: (d.name as string) ?? '',

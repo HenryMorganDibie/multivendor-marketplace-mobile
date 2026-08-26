@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth, callable } from '@/lib/firebase';
 
 export type BlockDirection = 'self' | 'other';
 
@@ -114,6 +115,17 @@ export function BlockedUsersProvider({ children }: { children: React.ReactNode }
       return [...prev, { chatId: normalized.chatId, archivedAt: new Date().toISOString(), reason: 'blocked' as const }];
     });
     console.log('User blocked:', normalized);
+
+    // This local record used to be the whole story: the real blockUser
+    // callable (and the send-message block check behind it) already existed
+    // server-side and worked correctly, but was never called, so a "blocked"
+    // user could still message the blocker — the app just hid it locally.
+    if (auth.currentUser && normalized.direction === 'self') {
+      const call = callable<{ blockedUid: string; reason?: string }, { success: true; blockId: string }>('blockUser');
+      call({ blockedUid: normalized.id }).catch((err) =>
+        console.error('[BlockedUsers] blockUser callable failed:', err)
+      );
+    }
   }, []);
 
   const unblockUser = useCallback((userId: string) => {
@@ -125,6 +137,13 @@ export function BlockedUsersProvider({ children }: { children: React.ReactNode }
       return prev.filter((u) => u.id !== userId);
     });
     console.log('User unblocked:', userId);
+
+    if (auth.currentUser) {
+      const call = callable<{ blockedUid: string }, { success: true }>('unblockUser');
+      call({ blockedUid: userId }).catch((err) =>
+        console.error('[BlockedUsers] unblockUser callable failed:', err)
+      );
+    }
   }, []);
 
   const archiveChat = useCallback((chatId: string, reason: 'manual' | 'blocked') => {

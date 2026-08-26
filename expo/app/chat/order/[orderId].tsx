@@ -242,6 +242,7 @@ export default function OrderChatScreen() {
   useEffect(() => {
     if (!chatId) return;
     markChatAsRead(chatId, 'customer');
+    void chatService.markRead(chatId);
   }, [chatId, chatVersion, markChatAsRead]);
   const [messageText, setMessageText] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);

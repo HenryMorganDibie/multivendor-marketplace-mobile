@@ -49,10 +49,28 @@ export default function CustomerNotificationsScreen() {
 
     if (raw.domain === 'support') {
       router.push('/help-center' as any);
-    } else if (raw.domain === 'vendor_chat') {
-      router.push('/customer/(tabs)/chats' as any);
-    } else if (raw.domain === 'order' && raw.vendorId) {
-      router.push(getVendorStorefrontPath(raw.vendorId) as any);
+    } else if (raw.domain === 'customer_chat') {
+      // sendChatMessage.ts sets domain by the RECIPIENT's role, so a
+      // customer's own incoming-message notifications are 'customer_chat',
+      // not 'vendor_chat' (that's what a vendor's incoming messages get) —
+      // this branch never matched a real notification before.
+      if (raw.vendorId) {
+        router.push(`/chat/${raw.vendorId}` as any);
+      } else {
+        router.push('/customer/(tabs)/chats' as any);
+      }
+    } else if (raw.domain === 'order') {
+      // getVendorStorefrontPath resolves against the local mocks/vendorData.ts
+      // fixture array — a real vendorId is never in it, so this silently
+      // fell through to '/' (app home) for every real order notification.
+      // updateOrderStatus.ts and createOrder.ts both set metadata.orderId on
+      // these, so route straight to the real order instead of through that
+      // broken lookup.
+      if (raw.orderId) {
+        router.push(`/order/${raw.orderId}` as any);
+      } else if (raw.vendorId) {
+        router.push(getVendorStorefrontPath(raw.vendorId) as any);
+      }
     }
   }, [markAsRead, notifications, router]);
 

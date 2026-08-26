@@ -75,11 +75,18 @@ function toItems(raw: unknown): OrderItem[] {
         (item.price_at_order as number) ??
         (item.price as number) ??
         0,
-      addOns: Array.isArray(item.addOns)
-        ? (item.addOns as Record<string, unknown>[]).map((a) => ({
-            id: (a.id as string) ?? '',
-            name: (a.name as string) ?? '',
-            price: (a.price as number) ?? 0,
+      // Real order documents store this as items[].selectedAddOns with
+      // {groupId, groupName, optionId, optionName, priceModifier}
+      // (repriceCart.ts/types2.ts OrderItemSnapshot) — never items[].addOns
+      // with {id, name, price}. Reading the wrong field meant a real order's
+      // add-ons never displayed anywhere this mapper feeds, regardless of
+      // whether the add-on was correctly selected, priced, and paid for.
+      addOns: Array.isArray(item.selectedAddOns)
+        ? (item.selectedAddOns as Record<string, unknown>[]).map((a) => ({
+            id: (a.optionId as string) ?? '',
+            name: (a.optionName as string) ?? '',
+            price: (a.priceModifier as number) ?? 0,
+            groupId: (a.groupId as string) ?? '',
           }))
         : undefined,
     } as OrderItem;

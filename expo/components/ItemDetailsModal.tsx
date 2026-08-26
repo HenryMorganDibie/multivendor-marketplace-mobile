@@ -118,12 +118,16 @@ export function ItemDetailsModal({
 
   const selectedAddOnObjects = useMemo(() => {
     if (!catalogItem?.addOnGroups) return [];
-    const all: { id: string; name: string; price: number }[] = [];
+    const all: { id: string; groupId: string; name: string; price: number }[] = [];
     catalogItem.addOnGroups.forEach((group) => {
       const sel = selectedAddOns.get(group.id) || [];
       group.options.forEach((opt) => {
         if (sel.includes(opt.id)) {
-          all.push({ id: opt.id, name: opt.name, price: opt.price || 0 });
+          // groupId is required by repriceCart.ts's (groupId, optionId) lookup
+          // — same fix as app/item/[id].tsx's selectedAddOnObjects. This
+          // modal is a second, separate add-to-cart entry point with the
+          // identical bug: a selected add-on silently priced at 0 server-side.
+          all.push({ id: opt.id, groupId: group.id, name: opt.name, price: opt.price || 0 });
         }
       });
     });

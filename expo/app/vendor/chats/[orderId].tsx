@@ -42,7 +42,6 @@ import { useVendorDrafts } from '@/contexts/VendorDraftContext';
 import { useInbox } from '@/contexts/InboxContext';
 import { useChatRead } from '@/contexts/ChatReadContext';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { formatVendorOrderId } from '@/utils/formatOrderId';
 import { formatCustomerNameFromFull } from '@/utils/formatCustomerName';
@@ -271,10 +270,17 @@ export default function VendorOrderChatScreen() {
   const isBlocked = !!blockedUser;
   const { markChatAsRead } = useChatRead();
 
-  /** Clear unread for vendor when this chat opens. */
+  /**
+   * Clear unread for vendor when this chat opens. markChatAsRead is a local
+   * store update only — it never reached the server, so read state never
+   * crossed devices or was visible to the customer. markRead is the real
+   * markChatRead callable, which also flips the other party's messages to
+   * status: "read" server-side.
+   */
   useEffect(() => {
     if (!chatId) return;
     markChatAsRead(chatId, 'vendor');
+    void chatService.markRead(chatId);
   }, [chatId, markChatAsRead]);
   const customerId = order?.customerId ?? chat?.customerId ?? '';
   const vendorId = order?.vendorId || chat?.vendorId || '';
@@ -302,16 +308,6 @@ export default function VendorOrderChatScreen() {
   }, [showCustomerProfile, vendorId, customerId, order, getNote]);
 
   useEffect(() => {
-    loadQuickReplies();
-  }, []);
-
-  useEffect(() => {
-    if (showQuickRepliesModal) {
-      loadQuickReplies();
-    }
-  }, [showQuickRepliesModal]);
-
-  useEffect(() => {
     if (latestChangeRequest?.status === 'accepted' && !changeAcceptedMsgRef.current) {
       changeAcceptedMsgRef.current = true;
       setSystemActionMessages(prev => {
@@ -332,16 +328,32 @@ export default function VendorOrderChatScreen() {
     }
   }, [isPaymentSubmitted, order?.customerName]);
 
-  const loadQuickReplies = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('quickReplies');
-      if (stored) {
-        setQuickReplies(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error('Failed to load quick replies:', error);
-    }
-  };
+  // The real management screen (vendor/settings/quick-replies.tsx) reads/writes
+  // vendors/{vendorId}/quickReplies via real callables — this screen's picker
+  // read a global AsyncStorage key nothing ever wrote to, so it was always
+  // empty regardless of what a vendor had actually saved.
+  useEffect(() => {
+    const vendorIdForReplies = vendor?.id;
+    if (!vendorIdForReplies) return;
+    const unsubscribe = onSnapshot(
+      query(collection(db, 'vendors', vendorIdForReplies, 'quickReplies'), orderBy('sortOrder', 'asc')),
+      (snap) => {
+        setQuickReplies(
+          snap.docs.map((d) => {
+            const data = d.data();
+            const shortcutRaw = String(data.shortcut ?? '');
+            return {
+              id: d.id,
+              shortcut: shortcutRaw.startsWith('/') ? shortcutRaw.slice(1) : shortcutRaw,
+              message: (data.message as string) ?? '',
+            };
+          })
+        );
+      },
+      (err) => console.error('[VendorOrderChat] quickReplies subscription failed:', err)
+    );
+    return unsubscribe;
+  }, [vendor?.id]);
 
   const getInitials = (name: string): string => {
     const parts = name.trim().split(' ');

@@ -342,11 +342,19 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
    * replaced by the real document when the listener fires. It carries the
    * client-side id, which the server will not reuse, so the temporary row is
    * removed rather than left as a duplicate alongside the real one.
+   *
+   * Returns a promise for the real outcome. review-order.tsx used to fire this
+   * and immediately clear the cart and navigate to the success screen without
+   * waiting — a real rejection (item went out of stock, vendor closed, price
+   * changed) still showed the customer a success screen and an emptied cart
+   * for an order that was never actually created, with only a console.error
+   * anywhere. Callers that want the old fire-and-forget behaviour can still
+   * ignore the returned promise.
    */
-  const addOrder = useCallback((order: Order) => {
+  const addOrder = useCallback((order: Order): Promise<{ success: boolean; error?: string }> => {
     setOrders((prev) => [order, ...prev]);
 
-    if (DEMO_ORDER_ACCOUNTS[accountId ?? '']) return;
+    if (DEMO_ORDER_ACCOUNTS[accountId ?? '']) return Promise.resolve({ success: true });
 
     // Two steps, because the backend deliberately splits them. repriceCart
     // prices the basket against the live catalogue and persists it, returning a
@@ -362,9 +370,16 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
       { success: true; orderId: string; publicOrderId: string }
     >('createOrderFromCart');
 
-    void reprice({
+    return reprice({
       vendorId: order.vendorId,
-      items: order.items.map((i) => ({ itemId: i.id, quantity: i.quantity })),
+      // selectedAddOns was never sent at all — repriceCart.ts's per-item
+      // add-on loop had nothing to iterate, so a selected add-on always
+      // priced at 0 server-side regardless of the CartAddOn.groupId fix.
+      items: order.items.map((i) => ({
+        itemId: i.id,
+        quantity: i.quantity,
+        selectedAddOns: i.addOns?.map((a) => ({ groupId: a.groupId, optionId: a.id })) ?? [],
+      })),
       fulfillmentType: order.fulfillmentType === 'Pickup' ? 'pickup' : 'delivery',
       orderNote: order.orderNote,
     })
@@ -373,10 +388,13 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
         // The listener now holds the authoritative row under the server's id.
         // Dropping the placeholder avoids the same order appearing twice.
         setOrders((prev) => prev.filter((o) => o.id !== order.id));
+        return { success: true };
       })
       .catch((err) => {
         console.error('[Orders] createOrder rejected:', err);
         setOrders((prev) => prev.filter((o) => o.id !== order.id));
+        const message = err instanceof Error ? err.message : 'Could not place your order.';
+        return { success: false, error: message };
       });
   }, [accountId]);
 

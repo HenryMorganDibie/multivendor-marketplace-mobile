@@ -338,6 +338,22 @@ export const chatService = {
     return newMessage;
   },
 
+  /**
+   * markChatRead exists correctly server-side (writes the read receipt and
+   * flips unread messages to status: "read") but nothing ever called it —
+   * every chat screen hardcoded message status locally instead, so read
+   * state never actually reached the server or crossed devices/users.
+   */
+  async markRead(chatId: string, lastReadMessageId?: string): Promise<void> {
+    if (DEV_LOCAL_AUTH_ENABLED && !auth.currentUser) return;
+    try {
+      const mark = callable<{ chatId: string; lastReadMessageId?: string }, { success: true }>('markChatRead');
+      await mark({ chatId, lastReadMessageId });
+    } catch (err) {
+      console.error('[ChatService] markChatRead failed:', err);
+    }
+  },
+
   async updateChatOrder(chatId: string, _orderId: string, _publicOrderId: string, _orderStatus: string): Promise<Chat | null> {
     const chat = chats.find(c => c.id === chatId);
     if (!chat) {

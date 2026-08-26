@@ -9,6 +9,14 @@ export interface CartAddOn {
   id: string;
   name: string;
   price: number;
+  /**
+   * The add-on group this option belongs to. repriceCart.ts looks up the
+   * real price by (groupId, optionId) against the catalog item's
+   * addOnGroups and ignores everything else about the add-on — without
+   * this, the lookup can never match and the add-on silently reprices to 0
+   * server-side even though it displayed correctly on-device.
+   */
+  groupId: string;
 }
 
 export interface CartItem {

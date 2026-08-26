@@ -101,6 +101,7 @@ export default function VendorInvoiceDetailScreen() {
     recordPayment,
     deletePayment,
     deleteInvoice,
+    cancelInvoice,
     duplicateInvoiceById,
     markInvoiceSharedExternally,
     downloadInvoicePdf,
@@ -400,10 +401,12 @@ export default function VendorInvoiceDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await updateInvoice(invoice.id, {
-                status: 'void',
-                voidedAt: new Date().toISOString(),
-              });
+              // updateInvoice only ever wrote to local/AsyncStorage state —
+              // never reached the server, so "voiding" an invoice did
+              // nothing real. cancelInvoice is the actual, working callable
+              // (updateInvoiceStatus backend only accepts 'cancelled', not
+              // 'void' — there is no server-side void concept).
+              await cancelInvoice(invoice.id);
             } catch (e) {
               console.error('Void failed', e);
               Alert.alert('Error', 'Could not void the invoice.');
@@ -833,6 +836,8 @@ export default function VendorInvoiceDetailScreen() {
                 <MenuRow icon={<Download size={18} color={Colors.text} />} label="Download PDF" onPress={handleDownload} />
                 <MenuDivider />
                 <MenuRow icon={<Copy size={18} color={Colors.text} />} label="Duplicate invoice" onPress={handleDuplicate} />
+                <MenuDivider />
+                <MenuRow icon={<Trash2 size={18} color={Colors.error} />} label="Void invoice" labelColor={Colors.error} onPress={handleVoid} />
               </>
             )}
           </View>

@@ -30,8 +30,10 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeBack } from '@/utils/useSafeBack';
 import { useCart } from '@/contexts/CartContext';
-import { mockMenuItems, mockVendors, mockVendor } from '@/mocks/vendorData';
-import { useCatalog } from '@/contexts/CatalogContext';
+import { mockMenuItems, mockVendors, mockVendor, MenuItem } from '@/mocks/vendorData';
+import { fromBackendItem, CatalogItem } from '@/contexts/CatalogContext';
+import { doc, onSnapshot as onDocSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import VendorStatusGate, { normalizeVendorStatus, useVendorStatusPermissions } from '@/components/VendorStatusGate';
 import VendorPreviewModal from '@/components/VendorPreviewModal';
 import { safeShare } from '@/utils/share';
@@ -93,11 +95,72 @@ function ItemViewContent({
   const safeBack = useSafeBack();
   const insets = useSafeAreaInsets();
   const { addItem, globalItemCount, items: activeCartItems, updateItemQuantity, removeItemByIndex, activeVendorId, getVendorCart } = useCart();
-  const { getItemById } = useCatalog();
   const { canAddToCart } = useVendorStatusPermissions();
 
-  const catalogItem = getItemById(id);
-  const item = mockMenuItems.find((i) => i.id === id);
+  // getItemById reads CatalogContext's `items`, which only ever loads the
+  // SIGNED-IN vendor's own catalog (keyed off the auth token's vendorId
+  // claim) — built for the vendor's own management screens. A customer
+  // browsing has no vendorId claim at all, so this never matched anything
+  // real here; it just happened to fail silently the same way the mock
+  // lookup below did. Fetching directly by the item's own vendorId (the
+  // route param — which vendor's storefront this item was opened from) is
+  // the correct customer-facing lookup, same collection the now-fixed
+  // storefront listing already reads (catalogRepository.getVendorMenu).
+  const [catalogItem, setCatalogItem] = useState<CatalogItem | undefined>(undefined);
+  useEffect(() => {
+    if (!vendorId || !id) {
+      setCatalogItem(undefined);
+      return;
+    }
+    const unsubscribe = onDocSnapshot(
+      doc(db, 'vendors', vendorId, 'catalogItems', id),
+      (snap) => {
+        if (!snap.exists()) {
+          setCatalogItem(undefined);
+          return;
+        }
+        const data = snap.data();
+        if (data.moderationStatus !== 'approved' || data.isHidden === true) {
+          setCatalogItem(undefined);
+          return;
+        }
+        setCatalogItem(fromBackendItem(snap.id, data));
+      },
+      (err) => {
+        console.error('[ItemView] catalogItem subscription failed:', err);
+        setCatalogItem(undefined);
+      }
+    );
+    return unsubscribe;
+  }, [vendorId, id]);
+  // This screen gated its entire render on `item`, sourced only from the
+  // mockMenuItems fixture array — a real catalog item id (from
+  // vendors/{vendorId}/catalogItems, already correctly fetched above as
+  // catalogItem and already used correctly for add-on selection below) never
+  // matched, so every real item showed "Item not found" and nobody ever
+  // reached the working add-on UI underneath. Mapping catalogItem onto the
+  // same MenuItem shape lets every existing item.* reference below keep
+  // working unchanged, now fed by real data when it exists.
+  const item: MenuItem | undefined = catalogItem
+    ? {
+        id: catalogItem.id,
+        name: catalogItem.name,
+        description: catalogItem.description,
+        price: catalogItem.basePrice,
+        salePrice: catalogItem.salePrice,
+        image: catalogItem.photos?.[0],
+        inStock: catalogItem.isAvailable && !catalogItem.isOutOfStock,
+        categoryId: catalogItem.categoryId,
+        stockCount: catalogItem.trackInventory ? catalogItem.inventoryQuantity : undefined,
+        createdAt: catalogItem.createdAt,
+        orderCount: catalogItem.orderCount,
+        recentOrderCount: catalogItem.recentOrderCount,
+        isFeatured: catalogItem.isFeatured,
+        // Not mapped: MenuItem's HighlightLabel (mocks/vendorData.ts) is a
+        // narrower legacy union than CatalogItem's (utils/itemTagging.ts),
+        // and this screen never actually reads item.highlightLabel anywhere.
+      }
+    : mockMenuItems.find((i) => i.id === id);
 
   const effectiveVendorId = vendorId ?? activeVendorId ?? undefined;
   const vendorCart = effectiveVendorId ? getVendorCart(effectiveVendorId) : null;
@@ -123,12 +186,16 @@ function ItemViewContent({
 
   const selectedAddOnObjects = useMemo(() => {
     if (!catalogItem?.addOnGroups) return [];
-    const all: { id: string; name: string; price: number }[] = [];
+    const all: { id: string; groupId: string; name: string; price: number }[] = [];
     catalogItem.addOnGroups.forEach((group) => {
       const sel = selectedAddOns.get(group.id) || [];
       group.options.forEach((opt) => {
         if (sel.includes(opt.id)) {
-          all.push({ id: opt.id, name: opt.name, price: opt.price || 0 });
+          // groupId is required by repriceCart.ts's (groupId, optionId) lookup
+          // against the catalog item's addOnGroups — without it, a selected
+          // add-on silently repriced to 0 server-side regardless of what was
+          // shown on-device.
+          all.push({ id: opt.id, groupId: group.id, name: opt.name, price: opt.price || 0 });
         }
       });
     });

@@ -106,13 +106,44 @@ export default function PublicInvoiceScreen() {
     returnTo,
   } = useLocalSearchParams<{ shareCode: string; viewer?: string; returnTo?: string }>();
   const isInAppCustomerView = viewer === 'customer';
-  const { getInvoiceByShareCode } = useInvoices();
+  const { getInvoiceByShareCode, fetchPublicInvoice } = useInvoices();
   const { plan } = useVendorPlan();
   // The signed-in vendor, used for the contact block when the invoice does not
   // carry its own. A customer viewing a shared link sees the vendor details
   // stored on the invoice, not this.
   const { vendor } = useVendor();
-  const invoice = getInvoiceByShareCode(shareCode ?? '');
+  const localInvoice = getInvoiceByShareCode(shareCode ?? '');
+
+  // getInvoiceByShareCode only ever matches an invoice already loaded into
+  // this device's own state (the signed-in vendor's own invoices, or demo
+  // seed data) — for anyone else opening a shared link, including the
+  // customer the invoice is actually for, it never matches, and the screen
+  // showed "Invoice unavailable" unconditionally. fetchPublicInvoice already
+  // existed correctly (round-trips to getPublicInvoice for a non-owner) but
+  // nothing here ever called it.
+  const [remoteInvoice, setRemoteInvoice] = useState<Invoice | undefined>(undefined);
+  const [isFetchingRemote, setIsFetchingRemote] = useState(false);
+
+  useEffect(() => {
+    if (localInvoice || !shareCode) return;
+    let cancelled = false;
+    setIsFetchingRemote(true);
+    fetchPublicInvoice(shareCode)
+      .then((inv) => {
+        if (!cancelled) setRemoteInvoice(inv);
+      })
+      .catch((err) => {
+        console.error('[PublicInvoice] fetchPublicInvoice failed:', err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsFetchingRemote(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shareCode, localInvoice, fetchPublicInvoice]);
+
+  const invoice = localInvoice ?? remoteInvoice;
 
   const [savedSettings, setSavedSettings] = useState<InvoiceBrandingSettings>(
     DEFAULT_INVOICE_BRANDING_SETTINGS,
@@ -176,6 +207,17 @@ export default function PublicInvoiceScreen() {
       router.back();
     }
   };
+
+  if (!invoice && isFetchingRemote) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.errorContainer, { flex: 1, justifyContent: 'center' }]}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      </View>
+    );
+  }
 
   if (!invoice) {
     return (

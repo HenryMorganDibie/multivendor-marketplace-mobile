@@ -41,10 +41,32 @@ export default function VendorNotificationsScreen() {
     const raw = notifications.find(n => n.id === notification.id);
     if (!raw) return;
 
+    // /vendor/chats/[orderId] doubles as the order-thread screen: order-domain
+    // notifications carry the real order id in metadata.orderId (set at
+    // createOrder/updateOrderStatus), which the screen needs for getOrder() and
+    // the paymentProofs query. Chat-domain notifications carry no order id —
+    // only deepLink `the platform://chat/{chatId}`, the commerce thread id — which
+    // the same screen resolves via the chats.find(c => c.id === orderId)
+    // fallback. Previously both just routed to the list tab, dropping the
+    // vendor onto "orders" or "chats" instead of the specific thread that
+    // triggered the notification.
+    const chatIdFromDeepLink = raw.deepLink?.startsWith('the platform://chat/')
+      ? raw.deepLink.slice('the platform://chat/'.length)
+      : null;
+
     if (raw.domain === 'order') {
-      router.push('/vendor/(tabs)/orders' as any);
+      const orderId = raw.orderId ?? raw.fullOrderId;
+      if (orderId) {
+        router.push(`/vendor/chats/${orderId}` as any);
+      } else {
+        router.push('/vendor/(tabs)/orders' as any);
+      }
     } else if (raw.domain === 'vendor_chat') {
-      router.push('/vendor/(tabs)/chats' as any);
+      if (chatIdFromDeepLink) {
+        router.push(`/vendor/chats/${chatIdFromDeepLink}` as any);
+      } else {
+        router.push('/vendor/(tabs)/chats' as any);
+      }
     } else if (raw.domain === 'support' && raw.type === 'new_support_message') {
       router.push('/vendor/settings/contact-support' as any);
     } else if (raw.domain === 'support') {

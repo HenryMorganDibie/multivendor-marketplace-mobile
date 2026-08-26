@@ -252,6 +252,7 @@ export default function CanonicalChatScreen() {
   useEffect(() => {
     if (!chatId) return;
     markChatAsRead(chatId, 'customer');
+    void chatService.markRead(chatId);
   }, [chatId, chatVersion, markChatAsRead]);
 
   const { getItemById } = useCatalog();

@@ -171,7 +171,7 @@ export default function ReviewOrderScreen() {
   const vendorIsOpen = isVendorCurrentlyOpen(orderVendor as any);
   const vendorNextOpen = getNextOpenTime(orderVendor as any);
 
-  const handleSendOrderRequest = () => {
+  const handleSendOrderRequest = async () => {
     if (isSubmitting || hasSubmittedRef.current) {
       console.log('Order submission already in progress or completed');
       return;
@@ -230,7 +230,7 @@ export default function ReviewOrderScreen() {
       },
     });
 
-    addOrder({
+    const result = await addOrder({
       id: orderRequestId,
       publicOrderId,
       vendorId: orderVendorId,
@@ -265,6 +265,22 @@ export default function ReviewOrderScreen() {
         },
       ],
     });
+
+    // addOrder's optimistic row is already gone by now either way (see
+    // OrdersContext) — a real rejection here (out of stock, vendor closed,
+    // price changed since review) used to be invisible: the cart still got
+    // cleared and the customer still landed on the success screen. Now the
+    // cart and submit state are left intact so they can see why and retry.
+    if (!result.success) {
+      Alert.alert(
+        'Order Not Placed',
+        result.error ?? 'Something changed with this order and it could not be placed. Please review your cart and try again.',
+        [{ text: 'OK' }]
+      );
+      setIsSubmitting(false);
+      hasSubmittedRef.current = false;
+      return;
+    }
 
     try {
       clearCart();
