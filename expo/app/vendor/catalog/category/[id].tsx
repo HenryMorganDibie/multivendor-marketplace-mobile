@@ -94,9 +94,15 @@ export default function CategoryItemsScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            deleteCategory(id as string);
-            router.back();
+          onPress: async () => {
+            try {
+              await deleteCategory(id as string);
+              router.back();
+            } catch (error) {
+              console.error('[Category] Failed to delete category:', error);
+              const message = (error as { message?: string })?.message ?? 'Could not delete this category. Please try again.';
+              Alert.alert('Something went wrong', message);
+            }
           },
         },
       ]

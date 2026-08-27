@@ -56,6 +56,25 @@ function handleChatDeepLink(deepLink: string, role: string | undefined, router: 
   return true;
 }
 
+/**
+ * verification_approved/rejected and catalog_item_approved/rejected
+ * (createNotificationInternal, domain: "system") carry a real app route as
+ * their deepLink — `the platform://vendor/settings/verification`,
+ * `the platform://vendor/catalog` — rather than a chat id. These fired the push
+ * and appeared in the in-app list correctly, but tapping the OS notification
+ * did nothing, since only handleChatDeepLink ever inspected `data.deepLink`.
+ * Routes generically off the path after `the platform://` so any future
+ * non-chat deepLink of this shape is handled without another code change.
+ */
+function handleAppDeepLink(deepLink: string, router: ReturnType<typeof useRouter>): boolean {
+  const prefix = 'the platform://';
+  if (!deepLink.startsWith(prefix)) return false;
+  const path = deepLink.slice(prefix.length);
+  if (!path || path.startsWith('chat/')) return false;
+  router.push(`/${path}` as any);
+  return true;
+}
+
 function NotificationHandler() {
   const router = useRouter();
   const { user } = useAuth();
@@ -84,6 +103,11 @@ function NotificationHandler() {
       const deepLink = typeof data?.deepLink === 'string' ? data.deepLink : undefined;
       if (deepLink && handleChatDeepLink(deepLink, user?.role, router)) {
         console.log('[NotificationHandler] Chat deep link handled:', deepLink);
+        return;
+      }
+
+      if (deepLink && handleAppDeepLink(deepLink, router)) {
+        console.log('[NotificationHandler] App deep link handled:', deepLink);
         return;
       }
     });

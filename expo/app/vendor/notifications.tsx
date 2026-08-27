@@ -71,6 +71,10 @@ export default function VendorNotificationsScreen() {
       router.push('/vendor/settings/contact-support' as any);
     } else if (raw.domain === 'support') {
       router.push('/help-center' as any);
+    } else if (raw.domain === 'system' && raw.type?.startsWith('verification_')) {
+      router.push('/vendor/settings/verification' as any);
+    } else if (raw.domain === 'system' && raw.type?.startsWith('catalog_item_')) {
+      router.push('/vendor/(tabs)/catalog' as any);
     }
   }, [markAsRead, notifications, router]);
 

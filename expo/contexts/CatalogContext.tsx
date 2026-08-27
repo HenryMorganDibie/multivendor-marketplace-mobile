@@ -144,7 +144,7 @@ interface CatalogContextValue {
   items: CatalogItem[];
   addCategory: (name: string) => Promise<void>;
   updateCategory: (id: string, name: string) => void;
-  deleteCategory: (id: string) => void;
+  deleteCategory: (id: string) => Promise<void>;
   reorderCategories: (newOrder: Category[]) => void;
   addItem: (item: Omit<CatalogItem, 'id' | 'moderationStatus'>) => void;
   updateItem: (id: string, item: Omit<CatalogItem, 'id' | 'moderationStatus'>) => void;
@@ -435,15 +435,24 @@ export function CatalogProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const deleteCategory = useCallback((id: string) => {
+  /**
+   * Deletes the category on the backend. deleteCatalogCategory reassigns the
+   * category's items to Uncategorized and deletes the category doc in one
+   * batch — this used to only touch local state, so it appeared to work but
+   * the category (and its items' old categoryId) came right back on the next
+   * real snapshot. No optimistic local update, same reasoning as addCategory:
+   * the categories/items listeners above pick up the real result.
+   */
+  const deleteCategory = useCallback(async (id: string) => {
     const category = categories.find((c) => c.id === id);
     if (!category || category.isSystem) return;
-    setItems((prev) =>
-      prev.map((item) =>
-        item.categoryId === id ? { ...item, categoryId: UNCATEGORIZED_ID } : item
-      )
-    );
-    setCategories((prev) => prev.filter((cat) => cat.id !== id));
+    try {
+      const remove = callable<{ categoryId: string }, { success: true; reassignedItemCount: number }>('deleteCatalogCategory');
+      await remove({ categoryId: id });
+    } catch (err) {
+      console.error('[Catalog] deleteCatalogCategory failed:', err);
+      throw err;
+    }
   }, [categories]);
 
   const reorderCategories = useCallback((newOrder: Category[]) => {
