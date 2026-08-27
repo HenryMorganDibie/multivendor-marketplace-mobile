@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { auth, callable } from '@/lib/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, callable, db } from '@/lib/firebase';
 import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 
 interface BusinessArea {
@@ -37,10 +38,55 @@ export const [VendorPickupProvider, useVendorPickup] = createContextHook(() => {
   });
   const [autoSendEnabled, setAutoSendEnabled] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [vendorId, setVendorId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        setVendorId(null);
+        return;
+      }
+      const tokenResult = await user.getIdTokenResult();
+      setVendorId((tokenResult.claims.vendorId as string | undefined) ?? null);
+    });
+    return unsubscribeAuth;
+  }, []);
+
+  // Real-time read-back from vendors/{vendorId}/settings/pickup - the same
+  // doc updateVendorPickupSettings writes to. Previously this only read from
+  // AsyncStorage, so pickup details set on another device (or restored after
+  // a reinstall) never showed here even though the save itself was already
+  // real and server-side.
+  useEffect(() => {
+    if (!vendorId) return;
+    const ref = doc(db, 'vendors', vendorId, 'settings', 'pickup');
+    const unsubscribe = onSnapshot(ref, (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data() as {
+        pickupAddress?: { streetAddress: string; unit: string; businessArea: BusinessArea };
+        pickupInstructions?: string;
+        pickupContactPhone?: string;
+        pickupVerificationCode?: string;
+        autoSendPickupDetailsEnabled?: boolean;
+      };
+      setPickupDetails((prev) => ({
+        streetAddress: data.pickupAddress?.streetAddress ?? prev.streetAddress,
+        unit: data.pickupAddress?.unit ?? prev.unit,
+        businessArea: data.pickupAddress?.businessArea ?? prev.businessArea,
+        instructions: data.pickupInstructions ?? prev.instructions,
+        contactPhone: data.pickupContactPhone ?? prev.contactPhone,
+        verificationCode: data.pickupVerificationCode ?? prev.verificationCode,
+      }));
+      if (data.autoSendPickupDetailsEnabled !== undefined) {
+        setAutoSendEnabled(data.autoSendPickupDetailsEnabled);
+      }
+    }, (error) => console.error('[VendorPickup] settings listener failed:', error));
+    return unsubscribe;
+  }, [vendorId]);
 
   const loadData = async () => {
     try {

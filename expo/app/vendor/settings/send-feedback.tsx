@@ -4,8 +4,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { Colors } from '@/constants/colors';
+import { callable } from '@/lib/firebase';
 
 type FeedbackType = 'feature' | 'problem' | 'general' | null;
+
+interface CreateTicketResponse {
+  success: true;
+  ticketId: string;
+  chatId: string;
+  created: boolean;
+}
+
+const FEEDBACK_SUBJECTS: Record<Exclude<FeedbackType, null>, string> = {
+  feature: 'Feature suggestion',
+  problem: 'Problem report',
+  general: 'General feedback',
+};
 
 export default function SendFeedbackScreen() {
   const params = useLocalSearchParams();
@@ -19,19 +33,36 @@ export default function SendFeedbackScreen() {
     }
   }, [params.type]);
 
+  // Files into the same real support-ticket system as report-problem.tsx and
+  // contact-support.tsx (createSupportTicket/sendChatMessage), rather than
+  // the console.log-and-fake-success this screen previously did.
   const handleSend = async () => {
     if (!selectedType || !message.trim()) {
       return;
     }
 
     setIsSending(true);
-    console.log('Send feedback:', { type: selectedType, message });
-    
-    setTimeout(() => {
+    try {
+      const createTicket = callable<{ subject: string; initialMessage: string }, CreateTicketResponse>(
+        'createSupportTicket'
+      );
+      const res = await createTicket({ subject: FEEDBACK_SUBJECTS[selectedType], initialMessage: message.trim() });
+
+      if (!res.data.created) {
+        const sendMessage = callable<{ chatId: string; type: string; content: string }, unknown>(
+          'sendChatMessage'
+        );
+        await sendMessage({ chatId: res.data.chatId, type: 'text', content: message.trim() });
+      }
+
       setIsSending(false);
       Alert.alert('', 'Feedback sent. Thank you.');
       router.back();
-    }, 1000);
+    } catch (error) {
+      setIsSending(false);
+      const msg = (error as { message?: string })?.message ?? 'Could not send your feedback. Please try again.';
+      Alert.alert('Could not send', msg);
+    }
   };
 
   const canSend = selectedType !== null && message.trim().length > 0;

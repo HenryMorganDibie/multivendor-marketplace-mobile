@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { auth, callable } from '@/lib/firebase';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { auth, callable, db } from '@/lib/firebase';
 
 export type BlockDirection = 'self' | 'other';
 
@@ -185,6 +186,42 @@ export function BlockedUsersProvider({ children }: { children: React.ReactNode }
     setBlockedUsers(mapped);
     isLoadedRef.current = true;
   }, []);
+
+  // The blocks collection is real (functions/src/blocks/blockFunctions.ts) and
+  // firestore.rules already allows a signed-in user to read their own
+  // blockerUid rows (`allow read: if ... request.auth.uid == resource.data.blockerUid`)
+  // - only the AsyncStorage-only read path (above) was ever wired up, so a
+  // block placed on another device, or restored after a reinstall, never
+  // showed here even though the block itself was real and enforced server-side.
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const q = query(collection(db, 'blocks'), where('blockerUid', '==', uid), where('isActive', '==', true));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const records: BlockedUserBackendRecord[] = snap.docs.map((d) => {
+        const data = d.data() as {
+          blockedUid: string; blockedRole: 'customer' | 'vendor';
+          vendorId?: string | null; customerId?: string | null;
+          blockedSnapshot: { displayName: string; businessName: string | null };
+          blockedAt: { toDate?: () => Date } | null;
+        };
+        // Deterministic commerce thread id, same convention
+        // createCommerceConversation.ts uses to name the thread doc.
+        const chatId = data.customerId && data.vendorId ? `commerce_${data.customerId}_${data.vendorId}` : '';
+        return {
+          id: d.id,
+          blockedUserId: data.blockedUid,
+          blockedUserName: data.blockedSnapshot.businessName ?? data.blockedSnapshot.displayName,
+          blockedUserRole: data.blockedRole,
+          chatId,
+          blockedAt: data.blockedAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+          isBlocker: true,
+        };
+      });
+      loadBlockedUsersFromBackend(records);
+    }, (error) => console.error('[BlockedUsers] blocks listener failed:', error));
+    return unsubscribe;
+  }, [loadBlockedUsersFromBackend]);
 
   return (
     <BlockedUsersContext.Provider

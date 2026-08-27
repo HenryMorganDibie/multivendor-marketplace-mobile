@@ -6,6 +6,14 @@ import { ChevronDown } from 'lucide-react-native';
 import { useVerification } from '@/contexts/VerificationContext';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { Colors } from '@/constants/colors';
+import { callable } from '@/lib/firebase';
+
+interface CreateTicketResponse {
+  success: true;
+  ticketId: string;
+  chatId: string;
+  created: boolean;
+}
 
 const ISSUE_TYPES = [
   'ID rejected',
@@ -22,19 +30,31 @@ export default function VerificationSupportScreen() {
   const [showIssueTypePicker, setShowIssueTypePicker] = useState(false);
   const [isSending, setIsSending] = useState(false);
 
+  // Files into the same real support-ticket system as report-problem.tsx and
+  // contact-support.tsx (createSupportTicket/sendChatMessage), rather than
+  // the console.log-and-fake-success this screen previously did.
   const handleSubmit = async () => {
     if (!issueType || !message.trim()) return;
 
     setIsSending(true);
-    
-    console.log('[VERIFICATION SUPPORT] Submitting request:', {
-      vendorId: 'auto-filled',
-      verificationReferenceId: verificationData.referenceId || 'pending',
-      issueType,
-      message: message.trim(),
-    });
+    const lines = [`Issue type: ${issueType}`];
+    lines.push(`Verification reference: ${verificationData.referenceId || 'pending'}`);
+    lines.push('', message.trim());
+    const reportText = lines.join('\n');
 
-    setTimeout(() => {
+    try {
+      const createTicket = callable<{ subject: string; initialMessage: string }, CreateTicketResponse>(
+        'createSupportTicket'
+      );
+      const res = await createTicket({ subject: `Verification Support: ${issueType}`, initialMessage: reportText });
+
+      if (!res.data.created) {
+        const sendMessage = callable<{ chatId: string; type: string; content: string }, unknown>(
+          'sendChatMessage'
+        );
+        await sendMessage({ chatId: res.data.chatId, type: 'text', content: reportText });
+      }
+
       setIsSending(false);
       Alert.alert(
         '',
@@ -46,7 +66,11 @@ export default function VerificationSupportScreen() {
           },
         ]
       );
-    }, 1000);
+    } catch (error) {
+      setIsSending(false);
+      const msg = (error as { message?: string })?.message ?? 'Could not submit your request. Please try again.';
+      Alert.alert('Submission failed', msg);
+    }
   };
 
   const canSubmit = issueType && message.trim().length > 0 && message.trim().length <= 500;

@@ -6,6 +6,14 @@ import { Paperclip, X } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import * as ImagePicker from 'expo-image-picker';
+import { callable } from '@/lib/firebase';
+
+interface CreateTicketResponse {
+  success: true;
+  ticketId: string;
+  chatId: string;
+  created: boolean;
+}
 
 export default function ContactSupportScreen() {
   const routerNav = useRouter();
@@ -30,17 +38,37 @@ export default function ContactSupportScreen() {
     setImages(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Files into the same real support-ticket system as report-problem.tsx and
+  // support-chat.tsx (createSupportTicket/sendChatMessage), rather than the
+  // console.log-and-fake-success this screen previously did. Picked images
+  // are still previewed but not uploaded anywhere - no screen in the app has
+  // a real chat-attachment upload path yet, so that stays unbuilt, not a
+  // regression from this fix.
   const handleSend = async () => {
     if (!message.trim()) return;
 
     setIsSending(true);
-    console.log('Contact support:', { message, images });
+    try {
+      const createTicket = callable<{ subject: string; initialMessage: string }, CreateTicketResponse>(
+        'createSupportTicket'
+      );
+      const res = await createTicket({ subject: 'Contact Support', initialMessage: message.trim() });
 
-    setTimeout(() => {
+      if (!res.data.created) {
+        const sendMessage = callable<{ chatId: string; type: string; content: string }, unknown>(
+          'sendChatMessage'
+        );
+        await sendMessage({ chatId: res.data.chatId, type: 'text', content: message.trim() });
+      }
+
       setIsSending(false);
       Alert.alert('', 'Message sent. We\'ll get back to you soon.');
       router.back();
-    }, 1000);
+    } catch (error) {
+      setIsSending(false);
+      const msg = (error as { message?: string })?.message ?? 'Could not send your message. Please try again.';
+      Alert.alert('Could not send', msg);
+    }
   };
 
   const canSend = message.trim().length > 0;
