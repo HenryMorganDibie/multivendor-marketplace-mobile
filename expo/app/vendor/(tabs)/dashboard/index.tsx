@@ -893,18 +893,17 @@ export default function VendorDashboardScreen() {
       .slice(0, 3);
   }, [vendorOrders]);
 
+  // Always the real order detail screen. `order` here is always the real
+  // Order type (this function's own signature guarantees it) - a real order
+  // created via createExternalOrder also carries orderSource: 'external', so
+  // branching on that field routed real orders into /vendor/orders/external,
+  // a screen that only ever reads the separate, AsyncStorage-only legacy
+  // ExternalOrder records and can never find a real order there.
   const navigateToOrder = useCallback((order: Order) => {
-    if (order.orderSource === 'external') {
-      router.push({
-        pathname: '/vendor/orders/external/[orderId]' as any,
-        params: { orderId: order.id },
-      });
-    } else {
-      router.push({
-        pathname: '/vendor/orders/[orderId]' as any,
-        params: { orderId: order.id },
-      });
-    }
+    router.push({
+      pathname: '/vendor/orders/[orderId]' as any,
+      params: { orderId: order.id },
+    });
   }, [router]);
 
   const applyFilter = (range: TimeRange) => {

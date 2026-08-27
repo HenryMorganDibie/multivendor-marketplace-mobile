@@ -147,7 +147,7 @@ interface CatalogContextValue {
   deleteCategory: (id: string) => Promise<void>;
   reorderCategories: (newOrder: Category[]) => void;
   addItem: (item: Omit<CatalogItem, 'id' | 'moderationStatus'>) => void;
-  updateItem: (id: string, item: Omit<CatalogItem, 'id' | 'moderationStatus'>) => void;
+  updateItem: (id: string, item: Omit<CatalogItem, 'id' | 'moderationStatus'>) => Promise<{ pendingRevision?: boolean }>;
   deleteItem: (id: string) => void;
   getItemsByCategory: (categoryId: string) => CatalogItem[];
   getCategoryById: (id: string) => Category | undefined;
@@ -487,6 +487,10 @@ export function CatalogProvider({ children }: { children: React.ReactNode }) {
       if (res.data.pendingRevision) {
         console.log('[Catalog] Edit held as a pending revision; live version unchanged:', id);
       }
+      // Backend already computes this correctly; it was just discarded here
+      // before, so nothing calling updateItem could ever tell the vendor
+      // their edit needs re-review rather than being live immediately.
+      return { pendingRevision: res.data.pendingRevision };
     } catch (err) {
       console.error('[Catalog] updateCatalogItem failed:', err);
       throw err;

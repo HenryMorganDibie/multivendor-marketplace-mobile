@@ -163,10 +163,18 @@ export default function VendorOrdersScreen() {
   const [deleteOrderId, setDeleteOrderId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  const the platformOrders = useMemo(
-    () => orders.filter((o) => o.orderSource !== 'external'),
-    [orders]
-  );
+  /**
+   * Real external orders (recorded via add-external.tsx -> createExternalOrder)
+   * carry orderSource: 'external' on the real order document, same as the
+   * legacy AsyncStorage-only ExternalOrder objects from useExternalOrders().
+   * Excluding every orderSource === 'external' order here meant a real,
+   * backend-recorded external order never appeared on this screen under any
+   * filter - not just today's, since `filtered` is always derived from this
+   * list. Real orders belong in the real list regardless of source; only the
+   * legacy local records (identified below by shareToken, a field the real
+   * Order type never has) are the separate, AsyncStorage-only case.
+   */
+  const the platformOrders = orders;
 
   const filteredOrders = useMemo(() => {
     const externalOrders = getTodayOrders();
@@ -287,7 +295,11 @@ export default function VendorOrdersScreen() {
   };
 
   const renderOrderCard = ({ item }: { item: Order | ExternalOrder }) => {
-    const isExternal = 'orderSource' in item && item.orderSource === 'external';
+    // shareToken only exists on the legacy AsyncStorage-only ExternalOrder
+    // shape - orderSource: 'external' is not a safe discriminant here since
+    // a real backend order created via createExternalOrder carries the same
+    // value. See the the platformOrders comment above for the full explanation.
+    const isExternal = 'shareToken' in item;
     const totalItemCount = item.items.reduce((sum, i) => sum + i.quantity, 0);
 
     let scheduledDate = 'Not scheduled';

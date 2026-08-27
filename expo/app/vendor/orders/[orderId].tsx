@@ -42,6 +42,7 @@ import { getStatusColor, getVendorStatusLabel, getStatusPriorityOrder } from '@/
 import { useVendorAutoAccept } from '@/contexts/VendorAutoAcceptContext';
 import { useVendorPickup } from '@/contexts/VendorPickupContext';
 import { useAuditLog } from '@/contexts/AuditLogContext';
+import { callable } from '@/lib/firebase';
 import { formatVendorDisplayName } from '@/utils/vendorDisplayHelpers';
 import {
   canAcceptOrder,
@@ -506,7 +507,26 @@ export default function VendorOrderDetailsScreen() {
     });
   };
 
-  const confirmPaymentReceived = () => {
+  const [isRecordingPayment, setIsRecordingPayment] = useState(false);
+
+  /**
+   * recordPayment is the same real, already-paid ledger function every other
+   * payment-recording flow in the app uses (InvoiceContext.recordPayment,
+   * vendorConfirmPayment's reviewPaymentProof path) - this button previously
+   * only touched local state (paymentHistory isn't even part of the real
+   * Order shape, so it was silently discarded on the next real snapshot) and
+   * hardcoded a fake vendorId. Real money is now actually recorded and counts
+   * toward revenue.
+   *
+   * Caveat worth knowing: recomputeOrderFromLedger (the function that would
+   * derive this order's own ledgerPaymentStatus/amountPaid fields from the
+   * payments ledger) is part of the held External Orders ledger work, not
+   * deployed. So this correctly records the payment and revenue for real, but
+   * the order document's own payment-status field won't update on its own
+   * server-side - hence the optimistic local update below, same pattern
+   * vendorConfirmPayment already uses for the same underlying reason.
+   */
+  const confirmPaymentReceived = async () => {
     if (!paymentType) {
       Alert.alert('Selection Required', 'Please select whether you received full or partial payment.');
       return;
@@ -518,7 +538,6 @@ export default function VendorOrderDetailsScreen() {
         return;
       }
     }
-    setShowPaymentConfirmModal(false);
     const paymentUpdate = calculatePaymentUpdate(
       paymentType,
       partialPaymentAmount,
@@ -527,23 +546,41 @@ export default function VendorOrderDetailsScreen() {
       calculatedTotal
     );
     const timestamp = new Date().toISOString();
-    const newRecord = { amount: paymentUpdate.amountReceived, timestamp };
-    setPaymentHistory((prev) => [...prev, newRecord]);
-    void logEvent({
-      eventType: paymentType === 'full' ? 'full_payment_marked' : 'partial_payment_marked',
-      orderId: order.id,
-      vendorId: 'vendor_mock',
-      customerId: order.customerId || 'customer_mock',
-      metadata: {
-        amountReceived: paymentUpdate.amountReceived / 100,
-        totalPaid: paymentUpdate.newTotalPaid / 100,
-        balanceDue: paymentUpdate.newBalanceDue / 100,
-        timestamp,
-      },
-    });
-    setTimeout(() => {
-      router.back();
-    }, 600);
+
+    setIsRecordingPayment(true);
+    try {
+      const record = callable<Record<string, unknown>, { success: true; paymentId: string }>('recordPayment');
+      await record({
+        orderId: order.id,
+        amountMinorUnits: Math.round(paymentUpdate.amountReceived),
+        method: 'other',
+        idempotencyKey: `${order.id}_${paymentUpdate.amountReceived}_${timestamp}`,
+      });
+
+      const newRecord = { amount: paymentUpdate.amountReceived, timestamp };
+      setPaymentHistory((prev) => [...prev, newRecord]);
+      void logEvent({
+        eventType: paymentType === 'full' ? 'full_payment_marked' : 'partial_payment_marked',
+        orderId: order.id,
+        vendorId: 'vendor_mock',
+        customerId: order.customerId || 'customer_mock',
+        metadata: {
+          amountReceived: paymentUpdate.amountReceived / 100,
+          totalPaid: paymentUpdate.newTotalPaid / 100,
+          balanceDue: paymentUpdate.newBalanceDue / 100,
+          timestamp,
+        },
+      });
+      setShowPaymentConfirmModal(false);
+      setTimeout(() => {
+        router.back();
+      }, 600);
+    } catch (error) {
+      const msg = (error as { message?: string })?.message ?? 'Could not record this payment. Please try again.';
+      Alert.alert('Could not record payment', msg);
+    } finally {
+      setIsRecordingPayment(false);
+    }
   };
 
   const statusColors = getStatusColor(orderStatus);
@@ -1431,13 +1468,15 @@ export default function VendorOrderDetailsScreen() {
                 <TouchableOpacity
                   style={[
                     styles.paymentConfirmButton,
-                    (!paymentType || !!partialAmountError) && styles.paymentConfirmButtonDisabled,
+                    (!paymentType || !!partialAmountError || isRecordingPayment) && styles.paymentConfirmButtonDisabled,
                   ]}
                   onPress={confirmPaymentReceived}
-                  disabled={!paymentType || !!partialAmountError}
+                  disabled={!paymentType || !!partialAmountError || isRecordingPayment}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.paymentConfirmButtonText}>Confirm payment</Text>
+                  <Text style={styles.paymentConfirmButtonText}>
+                    {isRecordingPayment ? 'Recording...' : 'Confirm payment'}
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.paymentCancelButton}

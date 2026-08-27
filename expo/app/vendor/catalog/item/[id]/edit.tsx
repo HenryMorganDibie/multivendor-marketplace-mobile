@@ -197,7 +197,7 @@ export default function EditItemScreen() {
     setIsSaving(true);
     try {
       const uploadedPhotos = await uploadCatalogItemPhotos(photos);
-      await updateItem(item.id, {
+      const result = await updateItem(item.id, {
         name: name.trim(), basePrice: basePriceNum, salePrice: salePriceNum,
         description: description.trim() || undefined, photos: uploadedPhotos, isAvailable,
         isTaxExempt, isHidden, isOutOfStock, isFeatured,
@@ -208,7 +208,19 @@ export default function EditItemScreen() {
         createdAt: item.createdAt, orderCount: item.orderCount,
         recentOrderCount: item.recentOrderCount,
       });
-      router.back();
+      // The backend already holds a material edit to an approved item as a
+      // pending revision rather than publishing it live - this was computed
+      // correctly but silently discarded, so a vendor had no way to know
+      // their change needed re-review instead of being live immediately.
+      if (result.pendingRevision) {
+        Alert.alert(
+          'Sent for review',
+          'This item is already live, so your changes are held as a pending revision until an admin reviews them. The live version stays unchanged until then.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      } else {
+        router.back();
+      }
     } catch (error) {
       const message = (error as { message?: string })?.message
         ?? 'Could not save these changes. Please try again.';

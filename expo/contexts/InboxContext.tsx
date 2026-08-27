@@ -98,6 +98,15 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
    * `onSnapshot(chatsCollection)` listener that maps the same chat → inbox
    * projection.
    */
+  // Real chatType -> InboxSnapshot.conversationType, matching how the seeded
+  // mock data itself classifies conversations (see mockVendorInbox above).
+  const conversationTypeFor = (chatType: Chat['chatType']): ConversationType => {
+    if (chatType === 'order_chat') return 'order';
+    if (chatType === 'ai_help') return 'ai';
+    if (chatType === 'support') return 'support';
+    return 'inquiry';
+  };
+
   useEffect(() => {
     const unsub = chatService.subscribeAll((chatId) => {
       const chat = chatService.getByIdSync(chatId);
@@ -113,10 +122,12 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
           ? chat.vendorId
           : m.sender;
 
-      const apply = (prev: InboxSnapshot[]): InboxSnapshot[] => {
+      const apply = (isVendorSide: boolean) => (prev: InboxSnapshot[]): InboxSnapshot[] => {
+        let found = false;
         let changed = false;
         const next = prev.map((item) => {
           if (item.chatId !== chatId) return item;
+          found = true;
           if (
             item.lastMessageText === previewText &&
             item.lastMessageAt === ts &&
@@ -132,11 +143,40 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
             lastSenderId: senderId,
           };
         });
-        return changed ? next : prev;
+        if (found) return changed ? next : prev;
+
+        // Only insert into the side matching the signed-in user's actual
+        // role - this callback fires once per chat update regardless of
+        // who's signed in, and a chat legitimately absent from, say, the
+        // vendor inbox (because this account is a customer) should stay
+        // absent there, not gain a row nothing will ever read correctly.
+        if (isVendorSide !== (user?.role === 'vendor')) return prev;
+
+        // A real thread this chatService.subscribeAll notification is about
+        // has no row yet - previously this function only patched existing
+        // rows, so a real account's inbox (empty seed, per DEMO_INBOX_ACCOUNTS
+        // above) never gained a row for any new conversation at all, no
+        // matter how many real messages arrived. Insert one from the real
+        // Chat data useBackendChats already hydrated into chatService.
+        const newRow: InboxSnapshot = {
+          conversationId: chat.id,
+          chatId: chat.id,
+          chatType: chat.chatType,
+          conversationType: conversationTypeFor(chat.chatType),
+          vendorId: chat.vendorId,
+          customerId: chat.customerId ?? '',
+          orderId: chat.orderId,
+          title: isVendorSide ? (chat.customerName ?? 'Customer') : chat.vendorName,
+          lastMessageText: previewText,
+          lastMessageAt: ts,
+          lastSenderId: senderId,
+          unreadCount: 0,
+        };
+        return [...prev, newRow];
       };
 
-      setCustomerInbox(apply);
-      setVendorInbox(apply);
+      setCustomerInbox(apply(false));
+      setVendorInbox(apply(true));
     });
     return unsub;
   }, []);
