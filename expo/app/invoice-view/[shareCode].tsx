@@ -21,6 +21,8 @@ import {
 import { useVendor } from '@/contexts/VendorContext';
 import { formatInvoiceCustomerName } from '@/utils/internalCustomerName';
 import { Colors } from '@/constants/colors';
+import { vendorRepository } from '@/services/repositories/vendorRepository';
+import type { Vendor } from '@/mocks/vendorData';
 
 const INVOICE_BRANDING_STORAGE_KEY = 'vendor_invoice_branding_v1';
 
@@ -144,6 +146,36 @@ export default function PublicInvoiceScreen() {
   }, [shareCode, localInvoice, fetchPublicInvoice]);
 
   const invoice = localInvoice ?? remoteInvoice;
+
+  /**
+   * `useVendor()` above is always the SIGNED-IN vendor's own record — it is
+   * never anyone else's. For the two people this screen actually serves,
+   * that is always the wrong vendor:
+   *  - the public share-link visitor is not signed in as a vendor at all,
+   *    so `vendor` stayed the VendorContext default (the mock "Spicy
+   *    Restaurant" fixture) forever;
+   *  - the in-app the platform customer is signed in as a customer, so `vendor`
+   *    was whatever the mock default resolves to for them too.
+   * Every shared invoice therefore displayed the same fake business's name,
+   * phone, email and address regardless of who actually issued it. Fetching
+   * the invoice's own vendor (mapInvoiceDoc/Invoice.vendorId, added
+   * alongside this fix) via vendorRepository.getById — the same live lookup
+   * used for vendor-status checks elsewhere (app/chat/[vendorId].tsx) — is
+   * the actual real-vendor lookup this screen needs.
+   */
+  const [issuingVendor, setIssuingVendor] = useState<Vendor | undefined>(undefined);
+  useEffect(() => {
+    const vendorId = invoice?.vendorId;
+    if (!vendorId) {
+      setIssuingVendor(undefined);
+      return;
+    }
+    let cancelled = false;
+    void vendorRepository.getById(vendorId).then((v) => {
+      if (!cancelled) setIssuingVendor(v);
+    });
+    return () => { cancelled = true; };
+  }, [invoice?.vendorId]);
 
   const [savedSettings, setSavedSettings] = useState<InvoiceBrandingSettings>(
     DEFAULT_INVOICE_BRANDING_SETTINGS,
@@ -274,9 +306,17 @@ export default function PublicInvoiceScreen() {
     ? formatInvoiceCustomerName(invoice.customerName, invoice.customerSource)
     : invoice.customerName;
 
+  // Prefer the invoice's own issuing vendor once it resolves. Falling back to
+  // the signed-in `vendor` covers the vendor previewing their own
+  // just-created invoice (correct immediately, no round trip needed) and the
+  // rare case where issuingVendor can't be resolved at all (no vendorId on
+  // an older invoice, or a permission-denied read for a non-discoverable,
+  // non-published vendor).
+  const displayVendor = issuingVendor ?? vendor;
+
   const invoiceData: InvoiceRendererData = {
     invoiceNumber: invoice.invoiceNumber,
-    vendorName: vendor.name,
+    vendorName: displayVendor.name,
     customerName: displayCustomerName,
     statusLabel: statusDisplay.label,
     statusColor: statusDisplay.color,
@@ -305,10 +345,10 @@ export default function PublicInvoiceScreen() {
       invoice.fulfilmentMethod === 'delivery' && invoice.fulfilmentDetails?.deliveryFee
         ? invoice.fulfilmentDetails.deliveryFee
         : 0,
-    vendorPhone: vendor.phone,
-    vendorEmail: vendor.email,
-    vendorAddress: vendor.fullAddress,
-    vendorWebsite: vendor.contactLinks?.website,
+    vendorPhone: displayVendor.phone,
+    vendorEmail: displayVendor.email,
+    vendorAddress: displayVendor.fullAddress,
+    vendorWebsite: displayVendor.contactLinks?.website,
   };
 
   const rendererBranding = {

@@ -30,7 +30,8 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeBack } from '@/utils/useSafeBack';
 import { useCart } from '@/contexts/CartContext';
-import { mockMenuItems, mockVendors, mockVendor, MenuItem } from '@/mocks/vendorData';
+import { mockMenuItems, MenuItem, type Vendor } from '@/mocks/vendorData';
+import { vendorRepository } from '@/services/repositories/vendorRepository';
 import { fromBackendItem, CatalogItem } from '@/contexts/CatalogContext';
 import { doc, onSnapshot as onDocSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -38,10 +39,10 @@ import VendorStatusGate, { normalizeVendorStatus, useVendorStatusPermissions } f
 import VendorPreviewModal from '@/components/VendorPreviewModal';
 import { safeShare } from '@/utils/share';
 import { formatPriceWithCommas } from '@/utils/formatPrice';
-import { mockOrders } from '@/mocks/ordersData';
 import { useOrders } from '@/contexts/OrdersContext';
 import { getActivePromotions } from '@/mocks/promotionsData';
 import { getMenuItemDisplayPrice, hasItemSalePrice } from '@/utils/itemPricing';
+import { catalogService } from '@/services/catalogService';
 
 const { width } = Dimensions.get('window');
 const IMAGE_HEIGHT = Math.round(width * 0.82);
@@ -271,16 +272,56 @@ function ItemViewContent({
   // server-side as catalogItems/{itemId}.orderCount (incremented in
   // adjustInventoryAfterOrder), just not wired to this screen.
 
-  const vendor = useMemo(() => {
-    if (!vendorId) return null;
-    return mockVendors.find((v) => v.id === vendorId) ?? null;
+  // mockVendors.find only ever matches the ten built-in demo ids (v1-v10);
+  // for any real vendor this returned null, silently hiding "About this
+  // vendor" and blanking the storefront row for every real vendor viewed
+  // from a chat-shared item. vendorRepository.getById already resolves both
+  // the demo ids and live Firestore vendors (see app/chat/[vendorId].tsx for
+  // the same pattern), so it replaces the mock lookup here too.
+  const [vendor, setVendor] = useState<Vendor | null>(null);
+  useEffect(() => {
+    if (!vendorId) {
+      setVendor(null);
+      return;
+    }
+    let cancelled = false;
+    void vendorRepository.getById(vendorId).then((v) => {
+      if (!cancelled) setVendor(v ?? null);
+    });
+    return () => { cancelled = true; };
+  }, [vendorId]);
+
+  // "More from this vendor" was always the same six fixture items regardless
+  // of which vendor's item was actually open — a customer forwarded an item
+  // from Bella Cakes' chat saw Spicy Restaurant's mock menu underneath it.
+  // catalogService.getVendorMenu reads the same
+  // vendors/{vendorId}/catalogItems collection the storefront listing and the
+  // catalogItem subscription above already use.
+  const [vendorMenuItems, setVendorMenuItems] = useState<MenuItem[]>([]);
+  useEffect(() => {
+    if (!vendorId) {
+      setVendorMenuItems([]);
+      return;
+    }
+    let cancelled = false;
+    void catalogService.getVendorMenu(vendorId).then((menu) => {
+      if (!cancelled) setVendorMenuItems(menu.items);
+    }).catch((err) => {
+      console.error('[ITEM] Could not load vendor menu for related items:', err);
+      if (!cancelled) setVendorMenuItems([]);
+    });
+    return () => { cancelled = true; };
   }, [vendorId]);
 
   const relatedItems = useMemo(() => {
-    return mockMenuItems
+    // Only fall back to the fixture list when there is no real vendor to ask
+    // at all; once a vendorId is known, an empty live result means the
+    // vendor genuinely has no other items, not "show the mock menu instead."
+    const source = vendorId ? vendorMenuItems : mockMenuItems;
+    return source
       .filter((i) => i.id !== id && i.inStock)
       .slice(0, 6);
-  }, [id]);
+  }, [id, vendorId, vendorMenuItems]);
 
   const handleSeeAll = () => {
     if (!vendorId) return;
@@ -307,14 +348,18 @@ function ItemViewContent({
     });
   };
 
+  // Was tallying quantities out of the seeded mockOrders array regardless of
+  // which vendor/item was actually open, so every item on every real vendor's
+  // storefront showed the same "Popular" verdict computed from demo data.
+  // catalogItem.orderCount (mapped onto item.orderCount above) is the live
+  // per-item counter the backend already maintains
+  // (catalogItems/{itemId}.orderCount, incremented in
+  // adjustInventoryAfterOrder) — falling back to mockMenuItems' orderCount
+  // only for the case where catalogItem itself never resolved.
   const isPopular = useMemo(() => {
     if (!item) return false;
-    const count = mockOrders.reduce((n, o) => {
-      const found = o.items.find((i) => i.id === id);
-      return n + (found ? found.quantity : 0);
-    }, 0);
-    return count >= 3;
-  }, [id, item]);
+    return (item.orderCount ?? 0) >= 3;
+  }, [item]);
 
   if (!item) {
     return (
@@ -928,11 +973,28 @@ export default function ItemViewScreen() {
       ? 'chat_shared_item'
       : 'storefront';
 
-  const normalizedStatus = useMemo(() => {
-    if (!vendorId) return normalizeVendorStatus(undefined);
-    const vendor = mockVendors.find((v) => v.id === vendorId);
-    return normalizeVendorStatus(vendor?.vendorStatus);
+  // Same gap as the in-content vendor lookup: mockVendors.find only matches
+  // the ten demo ids, so a real vendor that had been suspended or
+  // deactivated always fell back to normalizeVendorStatus(undefined) here —
+  // this gate is what's supposed to block ordering from a suspended vendor,
+  // and it silently passed every real vendor as if unresolved.
+  const [gateVendorStatus, setGateVendorStatus] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!vendorId) {
+      setGateVendorStatus(undefined);
+      return;
+    }
+    let cancelled = false;
+    void vendorRepository.getById(vendorId).then((v) => {
+      if (!cancelled) setGateVendorStatus(v?.vendorStatus);
+    });
+    return () => { cancelled = true; };
   }, [vendorId]);
+
+  const normalizedStatus = useMemo(
+    () => normalizeVendorStatus(gateVendorStatus),
+    [gateVendorStatus],
+  );
 
   console.log('[ITEM] id:', id, 'vendorId:', vendorId, 'source:', resolvedSource, 'chatThreadId:', chatThreadId);
 

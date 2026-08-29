@@ -35,6 +35,7 @@ import { generatethe platformOrderId } from '@/utils/orderIdGenerator';
 import { useAuditLog } from '@/contexts/AuditLogContext';
 import { useVendorRelationships } from '@/contexts/VendorRelationshipContext';
 import { useOrders, type PricedCart } from '@/contexts/OrdersContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { ContactCardPickerModal } from '@/components/ContactCardPickerModal';
 import { ContactCard } from '@/contexts/ContactCardsContext';
 import { formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
@@ -50,6 +51,7 @@ export default function ReviewOrderScreen() {
   const { logEvent } = useAuditLog();
   const { addRelationship } = useVendorRelationships();
   const { addOrder, priceCart } = useOrders();
+  const { user } = useAuth();
 
   /**
    * The vendor this basket is actually for.
@@ -220,7 +222,10 @@ export default function ReviewOrderScreen() {
       eventType: 'order_created',
       orderId: orderRequestId,
       vendorId: orderVendorId,
-      customerId: 'customer_mock',
+      // The signed-in customer's real id, not the hardcoded 'customer_mock'
+      // fixture id — the audit log entry otherwise attributed every order
+      // placed by every real customer to the same fake account.
+      customerId: user?.id ?? 'customer_mock',
       newState: 'ORDER_REQUESTED',
       metadata: {
         publicOrderId,
@@ -235,7 +240,13 @@ export default function ReviewOrderScreen() {
       publicOrderId,
       vendorId: orderVendorId,
       vendorName: (orderVendor?.name ?? ''),
-      customerId: 'customer_mock',
+      // Same fix as the audit log above: the optimistic order row (and the
+      // real order once the backend infers the customer from the auth
+      // token) is the signed-in customer's, not the fixture id. OrdersContext
+      // queries live orders by `customerId == fbUser.uid`, so an order
+      // stamped 'customer_mock' locally would never match a real customer's
+      // own orders query once the listener's real document replaced it.
+      customerId: user?.id ?? 'customer_mock',
       status: 'requested',
       orderDate: new Date().toISOString(),
       fulfillmentType: (fulfillmentType as 'Pickup' | 'Delivery') || 'Pickup',

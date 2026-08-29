@@ -50,6 +50,10 @@ export function mapInvoiceDoc(id: string, data: Record<string, unknown>): Invoic
   return {
     id,
     invoiceNumber: (data.invoiceNumber as string) ?? '',
+    // Needed so the public/customer invoice view can look up the real
+    // issuing vendor instead of falling back to whichever vendor (or none)
+    // happens to be signed in on the viewing device.
+    vendorId: (data.vendorId as string) ?? undefined,
     customerName: (data.customerName as string) ?? '',
     customerPhone: (data.customerPhone as string) ?? undefined,
     customerEmail: (data.customerEmail as string) ?? undefined,

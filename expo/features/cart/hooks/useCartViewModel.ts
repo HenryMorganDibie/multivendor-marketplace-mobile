@@ -8,7 +8,9 @@ import type { ContactCard } from '@/contexts/ContactCardsContext';
 import type { OrderStatus } from '@/mocks/ordersData';
 import { getOrderLockConfig, isOrderLocked } from '@/utils/orderImmutability';
 import { getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
-import { mockVendor, mockMenuItems } from '@/mocks/vendorData';
+import { mockVendor, mockMenuItems, type Vendor, type MenuItem } from '@/mocks/vendorData';
+import { vendorRepository } from '@/services/repositories/vendorRepository';
+import { catalogService } from '@/services/catalogService';
 import {
   calculateTax,
   calculateTotal,
@@ -34,8 +36,62 @@ export function useCartViewModel() {
   const { items, addItem, removeItem, updateItemQuantity, removeItemByIndex, totalPrice, setActiveVendor, activeVendorId } =
     useCart();
 
+  /**
+   * Every field below used to read from `mockVendor` (the single hardcoded
+   * "Spicy Restaurant" fixture) directly and unconditionally — not even
+   * `mockVendors.find(v => v.id === vendorId)`. That meant every real
+   * vendor's cart screen showed Spicy Restaurant's name, policy, tax rate
+   * and enabled/disabled state, currency, minimum order amount, fulfillment
+   * types and open/closed status, regardless of which vendor the customer
+   * actually had items from — the exact "wrong vendor shown" / "wrong
+   * currency" class of bug already fixed elsewhere (see
+   * app/chat/[vendorId].tsx's vendorRepository.getById lookup). Resolving
+   * the real vendor live and falling back to the fixture only while it is
+   * still loading (or if it never resolves) fixes this without changing the
+   * shape CartScreen.tsx already reads (`vm.mockVendor.*`).
+   */
+  const effectiveVendorId = vendorId || activeVendorId;
+  const [liveCartVendor, setLiveCartVendor] = useState<Vendor | undefined>(undefined);
+  useEffect(() => {
+    if (!effectiveVendorId) {
+      setLiveCartVendor(undefined);
+      return;
+    }
+    let cancelled = false;
+    void vendorRepository.getById(effectiveVendorId).then((v) => {
+      if (!cancelled) setLiveCartVendor(v);
+    });
+    return () => { cancelled = true; };
+  }, [effectiveVendorId]);
+  const effectiveVendor: Vendor = liveCartVendor ?? mockVendor;
+
+  // The upsell modal's "suggestions" (below, in handleSubmitOrderRequest)
+  // and the raw `mockMenuItems` this hook hands back to CartScreen.tsx were
+  // always the fixed twelve-item fixture catalog, regardless of which real
+  // vendor the cart belongs to. A customer could tap "add" on a suggested
+  // item that isn't in the real vendor's catalog at all, which the backend's
+  // repriceCart would then reject at checkout. catalogService.getVendorMenu
+  // is the same live per-vendor catalog read already used for storefront
+  // listings and the item-detail "More from this vendor" section.
+  const [liveCartMenuItems, setLiveCartMenuItems] = useState<MenuItem[]>([]);
+  useEffect(() => {
+    if (!effectiveVendorId) {
+      setLiveCartMenuItems([]);
+      return;
+    }
+    let cancelled = false;
+    void catalogService.getVendorMenu(effectiveVendorId).then((menu) => {
+      if (!cancelled) setLiveCartMenuItems(menu.items);
+    }).catch((err) => {
+      console.error('[Cart] Could not load vendor menu for upsell suggestions:', err);
+      if (!cancelled) setLiveCartMenuItems([]);
+    });
+    return () => { cancelled = true; };
+  }, [effectiveVendorId]);
+  const effectiveMenuItems: MenuItem[] = effectiveVendorId ? liveCartMenuItems : mockMenuItems;
+
   const isCartLocked = orderStatusParam ? isOrderLocked(orderStatusParam) : false;
-  const lockConfig = orderStatusParam ? getOrderLockConfig(orderStatusParam, mockVendor.name) : null;
+  const lockConfig = orderStatusParam ? getOrderLockConfig(orderStatusParam, effectiveVendor.name) : null;
 
   const [reorderIssues, setReorderIssues] = useState<ReorderIssue[]>([]);
   const [showReorderBanner, setShowReorderBanner] = useState(false);
@@ -81,7 +137,7 @@ export function useCartViewModel() {
   }, {});
 
   const currentVendorIdForPromo = vendorId || activeVendorId || mockVendor.id;
-  const vendorStackingMode: StackingMode = mockVendor.promoStackingMode || 'single';
+  const vendorStackingMode: StackingMode = effectiveVendor.promoStackingMode || 'single';
 
   const evaluatedPromotions: EvaluatedPromotion[] = evaluatePromotionsWithStatus(
     currentVendorIdForPromo,
@@ -103,7 +159,7 @@ export function useCartViewModel() {
   const vendorPromotions: VendorPromotion[] = getActivePromotions(currentVendorIdForPromo);
 
   const discount = autoDiscount > 0 ? autoDiscount : manualDiscount;
-  const tax = calculateTax(subtotal, mockVendor.taxEnabled, mockVendor.taxRate);
+  const tax = calculateTax(subtotal, effectiveVendor.taxEnabled, effectiveVendor.taxRate);
   const total = calculateTotal(subtotal, tax, discount);
 
   const totalItemSavings = items.reduce((acc, cartItem) => {
@@ -122,10 +178,10 @@ export function useCartViewModel() {
 
   const totalSavings = totalItemSavings + discount;
 
-  const isBelowMinimum = !!(mockVendor.minimumOrderAmount && subtotal < mockVendor.minimumOrderAmount);
-  const isVendorUnavailable = mockVendor.storeStatus === 'closed';
+  const isBelowMinimum = !!(effectiveVendor.minimumOrderAmount && subtotal < effectiveVendor.minimumOrderAmount);
+  const isVendorUnavailable = effectiveVendor.storeStatus === 'closed';
   const hasItemsRequiringSelection = items.some((item) => item.requiresSelection);
-  const requiresOrderTiming = !!mockVendor.requiresOrderTiming;
+  const requiresOrderTiming = !!effectiveVendor.requiresOrderTiming;
   const hasScheduledDateTime = !!(preferredDate);
 
   const canSubmit = checkCanSubmitOrder({
@@ -140,14 +196,17 @@ export function useCartViewModel() {
   });
 
   const vendorCurrency: Currency =
-    (mockVendor.currency as Currency) || getCurrencyFromCountryCode(mockVendor.countryCode);
+    (effectiveVendor.currency as Currency) || getCurrencyFromCountryCode(effectiveVendor.countryCode);
 
 
   useEffect(() => {
     if (vendorId) {
-      setActiveVendor(vendorId, mockVendor.name);
+      // Re-runs once the live vendor resolves (effectiveVendor.name changes
+      // from the fixture "Spicy Restaurant" to the real name), so the
+      // active-vendor label tracked in CartContext catches up.
+      setActiveVendor(vendorId, effectiveVendor.name);
     }
-  }, [vendorId, setActiveVendor]);
+  }, [vendorId, effectiveVendor.name, setActiveVendor]);
 
   useEffect(() => {
     if (reorderIssuesParam) {
@@ -171,10 +230,13 @@ export function useCartViewModel() {
 
   const handleAddMore = useCallback(() => {
     const vid = vendorId || activeVendorId || mockVendor.id;
-    const path = getVendorStorefrontPath(vid);
+    // getVendorStorefrontPath only resolves a username for the ten demo
+    // vendor ids — a dead "Add more" tap for a real vendor's cart.
+    // effectiveVendor carries the live vendor's real username once resolved.
+    const path = effectiveVendor.username ? `/store/${effectiveVendor.username.toLowerCase()}` : getVendorStorefrontPath(vid);
     console.log('[Cart] Add more → navigating to storefront:', path);
     router.push(path as any);
-  }, [vendorId, activeVendorId, router]);
+  }, [vendorId, activeVendorId, effectiveVendor.username, router]);
 
   const handleApplyPromo = useCallback(() => {
     setPromoError('');
@@ -230,7 +292,7 @@ export function useCartViewModel() {
 
   const proceedToReviewOrder = useCallback(() => {
     console.log('Navigating to review order:', {
-      vendor: mockVendor.name,
+      vendor: effectiveVendor.name,
       fulfillmentType: selectedFulfillment,
       subtotal,
       tax,
@@ -239,6 +301,14 @@ export function useCartViewModel() {
     });
 
     const navParams = buildReviewOrderNavigationParams({
+      // buildReviewOrderNavigationParams accepts vendorId specifically so
+      // review-order.tsx knows which real vendor this basket belongs to
+      // (its own comment there explains why: without it, every order was
+      // attributed to the demo vendor). This call site never actually
+      // passed it, so `vendorId` on the review screen was always ''
+      // regardless of that fix — every checkout still landed on
+      // review-order.tsx unable to resolve a real vendor.
+      vendorId: effectiveVendorId ?? undefined,
       fulfillmentType: selectedFulfillment,
       orderNote,
       subtotal,
@@ -255,6 +325,7 @@ export function useCartViewModel() {
 
     router.push({ pathname: '/review-order' as any, params: navParams as any });
   }, [
+    effectiveVendorId,
     selectedFulfillment,
     orderNote,
     subtotal,
@@ -290,7 +361,7 @@ export function useCartViewModel() {
     }
 
     const currentVendorId = vendorId || activeVendorId || mockVendor.id;
-    const availableSuggestions = mockMenuItems.filter(
+    const availableSuggestions = effectiveMenuItems.filter(
       (menuItem) => menuItem.inStock && !items.some((cartItem) => cartItem.id === menuItem.id)
     );
     const shouldShowUpsell =
@@ -314,6 +385,7 @@ export function useCartViewModel() {
     requiresOrderTiming,
     timingPreference,
     hasScheduledDateTime,
+    effectiveMenuItems,
     proceedToReviewOrder,
   ]);
 
@@ -367,8 +439,12 @@ export function useCartViewModel() {
   return {
     // Data
     items,
-    mockVendor,
-    mockMenuItems,
+    // Keys kept as `mockVendor`/`mockMenuItems` for CartScreen.tsx's existing
+    // `vm.mockVendor.*` / `vm.mockMenuItems` reads, but the values are now
+    // the live-resolved vendor/catalog (see effectiveVendor/effectiveMenuItems
+    // above), falling back to the fixtures only while unresolved.
+    mockVendor: effectiveVendor,
+    mockMenuItems: effectiveMenuItems,
     vendorId,
     activeVendorId,
     vendorCurrency,

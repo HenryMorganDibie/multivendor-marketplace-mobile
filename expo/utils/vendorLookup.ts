@@ -25,9 +25,15 @@ export function getVendorById(vendorId: string): Vendor | undefined {
   return mockVendors.find(v => v.id === vendorId);
 }
 
-export function getVendorStatus(vendorId: string): VendorStatus {
-  const vendor = mockVendors.find(v => v.id === vendorId);
-  switch (vendor?.vendorStatus) {
+/**
+ * Pure mapping from a vendor doc's own vendorStatus field to this util's
+ * narrower status union. Extracted out of getVendorStatus so callers that
+ * have already resolved a real (live, non-demo) vendor — e.g. via
+ * vendorRepository.getById — can classify it the same way this file already
+ * classifies the ten mock vendors, instead of re-deriving the switch.
+ */
+export function vendorStatusFromRaw(raw?: Vendor['vendorStatus']): VendorStatus {
+  switch (raw) {
     case 'ACTIVE': return 'active';
     case 'UNVERIFIED': return 'registered';
     case 'WAITLISTED': return 'waitlisted';
@@ -37,17 +43,20 @@ export function getVendorStatus(vendorId: string): VendorStatus {
   }
 }
 
+export function getVendorStatus(vendorId: string): VendorStatus {
+  const vendor = mockVendors.find(v => v.id === vendorId);
+  return vendorStatusFromRaw(vendor?.vendorStatus);
+}
+
 export function getVendorBannerImage(vendorId: string): string | undefined {
   const vendor = mockVendors.find(v => v.id === vendorId);
   return vendor?.bannerImage;
 }
 
-export function canAccessStorefront(
-  vendorId: string, 
-  hasExistingRelationship: boolean = false
-): { allowed: boolean; readOnly: boolean; message?: string } {
-  const status = getVendorStatus(vendorId);
-  
+export interface StorefrontAccess { allowed: boolean; readOnly: boolean; message?: string }
+
+/** Pure decision from an already-resolved status, same reasoning callers with a live vendor can reuse. */
+export function accessForVendorStatus(status: VendorStatus, hasExistingRelationship: boolean = false): StorefrontAccess {
   switch (status) {
     case 'active':
     case 'verified':
@@ -65,4 +74,11 @@ export function canAccessStorefront(
     default:
       return { allowed: false, readOnly: false, message: 'This store is not available.' };
   }
+}
+
+export function canAccessStorefront(
+  vendorId: string,
+  hasExistingRelationship: boolean = false
+): StorefrontAccess {
+  return accessForVendorStatus(getVendorStatus(vendorId), hasExistingRelationship);
 }

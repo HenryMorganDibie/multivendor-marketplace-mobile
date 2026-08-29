@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Colors } from '@/constants/colors';
 import SegmentedControl from '@/components/SegmentedControl';
 import { getOrderStatusColor } from '@/features/orders/selectors/orderStatusSelectors';
@@ -21,12 +21,13 @@ import { getCustomerOrderStatusLabel, getOrderStatusLabel } from '@/features/ord
 import StatusBadge from '@/components/StatusBadge';
 import { getTotalItemCount } from '@/utils/orderHelpers';
 import { Image } from 'expo-image';
-import { getVendorStorefrontPath, getVendorBannerImage, canAccessStorefront } from '@/utils/vendorLookup';
+import { getVendorStorefrontPath, getVendorBannerImage, canAccessStorefront, vendorStatusFromRaw, accessForVendorStatus } from '@/utils/vendorLookup';
 import { useOrders } from '@/contexts/OrdersContext';
 import ListStateView from '@/components/ListStateView';
 import { OrderListSkeleton } from '@/components/SkeletonLoader';
 import { formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
-import { mockVendors } from '@/mocks/vendorData';
+import { type Vendor } from '@/mocks/vendorData';
+import { vendorRepository } from '@/services/repositories/vendorRepository';
 
 type TabType = 'upcoming' | 'past';
 
@@ -95,6 +96,31 @@ export default function OrdersScreen() {
   const pastOrders = useMemo(() => filterPastOrders(filteredOrders), [filteredOrders]);
   const safeOrders = filteredOrders;
 
+  // mockVendors.find(v => v.id === item.vendorId) only ever matched the ten
+  // demo ids (v1-v10) — for any real vendor it returned undefined, so every
+  // real order's total silently displayed in NGN via the countryCode
+  // fallback regardless of what the vendor actually charges in. Resolving
+  // each order's vendor live through vendorRepository.getById (same lookup
+  // chat/[vendorId].tsx already uses for its own vendor-status check) fixes
+  // the currency for real vendors while still covering the demo ids.
+  const [vendorCache, setVendorCache] = useState<Record<string, Vendor | undefined>>({});
+  useEffect(() => {
+    const orderVendorIds = filteredOrders.map((o) => o.vendorId);
+    const idsToFetch = Array.from(new Set(filterVendorId ? [...orderVendorIds, filterVendorId] : orderVendorIds))
+      .filter((id) => !(id in vendorCache));
+    if (idsToFetch.length === 0) return;
+    let cancelled = false;
+    void Promise.all(idsToFetch.map((id) => vendorRepository.getById(id))).then((results) => {
+      if (cancelled) return;
+      setVendorCache((prev) => {
+        const next = { ...prev };
+        idsToFetch.forEach((id, i) => { next[id] = results[i]; });
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [filteredOrders, filterVendorId, vendorCache]);
+
   const currentOrders = activeTab === 'upcoming' ? upcomingOrders : pastOrders;
 
   const handleOrderPress = (order: Order) => {
@@ -104,12 +130,29 @@ export default function OrdersScreen() {
 
   const handleViewStore = (vendorId: string, e: any) => {
     e.stopPropagation();
-    const access = canAccessStorefront(vendorId, true);
+    // canAccessStorefront(vendorId) resolves status via mockVendors, which
+    // only matches the ten demo ids — for a real vendor it always fell back
+    // to 'registered', and since hasExistingRelationship is always true
+    // here, that always evaluated to allowed regardless of the vendor's
+    // actual status. Classify the already-fetched live vendor (vendorCache)
+    // with the same accessForVendorStatus logic instead, so a genuinely
+    // suspended/deactivated real vendor's order is correctly blocked.
+    const liveStatus = vendorCache[vendorId]
+      ? vendorStatusFromRaw(vendorCache[vendorId]?.vendorStatus)
+      : null;
+    const access = liveStatus ? accessForVendorStatus(liveStatus, true) : canAccessStorefront(vendorId, true);
     if (!access.allowed) {
       Alert.alert('Store Unavailable', access.message ?? 'This store is not available.');
       return;
     }
-    router.push(getVendorStorefrontPath(vendorId) as any);
+    // getVendorStorefrontPath only resolves a username for the ten demo
+    // vendor ids and falls back to '/' for anything else — a dead "View
+    // store" tap on every real order. vendorCache (populated above from the
+    // same vendorRepository.getById lookup used for currency) carries the
+    // live vendor's real username when it has resolved.
+    const liveVendor = vendorCache[vendorId];
+    const path = liveVendor?.username ? `/store/${liveVendor.username.toLowerCase()}` : getVendorStorefrontPath(vendorId);
+    router.push(path as any);
   };
 
   const renderOrderCard = ({ item }: { item: Order }) => {
@@ -127,7 +170,9 @@ export default function OrdersScreen() {
         })
       : 'Not scheduled';
     const itemCount = getTotalItemCount(item.items);
-    const vendorBanner = getVendorBannerImage(item.vendorId);
+    // Same live-vendor-cache fix as currency/storefront path above: the mock
+    // lookup never resolved a real vendor's banner.
+    const vendorBanner = vendorCache[item.vendorId]?.bannerImage ?? getVendorBannerImage(item.vendorId);
 
     return (
       <TouchableOpacity
@@ -184,7 +229,7 @@ export default function OrdersScreen() {
             )}
           </View>
           <Text style={styles.totalAmount}>
-            {formatPriceWithCommas(item.total, (() => { const v = mockVendors.find(vv => vv.id === item.vendorId); return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG'); })())}
+            {formatPriceWithCommas(item.total, (() => { const v = vendorCache[item.vendorId]; return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG'); })())}
           </Text>
         </View>
 
@@ -253,10 +298,17 @@ export default function OrdersScreen() {
         }
         emptyAction={
           filterVendorId
-            ? canAccessStorefront(filterVendorId, true).allowed
+            ? (filterVendorId in vendorCache
+                ? accessForVendorStatus(vendorStatusFromRaw(vendorCache[filterVendorId]?.vendorStatus), true)
+                : canAccessStorefront(filterVendorId, true)
+              ).allowed
               ? {
                   label: 'View Storefront',
-                  onPress: () => router.push(getVendorStorefrontPath(filterVendorId) as any),
+                  onPress: () => {
+                    const liveVendor = vendorCache[filterVendorId];
+                    const path = liveVendor?.username ? `/store/${liveVendor.username.toLowerCase()}` : getVendorStorefrontPath(filterVendorId);
+                    router.push(path as any);
+                  },
                 }
               : undefined
             : activeTab === 'upcoming' && safeOrders.length === 0

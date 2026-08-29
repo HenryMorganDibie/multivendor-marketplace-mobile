@@ -22,6 +22,15 @@ interface CartItemRowProps {
   removeItemByIndex: (index: number) => void;
   onItemNamePress: (itemId: string, index: number) => void;
   isLocked?: boolean;
+  /**
+   * The cart's real vendor currency (useCartViewModel's vendorCurrency,
+   * already live-vendor-aware). Without this prop this component always
+   * priced every line item in the hardcoded mockVendor's currency
+   * regardless of which real vendor the cart actually belonged to — kept
+   * optional with the old fixture as a fallback only so nothing breaks if
+   * another caller renders this row without passing it.
+   */
+  currency?: Currency;
 }
 
 export function CartItemRow({
@@ -31,6 +40,7 @@ export function CartItemRow({
   removeItemByIndex,
   onItemNamePress,
   isLocked = false,
+  currency,
 }: CartItemRowProps) {
   const translateX = useRef(new Animated.Value(0)).current;
   const DELETE_THRESHOLD = -80;
@@ -102,8 +112,9 @@ export function CartItemRow({
   const lineSavings = unitSavings * item.quantity;
 
   const vendorCurrency: Currency =
-    (mockVendor.currency as Currency) ||
-    getCurrencyFromCountryCode(mockVendor.countryCode);
+    currency ??
+    ((mockVendor.currency as Currency) ||
+    getCurrencyFromCountryCode(mockVendor.countryCode));
 
   return (
     <View style={styles.swipeableContainer}>

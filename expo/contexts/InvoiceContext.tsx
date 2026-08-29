@@ -166,6 +166,15 @@ export interface InvoiceLineItem {
 export interface Invoice {
   id: string;
   invoiceNumber: string;
+  /**
+   * The vendor who raised this invoice (InvoiceDoc.vendorId on the backend).
+   * mapInvoiceDoc never captured this, so the public/customer invoice view
+   * (app/invoice-view/[shareCode].tsx) had no way to look up the real vendor
+   * and fell back to whichever vendor happened to be signed in on that
+   * device (or the mock fixture for an unauthenticated public visitor) —
+   * every shared invoice link showed the wrong business's contact details.
+   */
+  vendorId?: string;
   customerName: string;
   customerPhone?: string;
   customerEmail?: string;

@@ -177,6 +177,7 @@ export function CartScreen() {
                     removeItemByIndex={vm.removeItemByIndex}
                     onItemNamePress={vm.handleItemNamePress}
                     isLocked={vm.isCartLocked}
+                    currency={vm.vendorCurrency}
                   />
                   {hasUpdate && (
                     <View style={styles.itemUpdateBanner}>

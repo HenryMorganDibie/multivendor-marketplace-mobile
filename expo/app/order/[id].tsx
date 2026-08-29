@@ -41,13 +41,15 @@ import { VendorPolicyModal } from '@/components/VendorPolicyModal';
 import {
   getVendorStorefrontPath,
   getVendorBannerImage,
-  canAccessStorefront,
-  getVendorStatus,
+  vendorStatusFromRaw,
+  accessForVendorStatus,
 } from '@/utils/vendorLookup';
 import { getOrderLockState } from '@/utils/orderImmutability';
 import { useOrders } from '@/contexts/OrdersContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
-import { mockVendors } from '@/mocks/vendorData';
+import { mockVendors, type Vendor } from '@/mocks/vendorData';
+import { vendorRepository } from '@/services/repositories/vendorRepository';
 import { isVendorCurrentlyOpen, getNextOpenTime } from '@/utils/vendorAvailability';
 
 const ORDER_STEPS = [
@@ -71,11 +73,6 @@ function getActiveStepIndex(status: string): number {
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-function getOrderCurrency(vendorId?: string): Currency {
-  const v = mockVendors.find(vv => vv.id === vendorId);
-  return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG');
-}
-
 export default function OrderDetailsScreen() {
   const router = useRouter();
   const safeBack = useSafeBack();
@@ -85,6 +82,7 @@ export default function OrderDetailsScreen() {
   const fromChat = params.fromChat === 'true';
   const { getOrder, updateOrderStatus, markCustomerPaid, addPaymentProof, hasOrderPendingChanges } = useOrders();
   const { addMessageToChat, getConversationByPair } = useChats();
+  const { user } = useAuth();
 
   const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
 
@@ -95,12 +93,38 @@ export default function OrderDetailsScreen() {
 
   const order = useMemo(() => getOrder(orderId), [orderId, getOrder]);
 
-  const orderVendor = useMemo(() => mockVendors.find(v => v.id === order?.vendorId), [order?.vendorId]);
+  // mockVendors.find only ever matched the ten demo ids (v1-v10). For any
+  // real vendor this was always undefined, which silently disabled two
+  // customer-safety checks below: the "vendor is closed" notice never showed
+  // for a real closed vendor, and a real SUSPENDED vendor's active order
+  // never showed the suspension freeze — exactly the "treated as suspended
+  // when not, or vice versa" class of bug already fixed in the chat/inbox
+  // screens (see app/chat/[vendorId].tsx's vendorRepository.getById lookup,
+  // reused here).
+  const [liveOrderVendor, setLiveOrderVendor] = useState<Vendor | undefined>(undefined);
+  useEffect(() => {
+    const vendorId = order?.vendorId;
+    if (!vendorId) {
+      setLiveOrderVendor(undefined);
+      return;
+    }
+    let cancelled = false;
+    void vendorRepository.getById(vendorId).then((v) => {
+      if (!cancelled) setLiveOrderVendor(v);
+    });
+    return () => { cancelled = true; };
+  }, [order?.vendorId]);
+
+  const orderVendor = liveOrderVendor ?? mockVendors.find(v => v.id === order?.vendorId);
+  // Same live-vendor fix applied to currency: mockVendors.find alone always
+  // fell back to NGN for a real vendor's order total.
+  const getOrderCurrency = (_vendorId?: string): Currency =>
+    (orderVendor?.currency as Currency) || getCurrencyFromCountryCode(orderVendor?.countryCode || 'NG');
   const isOrderVendorClosed = orderVendor ? !isVendorCurrentlyOpen(orderVendor) : false;
   const orderVendorNextOpen = orderVendor ? getNextOpenTime(orderVendor) : '';
   const showClosedVendorNotice = order?.status === 'requested' && isOrderVendorClosed;
 
-  const vendorStatusForOrder = order ? getVendorStatus(order.vendorId) : 'active';
+  const vendorStatusForOrder = order ? vendorStatusFromRaw(orderVendor?.vendorStatus) : 'active';
   const isVendorSuspendedWithActiveOrder =
     vendorStatusForOrder === 'suspended' &&
     order != null &&
@@ -175,7 +199,11 @@ export default function OrderDetailsScreen() {
       Alert.alert('Store Unavailable', storefrontAccess.message ?? 'This store is not available.');
       return;
     }
-    router.push(getVendorStorefrontPath(order.vendorId) as any);
+    // getVendorStorefrontPath only resolves a username for the ten demo
+    // vendor ids — a dead tap for a real vendor's order. orderVendor above
+    // now carries the live vendor (once resolved) with its real username.
+    const path = orderVendor?.username ? `/store/${orderVendor.username.toLowerCase()}` : getVendorStorefrontPath(order.vendorId);
+    router.push(path as any);
   };
 
   const handleItemPress = (itemId: string) => {
@@ -198,7 +226,12 @@ export default function OrderDetailsScreen() {
     if (!order) return;
     const success = markCustomerPaid(order.id, proofs);
     if (success) {
-      const chat = getConversationByPair(order.vendorId, order.customerId || 'customer-001');
+      // order.customerId should always be set for a real, live order, but
+      // the fallback used to be the hardcoded fixture id 'customer-001' —
+      // wrong for any real signed-in customer, and it would have silently
+      // matched (or created a mismatch against) a chat that belongs to
+      // nobody real. The signed-in customer's own id is the correct fallback.
+      const chat = getConversationByPair(order.vendorId, order.customerId || user?.id || 'customer-001');
       if (chat) {
         addMessageToChat(chat.id, {
           type: 'system',
@@ -216,7 +249,7 @@ export default function OrderDetailsScreen() {
       console.log('[OrderDetails] Payment marked as completed for order:', order.id);
     }
     setShowPaymentConfirmModal(false);
-  }, [order, markCustomerPaid, getConversationByPair, addMessageToChat]);
+  }, [order, markCustomerPaid, getConversationByPair, addMessageToChat, user]);
 
   const handleUploadProofLater = useCallback(async () => {
     if (!order) return;
@@ -236,7 +269,12 @@ export default function OrderDetailsScreen() {
           uploadedAt: new Date().toISOString(),
         };
         addPaymentProof(order.id, proof);
-        const chat = getConversationByPair(order.vendorId, order.customerId || 'customer-001');
+        // order.customerId should always be set for a real, live order, but
+      // the fallback used to be the hardcoded fixture id 'customer-001' —
+      // wrong for any real signed-in customer, and it would have silently
+      // matched (or created a mismatch against) a chat that belongs to
+      // nobody real. The signed-in customer's own id is the correct fallback.
+      const chat = getConversationByPair(order.vendorId, order.customerId || user?.id || 'customer-001');
         if (chat) {
           addMessageToChat(chat.id, {
             type: 'system',
@@ -249,7 +287,7 @@ export default function OrderDetailsScreen() {
     } catch (error) {
       console.log('[OrderDetails] Upload proof error:', error);
     }
-  }, [order, addPaymentProof, getConversationByPair, addMessageToChat]);
+  }, [order, addPaymentProof, getConversationByPair, addMessageToChat, user]);
 
   // TODO: Phase 2: Re-order should rebuild the cart from the vendor's current catalog, show unavailable items/price changes, and require customer review before submitting a new order.
 
@@ -260,9 +298,11 @@ export default function OrderDetailsScreen() {
   const displayStatus = getOrderStatusLabel(order.status);
 
   const lockState = getOrderLockState(order.status);
-const vendorBanner = getVendorBannerImage(order.vendorId);
-  const vendorStatus = getVendorStatus(order.vendorId);
-  const storefrontAccess = canAccessStorefront(order.vendorId, true);
+  // Same mock-only gap as orderVendor above: prefer the live vendor's own
+  // banner/status once resolved, matching vendorStatusForOrder's fix.
+  const vendorBanner = orderVendor?.bannerImage ?? getVendorBannerImage(order.vendorId);
+  const vendorStatus = vendorStatusForOrder;
+  const storefrontAccess = accessForVendorStatus(vendorStatus, true);
 
   const lockStateIsRequested = lockState === 'REQUESTED';
   const lockStateIsAccepted = lockState === 'ACCEPTED';

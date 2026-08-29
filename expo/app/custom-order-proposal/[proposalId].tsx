@@ -25,7 +25,8 @@ import {
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { useCustomOrders } from '@/contexts/CustomOrderContext';
 import { formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
-import { mockVendors } from '@/mocks/vendorData';
+import { mockVendors, type Vendor } from '@/mocks/vendorData';
+import { vendorRepository } from '@/services/repositories/vendorRepository';
 
 export default function CustomerProposalScreen() {
   const router = useRouter();
@@ -36,6 +37,31 @@ export default function CustomerProposalScreen() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   const proposal = proposals.find((p) => p.id === proposalId);
+
+  // mockVendors.find(v => v.id === proposal?.vendorId), repeated five times
+  // below for each price line, only ever matched the ten demo ids — every
+  // real vendor's custom-order pricing silently displayed in NGN via the
+  // countryCode fallback. Resolved once here via vendorRepository.getById
+  // (same live lookup used for vendor-status checks elsewhere, e.g.
+  // app/chat/[vendorId].tsx) and reused by getProposalCurrency below.
+  const [liveProposalVendor, setLiveProposalVendor] = useState<Vendor | undefined>(undefined);
+  useEffect(() => {
+    const vendorId = proposal?.vendorId;
+    if (!vendorId) {
+      setLiveProposalVendor(undefined);
+      return;
+    }
+    let cancelled = false;
+    void vendorRepository.getById(vendorId).then((v) => {
+      if (!cancelled) setLiveProposalVendor(v);
+    });
+    return () => { cancelled = true; };
+  }, [proposal?.vendorId]);
+
+  const getProposalCurrency = (): Currency => {
+    const v = liveProposalVendor ?? mockVendors.find((vv) => vv.id === proposal?.vendorId);
+    return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG');
+  };
 
   const isDraft = proposal?.state === 'DRAFT';
   const isProposalSent = proposal?.state === 'PROPOSAL_SENT';
@@ -315,7 +341,7 @@ export default function CustomerProposalScreen() {
                               <Text style={styles.itemNote}>{item.note}</Text>
                             )}
                           </View>
-                          <Text style={styles.itemPrice}>{formatPriceWithCommas(item.amount, (() => { const v = mockVendors.find(vv => vv.id === proposal?.vendorId); return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG'); })())}</Text>
+                          <Text style={styles.itemPrice}>{formatPriceWithCommas(item.amount, getProposalCurrency())}</Text>
                         </View>
                       ))}
                     </View>
@@ -336,17 +362,17 @@ export default function CustomerProposalScreen() {
                   <View style={styles.card}>
                     <View style={styles.priceRow}>
                       <Text style={styles.priceLabel}>Subtotal</Text>
-                      <Text style={styles.priceValue}>{formatPriceWithCommas(proposal.subtotal, (() => { const v = mockVendors.find(vv => vv.id === proposal?.vendorId); return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG'); })())}</Text>
+                      <Text style={styles.priceValue}>{formatPriceWithCommas(proposal.subtotal, getProposalCurrency())}</Text>
                     </View>
                     {proposal.taxAmount && proposal.taxAmount > 0 ? (
                       <View style={[styles.priceRow, styles.priceRowBorder]}>
                         <Text style={styles.priceLabel}>Tax</Text>
-                        <Text style={styles.priceValue}>{formatPriceWithCommas(proposal.taxAmount, (() => { const v = mockVendors.find(vv => vv.id === proposal?.vendorId); return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG'); })())}</Text>
+                        <Text style={styles.priceValue}>{formatPriceWithCommas(proposal.taxAmount, getProposalCurrency())}</Text>
                       </View>
                     ) : null}
                     <View style={[styles.priceRow, styles.priceRowBorder, styles.priceRowTotal]}>
                       <Text style={styles.priceTotalLabel}>Total</Text>
-                      <Text style={styles.priceTotalValue}>{formatPriceWithCommas(proposal.total, (() => { const v = mockVendors.find(vv => vv.id === proposal?.vendorId); return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG'); })())}</Text>
+                      <Text style={styles.priceTotalValue}>{formatPriceWithCommas(proposal.total, getProposalCurrency())}</Text>
                     </View>
                   </View>
                 </View>
@@ -375,7 +401,7 @@ export default function CustomerProposalScreen() {
                           <Text style={styles.itemDescription}>{item.description}</Text>
                         )}
                       </View>
-                      <Text style={styles.itemPrice}>{formatPriceWithCommas(item.amount, (() => { const v = mockVendors.find(vv => vv.id === proposal?.vendorId); return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG'); })())}</Text>
+                      <Text style={styles.itemPrice}>{formatPriceWithCommas(item.amount, getProposalCurrency())}</Text>
                     </View>
                   ))}
                 </View>
