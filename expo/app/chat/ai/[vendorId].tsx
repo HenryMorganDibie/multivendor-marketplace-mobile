@@ -27,8 +27,8 @@ import { ChatActionMenu, ChatActionItem } from '@/components/ChatActionMenu';
 import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import { createRorkTool, useRorkAgent } from '@rork-ai/toolkit-sdk';
 import { z } from 'zod';
-import { mockVendors } from '@/mocks/vendorData';
 import type { Vendor, MenuItem } from '@/mocks/vendorData';
+import { vendorRepository } from '@/services/repositories/vendorRepository';
 import { useVendorMenu } from '@/data/hooks';
 import { useCustomerAiUsage } from '@/contexts/CustomerAiUsageContext';
 import { formatPrice } from '@/utils/formatPrice';
@@ -89,11 +89,29 @@ export default function VendorAIChatScreen() {
   const expiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordedReplyIdsRef = useRef<Set<string>>(new Set());
 
-  // Resolve vendor. Fall back to a sentinel that the plan gate will catch.
-  const vendor: Vendor | undefined = useMemo(
-    () => mockVendors.find((v) => v.id === vendorId),
-    [vendorId]
-  );
+  // Real vendor doc. Previously read from mockVendors, which only contains a
+  // handful of demo vendors — any real vendor not in that array resolved to
+  // `undefined` immediately, which the gates below treat as "store not
+  // found," so the platform AI was unreachable for every real vendor regardless
+  // of plan or quota. `isVendorLoading` distinguishes "still fetching" from
+  // "genuinely doesn't exist" so a real vendor doesn't flash the not-found
+  // screen while the fetch is in flight.
+  const [vendor, setVendor] = useState<Vendor | undefined>(undefined);
+  const [isVendorLoading, setIsVendorLoading] = useState(true);
+  useEffect(() => {
+    if (!vendorId) {
+      setIsVendorLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setIsVendorLoading(true);
+    void vendorRepository.getById(vendorId).then((v) => {
+      if (cancelled) return;
+      setVendor(v);
+      setIsVendorLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [vendorId]);
 
   // Vendor's real storefront catalog (same hook the storefront screen uses).
   const { data: menuData, isLoading: isMenuLoading } = useVendorMenu(vendorId ?? '');
@@ -393,6 +411,31 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
   }, [router, vendor]);
 
   /* --------------------------- gating states --------------------------- */
+
+  if (isVendorLoading) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView edges={['top']} style={styles.safeArea}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+              <ChevronLeft size={24} color={Colors.text} />
+            </TouchableOpacity>
+            <View style={styles.headerAiAvatar}>
+              <Sparkles size={16} color={Colors.white} />
+            </View>
+            <View style={styles.headerCenter}>
+              <Text style={styles.chatName}>the platform AI</Text>
+            </View>
+            <View style={styles.headerSpacer} />
+          </View>
+        </SafeAreaView>
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      </>
+    );
+  }
 
   if (!vendor) {
     return (

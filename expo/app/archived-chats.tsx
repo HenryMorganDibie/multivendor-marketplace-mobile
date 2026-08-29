@@ -109,21 +109,28 @@ export default function ArchivedChatsScreen() {
 
     if (chat.chatType === 'pre_order_inquiry') {
       router.push(`/chat/pre-order/${chat.vendorId}` as any);
-    } else {
-      const latestOrder = orders
-        .filter(o => o.vendorId === chat.vendorId && o.customerId === chat.customerId)
-        .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())[0];
-      if (latestOrder) {
-        router.push({
-          pathname: `/chat/order/[orderId]` as any,
-          params: {
-            orderId: latestOrder.id,
-            vendorName: chat.vendorName,
-            publicOrderId: latestOrder.publicOrderId,
-          },
-        });
-      }
+      return;
     }
+
+    // Navigate using the chat's own orderId rather than re-deriving "the
+    // latest order for this vendor+customer": a customer can have more than
+    // one order with the same vendor, so that re-derivation could open the
+    // wrong order, and if this particular order had since fallen out of the
+    // live orders list it found nothing at all — a silent dead tap.
+    const matchedOrder = orders
+      .filter(o => o.vendorId === chat.vendorId && o.customerId === chat.customerId)
+      .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())[0];
+    const targetOrderId = chat.orderId || matchedOrder?.id;
+    if (!targetOrderId) return;
+
+    router.push({
+      pathname: `/chat/order/[orderId]` as any,
+      params: {
+        orderId: targetOrderId,
+        vendorName: chat.vendorName,
+        publicOrderId: matchedOrder?.publicOrderId,
+      },
+    });
   };
 
   const handleUnarchive = (chatId: string) => {

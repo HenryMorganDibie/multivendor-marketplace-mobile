@@ -15,7 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { ChevronLeft, Send, Package, Truck, ChevronRight, Info } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
-import { mockVendor, mockVendors } from '@/mocks/vendorData';
+import { type Vendor } from '@/mocks/vendorData';
+import { vendorRepository } from '@/services/repositories/vendorRepository';
 import { useChats } from '@/contexts/ChatContext';
 import { ChatMessage } from '@/mocks/chatData';
 import { chatService } from '@/services/chatService';
@@ -51,7 +52,7 @@ const getStableColor = (name: string): string => {
   return colors[Math.abs(hash) % colors.length];
 };
 
-function PreOrderChatContent({ vendorId }: { vendorId: string }) {
+function PreOrderChatContent({ vendorId, vendor }: { vendorId: string; vendor: Vendor | undefined }) {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
   const { getPreOrderChat, addMessageToChat } = useChats();
@@ -61,8 +62,11 @@ function PreOrderChatContent({ vendorId }: { vendorId: string }) {
   const { canChat } = useVendorStatusPermissions();
 
   const preOrderChat = getPreOrderChat(vendorId);
-  const resolvedVendor = mockVendors.find(v => v.id === vendorId) ?? mockVendor;
-  const vendorName = resolvedVendor.name;
+  // Real vendor doc, fetched once by the wrapper below and passed down —
+  // backs vendor identity here and vendor currency further down. Previously
+  // read from mockVendors, which only contains a handful of demo vendors and
+  // silently fell back to a hardcoded mock vendor for everyone else.
+  const vendorName = vendor?.name || 'Vendor';
 
   const isChatBlocked = !canChat;
   const headerSubtitle = preOrderChat?.chatType === 'order_chat' ? CHAT_HEADER_SUBTITLES.orderConversation : CHAT_HEADER_SUBTITLES.preOrderInquiry;
@@ -76,6 +80,7 @@ function PreOrderChatContent({ vendorId }: { vendorId: string }) {
     }
   }, [preOrderChat]);
   const [messageText, setMessageText] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const hasVendorEngaged = messages.some(msg => msg.sender === 'vendor');
@@ -121,17 +126,22 @@ function PreOrderChatContent({ vendorId }: { vendorId: string }) {
   };
 
   const handleSendMessage = () => {
-    if (messageText.trim() === '' || !preOrderChat) return;
+    // isSendingMessage guard: messageText only clears once React re-renders,
+    // so a rapid double-tap could fire this handler twice on the same
+    // content before that happens, sending the same message twice.
+    if (messageText.trim() === '' || !preOrderChat || isSendingMessage) return;
 
     const messageContent = messageText.trim();
-    
+
     const validation = validateChatMessage(messageContent);
     if (!validation.isValid) {
       setValidationError(validation.errorMessage || 'Invalid message');
       setTimeout(() => setValidationError(null), 4000);
       return;
     }
-    
+
+    setIsSendingMessage(true);
+
     addMessageToChat(preOrderChat.id, {
       type: 'text',
       content: messageContent,
@@ -147,7 +157,10 @@ function PreOrderChatContent({ vendorId }: { vendorId: string }) {
           sender: 'customer',
         })
         .then((m) => console.log('[PRE-ORDER CHAT] Message persisted via chatService:', m.id))
-        .catch((err) => console.log('[PRE-ORDER CHAT] sendMessage failed:', err));
+        .catch((err) => console.log('[PRE-ORDER CHAT] sendMessage failed:', err))
+        .finally(() => setIsSendingMessage(false));
+    } else {
+      setIsSendingMessage(false);
     }
 
     setMessageText('');
@@ -297,7 +310,7 @@ function PreOrderChatContent({ vendorId }: { vendorId: string }) {
               </View>
               <View style={styles.menuItemInfo}>
                 <Text style={styles.menuItemName}>{item.name}</Text>
-                <Text style={styles.menuItemPrice}>{formatPriceWithCommas(Number(displayPrice) || 0, (() => { const v = mockVendors.find(vv => vv.id === vendorId); return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG'); })())}</Text>
+                <Text style={styles.menuItemPrice}>{formatPriceWithCommas(Number(displayPrice) || 0, (vendor?.currency as Currency) || getCurrencyFromCountryCode(vendor?.countryCode || 'NG'))}</Text>
               </View>
             </View>
             <TouchableOpacity
@@ -428,9 +441,9 @@ function PreOrderChatContent({ vendorId }: { vendorId: string }) {
             testID="chat-header-info"
             accessibilityLabel={`Open ${vendorName} chat info`}
           >
-            {resolvedVendor.logoImage ? (
+            {vendor?.logoImage ? (
               <Image
-                source={{ uri: resolvedVendor.logoImage }}
+                source={{ uri: vendor.logoImage }}
                 style={styles.avatarCircleHeader}
                 contentFit="cover"
               />
@@ -442,8 +455,8 @@ function PreOrderChatContent({ vendorId }: { vendorId: string }) {
             <View style={styles.headerCenter}>
               <Text style={styles.headerTitle} numberOfLines={1}>{vendorName}</Text>
               <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {resolvedVendor.username || resolvedVendor.slug
-                  ? `@${(resolvedVendor.username || resolvedVendor.slug || '').toLowerCase()}`
+                {vendor?.username || vendor?.slug
+                  ? `@${(vendor?.username || vendor?.slug || '').toLowerCase()}`
                   : headerSubtitle}
               </Text>
             </View>
@@ -529,10 +542,10 @@ function PreOrderChatContent({ vendorId }: { vendorId: string }) {
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (messageText.trim() === '' || isChatBlocked || isConversationExpired) && styles.sendButtonDisabled,
+              (messageText.trim() === '' || isChatBlocked || isConversationExpired || isSendingMessage) && styles.sendButtonDisabled,
             ]}
             onPress={handleSendMessage}
-            disabled={messageText.trim() === '' || isChatBlocked || isConversationExpired}
+            disabled={messageText.trim() === '' || isChatBlocked || isConversationExpired || isSendingMessage}
             activeOpacity={0.7}
           >
             <Send
@@ -553,16 +566,30 @@ function PreOrderChatContent({ vendorId }: { vendorId: string }) {
 export default function PreOrderChatScreen() {
   const { vendorId } = useLocalSearchParams<{ vendorId: string }>();
 
-  const normalizedStatus = useMemo(() => {
-    const vendor = mockVendors.find((v) => v.id === vendorId);
-    return normalizeVendorStatus(vendor?.vendorStatus);
+  // Real vendor doc, fetched once here and passed down to PreOrderChatContent
+  // so the status gate and the content below it read the same vendor.
+  // Previously read from mockVendors, which only contains a handful of demo
+  // vendors: any real vendor not in that array fell through to `undefined`,
+  // normalized to 'UNVERIFIED' rather than reflecting the vendor's real status.
+  const [vendor, setVendor] = useState<Vendor | undefined>(undefined);
+  useEffect(() => {
+    if (!vendorId) return;
+    let cancelled = false;
+    void vendorRepository.getById(vendorId).then((v) => {
+      if (!cancelled) setVendor(v);
+    });
+    return () => { cancelled = true; };
   }, [vendorId]);
+
+  const normalizedStatus = useMemo(() => {
+    return normalizeVendorStatus(vendor?.vendorStatus);
+  }, [vendor]);
 
   console.log('[PRE-ORDER CHAT] Gate status for vendorId:', vendorId, '->', normalizedStatus);
 
   return (
     <VendorStatusGate vendorStatus={normalizedStatus}>
-      <PreOrderChatContent vendorId={vendorId as string} />
+      <PreOrderChatContent vendorId={vendorId as string} vendor={vendor} />
     </VendorStatusGate>
   );
 }

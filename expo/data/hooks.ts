@@ -112,7 +112,17 @@ export function useAcceptOrder() {
 
       const order = getOrder(orderId);
       if (order) {
-        const customerId = order.customerId ?? 'customer_mock';
+        if (!order.customerId) {
+          // customerId is optional on Order, but a real accepted order always
+          // has one — this used to fall back to a hardcoded 'customer_mock',
+          // which wrote that fake id into BOTH participants' real inbox
+          // conversation records (lastSenderId), corrupting inbox metadata
+          // for the customer's own accepted order. Skip the conversion
+          // instead of writing a fake identity into real data.
+          console.error('[hooks] acceptOrder: order has no customerId, skipping chat/inbox conversion:', order.id);
+          return;
+        }
+        const customerId = order.customerId;
         const fulfillmentType = (order.fulfillmentType?.toLowerCase() === 'delivery' ? 'delivery' : 'pickup') as 'pickup' | 'delivery';
 
         console.log('[hooks] Converting inquiry chat to order chat for order:', order.id);

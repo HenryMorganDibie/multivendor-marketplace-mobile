@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Modal,
   Pressable,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,7 +26,8 @@ import {
   BadgeCheck,
 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
-import { mockVendors } from '@/mocks/vendorData';
+import type { Vendor } from '@/mocks/vendorData';
+import { vendorRepository } from '@/services/repositories/vendorRepository';
 
 import { useFavorites } from '@/contexts/FavoritesContext';
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
@@ -58,10 +60,27 @@ export default function VendorChatInfoScreen() {
   const vendorId = (params.vendorId as string) || '';
   const chatId = (params.chatId as string) || '';
 
-  const vendor = useMemo(
-    () => mockVendors.find((v) => v.id === vendorId),
-    [vendorId],
-  );
+  // Real vendor doc. Previously read from mockVendors, which only contains a
+  // handful of demo vendors — any real vendor not in that array resolved to
+  // `undefined` immediately, so this screen showed "Vendor unavailable" for
+  // every real vendor. `isVendorLoading` distinguishes "still fetching" from
+  // "genuinely doesn't exist" so a real vendor doesn't flash that state.
+  const [vendor, setVendor] = useState<Vendor | undefined>(undefined);
+  const [isVendorLoading, setIsVendorLoading] = useState(true);
+  useEffect(() => {
+    if (!vendorId) {
+      setIsVendorLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setIsVendorLoading(true);
+    void vendorRepository.getById(vendorId).then((v) => {
+      if (cancelled) return;
+      setVendor(v);
+      setIsVendorLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [vendorId]);
 
   const { isFavorite, toggleFavorite } = useFavorites();
   const { blockUser } = useBlockedUsers();
@@ -160,6 +179,19 @@ export default function VendorChatInfoScreen() {
     }
     setConfirm(null);
   }, [confirm, vendor, chatId, blockUser]);
+
+  if (isVendorLoading) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
+          <View style={styles.missingState}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
 
   if (!vendor) {
     return (

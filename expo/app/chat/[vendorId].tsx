@@ -19,11 +19,13 @@ import MessageStatusIcon from '@/components/MessageStatusIcon';
 import { PaymentRequestCard } from '@/components/PaymentRequestCard';
 import { useRouter, useLocalSearchParams, Stack, useFocusEffect } from 'expo-router';
 import { consumeChatSearchSignal } from '@/utils/chatSearchSignal';
-import { ChatMessage, getChatByVendorId, getChatByOrderId, MessageStatus } from '@/mocks/chatData';
+import { ChatMessage, getChatByOrderId, MessageStatus } from '@/mocks/chatData';
 import { chatService } from '@/services/chatService';
+import { useChats } from '@/contexts/ChatContext';
 import { useChatSubscription, mergeChatMessages } from '@/hooks/useChatMessages';
 import { OrderStatus, Order } from '@/mocks/ordersData';
-import { mockVendor, mockVendors } from '@/mocks/vendorData';
+import { type Vendor } from '@/mocks/vendorData';
+import { vendorRepository } from '@/services/repositories/vendorRepository';
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
 import { useChatRead } from '@/contexts/ChatReadContext';
 import { useVendorChatMode } from '@/contexts/VendorChatModeContext';
@@ -116,12 +118,33 @@ export default function CanonicalChatScreen() {
   const { isChatLimited } = useVendorChatMode();
   const { markChatAsRead } = useChatRead();
   const { orders } = useOrders();
+  const { getPreOrderChat } = useChats();
 
-  const preOrderChat = getChatByVendorId(vendorId, 'pre_order_inquiry');
-  const resolvedVendor = mockVendors.find(v => v.id === vendorId) ?? mockVendor;
-  const vendorName = resolvedVendor.name;
-  const isVendorSuspended = resolvedVendor.vendorStatus === 'SUSPENDED';
-  console.log('[CHAT] Vendor status:', resolvedVendor.vendorStatus, '| Suspended:', isVendorSuspended);
+  // getChatByVendorId (the free function from mocks/chatData) never received
+  // a customerId here, and its own signature treats a missing customerId as
+  // "match any customer" — so this used to resolve to whichever seeded chat
+  // happened to match this vendor first, regardless of who was signed in.
+  // getPreOrderChat is the same context method the pre-order chat screen
+  // already uses, scoped to the real signed-in customer via useAuth().
+  const preOrderChat = getPreOrderChat(vendorId);
+
+  // Real vendor doc — backs vendor identity, the suspension gate, and vendor
+  // currency below. Previously read from mockVendors, which only contains a
+  // handful of demo vendors: any real vendor not in that array silently fell
+  // back to a single hardcoded mock vendor, showing the wrong name and never
+  // reading as suspended.
+  const [resolvedVendor, setResolvedVendor] = useState<Vendor | undefined>(undefined);
+  useEffect(() => {
+    if (!vendorId) return;
+    let cancelled = false;
+    void vendorRepository.getById(vendorId).then((v) => {
+      if (!cancelled) setResolvedVendor(v);
+    });
+    return () => { cancelled = true; };
+  }, [vendorId]);
+  const vendorName = resolvedVendor?.name || 'Vendor';
+  const isVendorSuspended = resolvedVendor?.vendorStatus === 'SUSPENDED';
+  console.log('[CHAT] Vendor status:', resolvedVendor?.vendorStatus, '| Suspended:', isVendorSuspended);
 
   const activeOrders = useMemo(() => {
     // Real order statuses (types2.ts / OrdersContext) are lowercase
@@ -419,7 +442,7 @@ export default function CanonicalChatScreen() {
       const cardPaymentStatus = getCardPaymentStatus(orderItem);
       const showPaymentSubmitted = orderItem.status === 'accepted' && cardPaymentStatus === 'PAYMENT_SUBMITTED';
       const showPaymentConfirmed = cardPaymentStatus === 'PAID_CONFIRMED';
-      const orderCurrency = (() => { const v = mockVendors.find(vv => vv.id === orderItem.vendorId); return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG'); })();
+      const orderCurrency = (resolvedVendor?.currency as Currency) || getCurrencyFromCountryCode(resolvedVendor?.countryCode || 'NG');
 
       return (
         <View

@@ -27,7 +27,6 @@ import { useVendorDrafts } from '@/contexts/VendorDraftContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { validateChatMessage } from '@/utils/chatValidation';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
 
 const formatVendorDisplayName = (fullName?: string): string => {
   if (!fullName) return 'Unknown Customer';
@@ -61,6 +60,7 @@ export default function VendorPreOrderChatScreen() {
     }
   }, [preOrderChat]);
   const [messageText, setMessageText] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showCatalogModal, setShowCatalogModal] = useState(false);
@@ -134,17 +134,22 @@ export default function VendorPreOrderChatScreen() {
   };
 
   const handleSendMessage = () => {
-    if (messageText.trim() === '' || !preOrderChat) return;
+    // isSendingMessage guard: messageText only clears once React re-renders,
+    // so a rapid double-tap could fire this handler twice on the same
+    // content before that happens, sending the same message twice.
+    if (messageText.trim() === '' || !preOrderChat || isSendingMessage) return;
 
     const messageContent = messageText.trim();
-    
+
     const validation = validateChatMessage(messageContent);
     if (!validation.isValid) {
       setValidationError(validation.errorMessage || 'Invalid message');
       setTimeout(() => setValidationError(null), 4000);
       return;
     }
-    
+
+    setIsSendingMessage(true);
+
     addMessageToChat(preOrderChat.id, {
       type: 'text',
       content: messageContent,
@@ -160,7 +165,10 @@ export default function VendorPreOrderChatScreen() {
           sender: 'vendor',
         })
         .then((m) => console.log('[VENDOR PRE-ORDER CHAT] Message persisted via chatService:', m.id))
-        .catch((err) => console.log('[VENDOR PRE-ORDER CHAT] sendMessage failed:', err));
+        .catch((err) => console.log('[VENDOR PRE-ORDER CHAT] sendMessage failed:', err))
+        .finally(() => setIsSendingMessage(false));
+    } else {
+      setIsSendingMessage(false);
     }
 
     clearDraft(chatId);
@@ -298,7 +306,7 @@ export default function VendorPreOrderChatScreen() {
                     {item.description}
                   </Text>
                 )}
-                <Text style={styles.catalogItemCardPrice}>{formatPriceWithCommas(Number(displayPrice) || 0, (mockVendor.currency as Currency) || 'NGN')}</Text>
+                <Text style={styles.catalogItemCardPrice}>{formatPriceWithCommas(Number(displayPrice) || 0, (vendor.currency as Currency) || 'NGN')}</Text>
               </View>
             </View>
             <TouchableOpacity
@@ -445,7 +453,7 @@ export default function VendorPreOrderChatScreen() {
                 messageText.trim() !== '' && styles.sendButtonActive,
               ]}
               onPress={handleSendMessage}
-              disabled={messageText.trim() === ''}
+              disabled={messageText.trim() === '' || isSendingMessage}
               activeOpacity={0.8}
             >
               <ArrowUp
@@ -588,7 +596,7 @@ export default function VendorPreOrderChatScreen() {
                                   {item.description}
                                 </Text>
                               )}
-                              <Text style={styles.catalogItemPrice}>{formatPriceWithCommas(displayPrice, (mockVendor.currency as Currency) || 'NGN')}</Text>
+                              <Text style={styles.catalogItemPrice}>{formatPriceWithCommas(displayPrice, (vendor.currency as Currency) || 'NGN')}</Text>
                             </View>
                           </View>
                           <View style={[

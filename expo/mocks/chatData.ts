@@ -859,8 +859,16 @@ export const getPreOrderChat = (
  * Lookup order:
  *  1. Chat whose messages include an `order_context` message with matching orderId.
  *  2. Chat whose messages include a `change_request` whose `changeRequestData.orderId` matches.
- *  3. Fallback: look up the order in mockOrders, then find the order chat for that
- *     (vendorId, customerId) pair.
+ *
+ * Both real order chats (via convertToOrderChat / the backend's mapChatDoc,
+ * which both stamp orderContextData onto the message) and seeded mock chats
+ * carry this, so these two checks are sufficient. A third fallback used to
+ * look the order up in mockOrders and match a chat by (vendorId, customerId)
+ * — real orders never appear in mockOrders, so for a real order that
+ * fallback either matched nothing or, worse, matched an unrelated chat that
+ * happened to share the same vendor+customer pair. Removed rather than
+ * pointed at a real order source, since paths 1 and 2 already cover every
+ * real order chat.
  *
  * Returns undefined when no matching chat exists so the UI can render an empty state
  * instead of an unrelated chat.
@@ -877,22 +885,6 @@ export const getChatByOrderId = (orderId: string): Chat | undefined => {
     c.messages.some(m => m.changeRequestData?.orderId === orderId),
   );
   if (byChangeRequest) return byChangeRequest;
-
-  try {
-    // Lazy require to avoid a hard module cycle between chatData and ordersData.
-    const { mockOrders } = require('@/mocks/ordersData') as typeof import('@/mocks/ordersData');
-    const order = mockOrders.find(o => o.id === orderId);
-    if (order?.vendorId && order?.customerId) {
-      return mockChats.find(
-        c =>
-          c.vendorId === order.vendorId &&
-          c.customerId === order.customerId &&
-          normalizeChatType(c.chatType) === 'order_chat',
-      );
-    }
-  } catch (e) {
-    console.log('[chatData] getChatByOrderId order fallback failed', e);
-  }
 
   return undefined;
 };

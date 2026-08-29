@@ -26,7 +26,7 @@ import { chatService } from '@/services/chatService';
 import { CustomerInvoiceChatCard } from '@/features/chat/components/CustomerInvoiceChatCard';
 import { useChatSubscription, mergeChatMessages } from '@/hooks/useChatMessages';
 import { OrderStatus, Order } from '@/mocks/ordersData';
-import { mockVendors, type Vendor } from '@/mocks/vendorData';
+import { type Vendor } from '@/mocks/vendorData';
 import { vendorRepository } from '@/services/repositories/vendorRepository';
 import { useOrders } from '@/contexts/OrdersContext';
 
@@ -152,17 +152,12 @@ export default function OrderChatScreen() {
   const blockedUser = chatId ? getBlockedUserByChatId(chatId) : undefined;
   const isBlocked = !!blockedUser;
 
-  const orderVendor = order ? mockVendors.find(v => v.id === order.vendorId) : null;
-  const isVendorSuspendedOnActiveOrder =
-    orderVendor?.vendorStatus === 'SUSPENDED' &&
-    order != null &&
-    ['requested', 'accepted', 'confirmed', 'in_progress'].includes(order.status);
-  console.log('[ORDER CHAT] Vendor status:', orderVendor?.vendorStatus, '| Safety freeze active:', isVendorSuspendedOnActiveOrder);
-
-  // Real vendor doc, fetched separately from orderVendor above (which stays
-  // on mockVendors for the unrelated suspension check). Only used to show the
-  // vendor's actual configured payment instructions instead of the previous
-  // hardcoded bank details in the Payment Details modal.
+  // Real vendor doc — backs the suspension safety-freeze check, the payment
+  // instructions shown in the Payment Details modal, and vendor currency.
+  // Previously the suspension check read mockVendors directly, which only
+  // contains a handful of demo vendors: any real vendor not in that array
+  // fell through to `undefined`, so `vendorStatus === 'SUSPENDED'` was never
+  // true and a real suspended vendor's chat never froze.
   const [paymentVendor, setPaymentVendor] = useState<Vendor | undefined>(undefined);
   useEffect(() => {
     if (!order?.vendorId) return;
@@ -172,6 +167,12 @@ export default function OrderChatScreen() {
     });
     return () => { cancelled = true; };
   }, [order?.vendorId]);
+
+  const isVendorSuspendedOnActiveOrder =
+    paymentVendor?.vendorStatus === 'SUSPENDED' &&
+    order != null &&
+    ['requested', 'accepted', 'confirmed', 'in_progress'].includes(order.status);
+  console.log('[ORDER CHAT] Vendor status:', paymentVendor?.vendorStatus, '| Safety freeze active:', isVendorSuspendedOnActiveOrder);
 
   const fulfillmentTypeFromParams = (params.fulfillmentType as string) || 'Pickup';
   const orderTotalFromParams = params.orderTotal ? Number(params.orderTotal) : 0;
@@ -254,9 +255,8 @@ export default function OrderChatScreen() {
   const { toastVisible, showToast } = useToast();
 
   const vendorCurrency = useMemo(() => {
-    const v = mockVendors.find(vv => vv.id === currentOrder.vendorId);
-    return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG');
-  }, [currentOrder.vendorId]);
+    return (paymentVendor?.currency as Currency) || getCurrencyFromCountryCode(paymentVendor?.countryCode || 'NG');
+  }, [paymentVendor]);
 
   const hasPendingChangeRequest = useMemo(() => {
     return messages.some((m) => {
@@ -518,7 +518,7 @@ export default function OrderChatScreen() {
             <View style={styles.customOrderPreviewInfo}>
               <Text style={styles.customOrderPreviewTitle}>Custom Order</Text>
               <Text style={styles.customOrderPreviewItems}>{itemCount} {itemCount === 1 ? 'item' : 'items'}</Text>
-              <Text style={styles.customOrderPreviewTotal}>{formatPriceWithCommas(proposal.total, (() => { const v = mockVendors.find(vv => vv.id === proposal.vendorId); return (v?.currency as Currency) || 'NGN'; })())}</Text>
+              <Text style={styles.customOrderPreviewTotal}>{formatPriceWithCommas(proposal.total, vendorCurrency)}</Text>
             </View>
           </View>
           <TouchableOpacity
@@ -566,7 +566,7 @@ export default function OrderChatScreen() {
               </View>
               <View style={styles.menuItemInfo}>
                 <Text style={styles.menuItemName}>{item.name}</Text>
-                <Text style={styles.menuItemPrice}>{formatPriceWithCommas(Number(displayPrice) || 0, (() => { const v = mockVendors.find(vv => vv.id === order?.vendorId); return (v?.currency as Currency) || 'NGN'; })())}</Text>
+                <Text style={styles.menuItemPrice}>{formatPriceWithCommas(Number(displayPrice) || 0, vendorCurrency)}</Text>
               </View>
             </View>
             <TouchableOpacity
@@ -668,7 +668,7 @@ export default function OrderChatScreen() {
 
             <View style={styles.paymentRequestSection}>
               <Text style={styles.paymentRequestLabel}>Amount paid</Text>
-              <Text style={styles.paymentRequestValue}>{formatPriceWithCommas(data.amountPaid, (() => { const v = mockVendors.find(vv => vv.id === order?.vendorId); return (v?.currency as Currency) || 'NGN'; })())}</Text>
+              <Text style={styles.paymentRequestValue}>{formatPriceWithCommas(data.amountPaid, vendorCurrency)}</Text>
             </View>
 
             <Text style={styles.paymentRequestTimestamp}>{formatTime(message.timestamp)}</Text>
@@ -738,10 +738,6 @@ export default function OrderChatScreen() {
     }
 
     if (message.type === 'change_request' && message.changeRequestData) {
-      const vendorCurrency = (() => {
-        const v = mockVendors.find(vv => vv.id === order?.vendorId);
-        return (v?.currency as Currency) || 'NGN';
-      })();
       const effectiveStatus = changeRequestStatuses[message.id] || message.changeRequestData.status;
       const effectiveChangeRequest = { ...message.changeRequestData, status: effectiveStatus };
       return (
@@ -1275,7 +1271,7 @@ export default function OrderChatScreen() {
               <>
                 <View style={styles.paymentDetailSection}>
                   <Text style={styles.paymentDetailLabel}>Amount</Text>
-                  <Text style={styles.paymentDetailValue}>{formatPriceWithCommas(messages.find(m => m.id === showPaymentDetails)?.paymentRequestData?.amount || 0, (() => { const v = mockVendors.find(vv => vv.id === order?.vendorId); return (v?.currency as Currency) || 'NGN'; })())}</Text>
+                  <Text style={styles.paymentDetailValue}>{formatPriceWithCommas(messages.find(m => m.id === showPaymentDetails)?.paymentRequestData?.amount || 0, vendorCurrency)}</Text>
                 </View>
                 <View style={styles.paymentDetailSection}>
                   <Text style={styles.paymentDetailLabel}>Payment Method</Text>
