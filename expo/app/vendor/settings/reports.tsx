@@ -14,7 +14,6 @@ import type { Order } from '@/mocks/ordersData';
 import { useOrders } from '@/contexts/OrdersContext';
 import { useVendor } from '@/contexts/VendorContext';
 import { formatPriceCents, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
 import { Colors } from '@/constants/colors';
 
 type ReportType = 'monthly' | 'yearly';
@@ -144,9 +143,9 @@ export default function ReportsScreen() {
         <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${new Date(order.orderDate).toLocaleDateString()}</td>
         <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${order.fulfillmentType}</td>
         <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${order.paymentStatus === 'payment_received' ? 'Paid' : order.paymentStatus === 'partially_received' ? 'Partially Paid' : 'Unpaid'}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatPriceCents(order.total, (mockVendor.currency as Currency) || 'NGN')}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatPriceCents(order.discount, (mockVendor.currency as Currency) || 'NGN')}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatPriceCents(order.tax, (mockVendor.currency as Currency) || 'NGN')}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatPriceCents(order.total, (vendor.currency as Currency) || 'NGN')}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatPriceCents(order.discount, (vendor.currency as Currency) || 'NGN')}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatPriceCents(order.tax, (vendor.currency as Currency) || 'NGN')}</td>
         <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${order.status === 'cancelled' ? 'Yes' : 'No'}</td>
       </tr>
     `).join('');
@@ -182,7 +181,7 @@ export default function ReportsScreen() {
             <div class="summary-card"><h3>TOTAL ORDERS</h3><p>${totalOrders}</p></div>
             <div class="summary-card"><h3>COMPLETED</h3><p>${completedOrders}</p></div>
             <div class="summary-card"><h3>CANCELLED</h3><p>${cancelledOrders}</p></div>
-            <div class="summary-card"><h3>GROSS TOTAL</h3><p style="font-size: 20px;">${formatPriceCents(totalGross, (mockVendor.currency as Currency) || 'NGN')}</p></div>
+            <div class="summary-card"><h3>GROSS TOTAL</h3><p style="font-size: 20px;">${formatPriceCents(totalGross, (vendor.currency as Currency) || 'NGN')}</p></div>
           </div>
           <table>
             <thead>

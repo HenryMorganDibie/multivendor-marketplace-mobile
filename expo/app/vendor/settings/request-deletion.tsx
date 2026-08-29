@@ -219,8 +219,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 59, 48, 0.3)',
   },
   warningText: {
+    // Was hardcoded '#FFFFFF' against this card's light pink background and
+    // the screen's white Colors.background — invisible white-on-white/pink
+    // text on the account-deletion warning a vendor most needs to read.
     fontSize: 15,
-    color: '#FFFFFF',
+    color: Colors.text,
     lineHeight: 22,
     textAlign: 'center' as const,
     marginTop: 16,
@@ -231,13 +234,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 17,
     fontWeight: '600' as const,
-    color: '#FFFFFF',
+    color: Colors.text,
     marginBottom: 16,
   },
   fieldLabel: {
     fontSize: 15,
     fontWeight: '500' as const,
-    color: '#FFFFFF',
+    color: Colors.text,
     marginBottom: 8,
   },
   dropdown: {
@@ -300,9 +303,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   checkboxLabel: {
+    // Same white-on-white issue as warningText/sectionTitle/fieldLabel above.
     flex: 1,
     fontSize: 15,
-    color: '#FFFFFF',
+    color: Colors.text,
     lineHeight: 22,
   },
   primaryButton: {

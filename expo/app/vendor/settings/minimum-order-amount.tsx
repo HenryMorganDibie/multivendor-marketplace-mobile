@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -6,11 +6,8 @@ import { Alert } from '@/utils/alert';
 import { Colors } from '@/constants/colors';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { getCurrencySymbol, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
 import { useVendor } from '@/contexts/VendorContext';
 import { callable } from '@/lib/firebase';
-
-const CURRENCY = getCurrencySymbol((mockVendor.currency as Currency) || getCurrencyFromCountryCode(mockVendor.countryCode));
 
 function formatCurrencyDisplay(value: string): string {
   const num = value.replace(/[^0-9]/g, '');
@@ -23,6 +20,13 @@ function formatCurrencyDisplay(value: string): string {
 export default function MinimumOrderAmountScreen() {
   const router = useRouter();
   const { vendor } = useVendor();
+  // The signed-in vendor's own currency, not the demo fixture's — this was
+  // computed once at module load from mockVendor, so every real vendor saw
+  // the demo currency symbol regardless of their own country/currency.
+  const CURRENCY = useMemo(
+    () => getCurrencySymbol((vendor.currency as Currency) || getCurrencyFromCountryCode(vendor.countryCode)),
+    [vendor.currency, vendor.countryCode]
+  );
   const [savedEnabled, setSavedEnabled] = useState(false);
   const [savedAmount, setSavedAmount] = useState('');
 

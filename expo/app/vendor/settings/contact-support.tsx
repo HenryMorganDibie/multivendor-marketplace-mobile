@@ -151,7 +151,11 @@ const styles = StyleSheet.create({
   },
   messageInput: {
     fontSize: 17,
-    color: '#FFFFFF',
+    // Was hardcoded '#FFFFFF' (white) against this screen's white
+    // Colors.background container — the vendor's typed text was invisible
+    // while composing a support message. Leftover from an abandoned dark
+    // mockup; Colors.text matches the actual light background used here.
+    color: Colors.text,
     minHeight: 200,
     textAlignVertical: 'top',
   },

@@ -17,6 +17,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import LaektivaModal from '@/components/LaektivaModal';
 import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
 import { usePromo, type PromotionType, type VendorPromotionDraft } from '@/contexts/PromoContext';
+import { useVendor } from '@/contexts/VendorContext';
+import { getCurrencySymbol, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
 
 const TYPE_OPTIONS: { value: PromotionType; label: string }[] = [
   { value: 'percentage', label: 'Percentage off' },
@@ -31,6 +33,10 @@ export default function EditPromoScreen() {
   const { promoId } = useLocalSearchParams<{ promoId: string }>();
   const { getPromotion, updatePromotion } = usePromo();
   const promo = promoId ? getPromotion(promoId) : null;
+  // The signed-in vendor's own currency, not a hardcoded ₦ — this app
+  // supports non-Nigerian vendors (Canada/US/etc, see business-location.tsx).
+  const { vendor } = useVendor();
+  const currencySymbol = getCurrencySymbol((vendor.currency as Currency) || getCurrencyFromCountryCode(vendor.countryCode));
 
   const [type, setType] = useState<PromotionType>('percentage');
   const [discountValue, setDiscountValue] = useState('');
@@ -145,7 +151,7 @@ export default function EditPromoScreen() {
             <View style={styles.section}>
               <Text style={styles.label}>Discount Value</Text>
               <View style={styles.inputWithPrefix}>
-                {type === 'flat' && <Text style={styles.prefix}>₦</Text>}
+                {type === 'flat' && <Text style={styles.prefix}>{currencySymbol}</Text>}
                 <TextInput
                   style={[styles.input, type === 'flat' && styles.inputWithPrefixInput]}
                   value={discountValue}
@@ -202,7 +208,7 @@ export default function EditPromoScreen() {
           <View style={styles.section}>
             <Text style={styles.label}>Minimum Order (optional)</Text>
             <View style={styles.inputWithPrefix}>
-              <Text style={styles.prefix}>₦</Text>
+              <Text style={styles.prefix}>{currencySymbol}</Text>
               <TextInput
                 style={[styles.input, styles.inputWithPrefixInput]}
                 value={minimumOrder}
