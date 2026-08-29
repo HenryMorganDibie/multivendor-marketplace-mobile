@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Colors } from '@/constants/colors';
 import SegmentedControl from '@/components/SegmentedControl';
 import {
@@ -14,6 +14,8 @@ import { ChevronLeft, Heart, Store, UtensilsCrossed } from 'lucide-react-native'
 import { useRouter } from 'expo-router';
 import { useSafeBack } from '@/utils/useSafeBack';
 import { formatPrice } from '@/utils/formatPrice';
+import { useFavorites } from '@/contexts/FavoritesContext';
+import { vendorService } from '@/services/vendorService';
 
 type FavTab = 'all' | 'vendors' | 'items';
 
@@ -36,7 +38,10 @@ interface FavItem {
   vendorId: string;
 }
 
-const MOCK_FAV_VENDORS: FavVendor[] = [];
+// There is no per-item favoriting anywhere in the app (no data model, no
+// heart-toggle wired to an item) - only vendors can be favorited
+// (FavoritesContext, wired up from the storefront and vendor-info screens).
+// Items stay an empty, always-empty list until that is actually built.
 const MOCK_FAV_ITEMS: FavItem[] = [];
 
 export default function FavoritesScreen() {
@@ -44,8 +49,41 @@ export default function FavoritesScreen() {
   const insets = useSafeAreaInsets();
   const safeBack = useSafeBack();
   const [activeTab, setActiveTab] = useState<FavTab>('all');
+  const { favoriteVendorIds, toggleFavorite } = useFavorites();
+  const [favVendors, setFavVendors] = useState<FavVendor[]>([]);
 
-  const favVendors = MOCK_FAV_VENDORS;
+  // This screen used to render two hardcoded, permanently-empty arrays
+  // instead of the real favorites system: FavoritesContext already persists
+  // favorited vendor ids (AsyncStorage) and is wired up from the storefront
+  // and chat/vendor-info screens' heart buttons, but nothing ever read it
+  // back here, so a vendor a customer favorited was never visible in their
+  // own Favorites list. Resolve each favorited id against the live vendor
+  // record (same pattern as vendorService.getById elsewhere) to render it.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      Array.from(favoriteVendorIds).map((id) => vendorService.getById(id))
+    ).then((resolved) => {
+      if (cancelled) return;
+      setFavVendors(
+        resolved
+          .filter((v): v is NonNullable<typeof v> => v !== undefined)
+          .map((v) => ({
+            id: v.id,
+            name: v.name,
+            category: v.category,
+            rating: v.rating,
+            reviewCount: v.reviewCount,
+            bannerImage: v.bannerImage ?? '',
+            username: v.username,
+          }))
+      );
+    }).catch((err) => console.error('[FAVORITES] Failed to resolve favorite vendors:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [favoriteVendorIds]);
+
   const favItems = MOCK_FAV_ITEMS;
 
   const hasVendors = favVendors.length > 0;
@@ -68,7 +106,14 @@ export default function FavoritesScreen() {
         <Text style={styles.vendorCardName} numberOfLines={1}>{vendor.name}</Text>
         <Text style={styles.vendorCardMeta}>{vendor.category} · ⭐ {vendor.rating} ({vendor.reviewCount})</Text>
       </View>
-      <TouchableOpacity style={styles.heartButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      <TouchableOpacity
+        style={styles.heartButton}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        onPress={(e) => {
+          e.stopPropagation();
+          toggleFavorite(vendor.id);
+        }}
+      >
         <Heart size={18} color="#FF3B30" fill="#FF3B30" />
       </TouchableOpacity>
     </TouchableOpacity>

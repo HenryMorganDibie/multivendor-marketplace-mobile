@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Colors } from '@/constants/colors';
 import {
   View,
@@ -15,6 +15,8 @@ import { ChevronLeft } from 'lucide-react-native';
 import { Vendor } from '@/mocks/vendorData';
 import { useVendorFilter, slugToCategory } from '@/contexts/VendorFilterContext';
 import { useUserLocation } from '@/contexts/UserLocationContext';
+import { useRecentlyViewed } from '@/contexts/RecentlyViewedContext';
+import { vendorService } from '@/services/vendorService';
 import VendorCard from '@/components/VendorCard';
 
 export default function VendorSectionScreen() {
@@ -31,8 +33,31 @@ export default function VendorSectionScreen() {
     trendingVendors,
   } = useVendorFilter();
   const { regionName, city } = useUserLocation();
+  const { recentVendors } = useRecentlyViewed();
+  const [resolvedRecentVendors, setResolvedRecentVendors] = useState<Vendor[]>([]);
 
   const locationLabel = city || regionName || 'Your Region';
+
+  // The 'recent' section used to show an arbitrary slice of all verified
+  // vendors mislabeled as "Recently Viewed" instead of the vendors the
+  // customer actually viewed (tracked in RecentlyViewedContext). Each entry
+  // there is only a snapshot captured at view time, so it's re-resolved
+  // against the live vendor record here rather than rendered as-is — the
+  // same stale-data fix applied to the home screen's inline Recently Viewed
+  // card and to app/customer/recently-viewed.tsx.
+  useEffect(() => {
+    if (section !== 'recent') return;
+    let cancelled = false;
+    Promise.all(recentVendors.map((entry) => vendorService.getById(entry.vendorId)))
+      .then((resolved) => {
+        if (cancelled) return;
+        setResolvedRecentVendors(resolved.filter((v): v is Vendor => v !== undefined));
+      })
+      .catch((err) => console.error('[VENDOR SECTION] Failed to resolve recently viewed vendors:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [section, recentVendors]);
 
   const { title, vendors } = useMemo(() => {
     console.log('[VENDOR SECTION] section:', section);
@@ -46,7 +71,7 @@ export default function VendorSectionScreen() {
       case 'recent':
         return {
           title: 'Recently Viewed',
-          vendors: verifiedVendors.slice(0, 10),
+          vendors: resolvedRecentVendors,
         };
       case 'open-now':
         return {
@@ -90,7 +115,7 @@ export default function VendorSectionScreen() {
         };
       }
     }
-  }, [section, verifiedVendors, getOpenVerifiedVendors, getVerifiedVendorsByCategory, dynamicCategories, newVendorsNearYou, popularVendorsNearYou, trendingVendors, locationLabel]);
+  }, [section, verifiedVendors, getOpenVerifiedVendors, getVerifiedVendorsByCategory, dynamicCategories, newVendorsNearYou, popularVendorsNearYou, trendingVendors, locationLabel, resolvedRecentVendors]);
 
   const toggleFavorite = (vendorId: string) => {
     setFavorites(prev => {

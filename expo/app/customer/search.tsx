@@ -17,18 +17,10 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, Clock, X, UserPlus, SearchX, Search } from 'lucide-react-native';
 import VendorCard from '@/components/VendorCard';
 import { useVendorFilter } from '@/contexts/VendorFilterContext';
+import { useSearch } from '@/contexts/SearchContext';
 import { isUsernameSearch, extractUsername } from '@/utils/usernameValidation';
 import { safeShare } from '@/utils/share';
 import { Vendor } from '@/mocks/vendorData';
-
-const RECENT_SEARCHES = [
-  "Mama T's Kitchen",
-  'TechFix Pro',
-  'Style Lounge',
-  'Handmade bags',
-  'Phone cases',
-  'Beauty tools',
-];
 
 const RECOMMENDED_SEARCHES = [
   'Fashion',
@@ -87,6 +79,8 @@ export default function CustomerSearchScreen() {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [showAllRecent, setShowAllRecent] = useState(false);
   const { verifiedVendors, dynamicCategories } = useVendorFilter();
+  const { history, addToHistory } = useSearch();
+  const recentSearches = useMemo(() => history.map(entry => entry.query), [history]);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -130,8 +124,14 @@ export default function CustomerSearchScreen() {
   const handleRecentSearchPress = useCallback((query: string) => {
     console.log('[SEARCH] recent/recommended search tapped:', query);
     setSearchQuery(query);
+    addToHistory(query);
     inputRef.current?.focus();
-  }, []);
+  }, [addToHistory]);
+
+  const handleSubmitSearch = useCallback(() => {
+    if (searchQuery.trim().length === 0) return;
+    addToHistory(searchQuery);
+  }, [searchQuery, addToHistory]);
 
   const isHandleSearch = isUsernameSearch(searchQuery);
   const username = isHandleSearch ? extractUsername(searchQuery) : null;
@@ -180,7 +180,7 @@ export default function CustomerSearchScreen() {
   const showResults = searchQuery.trim().length > 0;
   const isUsernameNotFound = isHandleSearch && filteredVendors.length === 0 && searchQuery.trim().length > 0;
   const isGeneralNotFound = !isHandleSearch && filteredVendors.length === 0 && searchQuery.trim().length > 0;
-  const displayedRecentSearches = showAllRecent ? RECENT_SEARCHES : RECENT_SEARCHES.slice(0, 5);
+  const displayedRecentSearches = showAllRecent ? recentSearches : recentSearches.slice(0, 5);
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
@@ -204,6 +204,7 @@ export default function CustomerSearchScreen() {
               placeholderTextColor={Colors.textMuted}
               value={searchQuery}
               onChangeText={setSearchQuery}
+              onSubmitEditing={handleSubmitSearch}
               returnKeyType="search"
               autoCapitalize="none"
               autoCorrect={false}
@@ -230,11 +231,11 @@ export default function CustomerSearchScreen() {
       >
         {!showResults ? (
           <>
-            {RECENT_SEARCHES.length > 0 && (
+            {recentSearches.length > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeaderRow}>
                   <Text style={styles.sectionTitle}>Recent Searches</Text>
-                  {RECENT_SEARCHES.length > 5 && (
+                  {recentSearches.length > 5 && (
                     <Pressable onPress={() => setShowAllRecent(!showAllRecent)}>
                       <Text style={styles.seeMoreText}>
                         {showAllRecent ? 'See Less' : 'See More'}

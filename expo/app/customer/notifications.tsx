@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Bell, BellOff } from 'lucide-react-native';
 import { useCustomerNotifications } from '@/contexts/CustomerNotificationContext';
-import { getVendorStorefrontPath } from '@/utils/vendorLookup';
+import { vendorService } from '@/services/vendorService';
 import {
   NotificationItem,
   NotificationItemData,
@@ -42,7 +42,7 @@ export default function CustomerNotificationsScreen() {
 
   const sections = useMemo(() => groupNotificationsByDate(mappedNotifications), [mappedNotifications]);
 
-  const handleNotificationPress = useCallback((notification: NotificationItemData) => {
+  const handleNotificationPress = useCallback(async (notification: NotificationItemData) => {
     markAsRead(notification.id);
     const raw = notifications.find(n => n.id === notification.id);
     if (!raw) return;
@@ -60,16 +60,25 @@ export default function CustomerNotificationsScreen() {
         router.push('/customer/(tabs)/chats' as any);
       }
     } else if (raw.domain === 'order') {
-      // getVendorStorefrontPath resolves against the local mocks/vendorData.ts
-      // fixture array — a real vendorId is never in it, so this silently
-      // fell through to '/' (app home) for every real order notification.
-      // updateOrderStatus.ts and createOrder.ts both set metadata.orderId on
-      // these, so route straight to the real order instead of through that
-      // broken lookup.
       if (raw.orderId) {
         router.push(`/order/${raw.orderId}` as any);
       } else if (raw.vendorId) {
-        router.push(getVendorStorefrontPath(raw.vendorId) as any);
+        // getVendorStorefrontPath (utils/vendorLookup.ts) resolves against
+        // the local mocks/vendorData.ts fixture array — a real vendorId is
+        // never in it, so this silently fell through to '/' (app home) for
+        // every order notification that lacked orderId. Resolve against the
+        // live vendor record instead, the same pattern used everywhere else
+        // a vendorId needs a current username (vendorService.getById).
+        try {
+          const vendor = await vendorService.getById(raw.vendorId);
+          if (vendor?.username) {
+            router.push(`/store/${vendor.username.toLowerCase()}` as any);
+          } else {
+            console.log('[NOTIFICATIONS] No resolvable vendor for notification:', raw.vendorId);
+          }
+        } catch (err) {
+          console.error('[NOTIFICATIONS] Failed to resolve vendor storefront:', err);
+        }
       }
     }
   }, [markAsRead, notifications, router]);
