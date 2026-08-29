@@ -36,7 +36,16 @@ function VendorCard({
       onPress(vendor);
       return;
     }
-    if (!vendor?.username) return;
+    if (!vendor?.username) {
+      // Storefront routing is keyed strictly on username with no id fallback
+      // (vendorRepository.getByUsername) — a vendor missing this silently
+      // becomes untappable everywhere this card is used, with no visible
+      // sign anything is wrong. Logging so this is at least debuggable
+      // instead of a silent no-op, per the Recently Viewed dead-tap found
+      // 2026-08-29.
+      console.log('[VendorCard] Vendor has no resolvable username, cannot open storefront:', vendor?.id, vendor?.name);
+      return;
+    }
     router.push(`/store/${vendor.username.toLowerCase()}` as any);
   }, [vendor, router, onPress]);
 

@@ -19,6 +19,7 @@ import { Colors } from '@/constants/colors';
 import { useCountryStatus } from '@/contexts/CountryStatusContext';
 import { useResponsive } from '@/constants/layout';
 import { useContextualVendorClusters } from '@/hooks/useContextualVendorClusters';
+import { vendorService } from '@/services/vendorService';
 
 export default function CustomerHomeScreen() {
   const router = useRouter();
@@ -272,10 +273,32 @@ export default function CustomerHomeScreen() {
             <TouchableOpacity
               key={entry.id}
               style={styles.recentVendorCard}
-              onPress={() => {
+              onPress={async () => {
                 console.log('[HOME] Recently viewed vendor tapped:', entry.name);
-                if (entry.username) {
-                  router.push(`/store/${entry.username.toLowerCase()}` as any);
+                // entry.username is a snapshot captured whenever this vendor
+                // was first viewed, saved to AsyncStorage and never refreshed
+                // (RecentlyViewedContext.tsx). If the vendor didn't have a
+                // finalized username yet at that moment (e.g. mid-setup),
+                // this stays permanently stale, and the storefront route is
+                // keyed strictly on username with no id fallback
+                // (vendorRepository.getByUsername), so a stale/missing value
+                // here silently fails on every future tap even after the
+                // vendor's real username is set. Re-resolve the current
+                // vendor by id first; only fall back to the stored snapshot
+                // if that lookup fails (e.g. offline).
+                try {
+                  const current = await vendorService.getById(entry.vendorId);
+                  const liveUsername = current?.username || entry.username;
+                  if (liveUsername) {
+                    router.push(`/store/${liveUsername.toLowerCase()}` as any);
+                  } else {
+                    console.log('[HOME] Recently viewed vendor has no resolvable username:', entry.vendorId);
+                  }
+                } catch (err) {
+                  console.log('[HOME] Failed to resolve current vendor, falling back to stored username:', err);
+                  if (entry.username) {
+                    router.push(`/store/${entry.username.toLowerCase()}` as any);
+                  }
                 }
               }}
               activeOpacity={0.75}
