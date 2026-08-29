@@ -44,7 +44,7 @@ import DiscardChangesModal from '@/components/DiscardChangesModal';
 import EditScreenHeader from '@/components/EditScreenHeader';
 import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
 import { formatPriceWithCommas, getCurrencySymbol, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
 import { callable } from '@/lib/firebase';
 
@@ -258,8 +258,9 @@ function DropdownSelector({ label, value, options, onSelect, placeholder }: Drop
 export default function RecordExternalOrderScreen() {
   const router = useRouter();
   const { plan } = useVendorPlan();
+  const { vendor } = useVendor();
   const canUseScreenshots = plan === 'pro' || plan === 'pro+';
-  const vendorCurrency = (mockVendor.currency as Currency) || 'NGN';
+  const vendorCurrency = (vendor.currency as Currency) || 'NGN';
 
   const [items, setItems] = useState<OrderItem[]>([]);
   const [openRowId, setOpenRowId] = useState<string | null>(null);

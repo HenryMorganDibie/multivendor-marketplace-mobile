@@ -24,7 +24,7 @@ import { useCustomOrders, CustomOrderItem } from '@/contexts/CustomOrderContext'
 import { useQuery } from '@tanstack/react-query';
 import { formatCustomerNameFromFull } from '@/utils/formatCustomerName';
 import { formatPriceWithCommas, getCurrencySymbol, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 
 interface SwipeableItemProps {
   item: CustomOrderItem;
@@ -34,6 +34,7 @@ interface SwipeableItemProps {
 }
 
 function SwipeableItem({ item, onEdit, onDelete, isDraft }: SwipeableItemProps) {
+  const { vendor } = useVendor();
   const translateX = useRef(new Animated.Value(0)).current;
 
   const SWIPE_THRESHOLD = -80;
@@ -110,11 +111,11 @@ function SwipeableItem({ item, onEdit, onDelete, isDraft }: SwipeableItemProps) 
               <Text style={styles.itemNote}>Note: {item.note}</Text>
             )}
             <Text style={styles.itemMeta}>
-              {item.quantity} × {formatPriceWithCommas(item.unitPrice, (mockVendor.currency as Currency) || 'NGN')}
+              {item.quantity} × {formatPriceWithCommas(item.unitPrice, (vendor.currency as Currency) || 'NGN')}
             </Text>
           </View>
           <View style={styles.itemRight}>
-            <Text style={styles.itemAmount}>{formatPriceWithCommas(item.amount, (mockVendor.currency as Currency) || 'NGN')}</Text>
+            <Text style={styles.itemAmount}>{formatPriceWithCommas(item.amount, (vendor.currency as Currency) || 'NGN')}</Text>
           </View>
         </View>
       </Animated.View>
@@ -125,6 +126,7 @@ function SwipeableItem({ item, onEdit, onDelete, isDraft }: SwipeableItemProps) 
 export default function VendorCustomOrderScreen() {
   const { orderId: proposalId, chatId, customerName, vendorId, vendorSlug } = useLocalSearchParams();
   const { proposals, createProposal, updateProposal, deleteProposal, sendProposal, recallProposal } = useCustomOrders();
+  const { vendor } = useVendor();
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [editingItem, setEditingItem] = useState<CustomOrderItem | null>(null);
 
@@ -600,19 +602,19 @@ export default function VendorCustomOrderScreen() {
         <View style={styles.summary}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryValue}>{formatPriceWithCommas(proposal.subtotal, (mockVendor.currency as Currency) || 'NGN')}</Text>
+            <Text style={styles.summaryValue}>{formatPriceWithCommas(proposal.subtotal, (vendor.currency as Currency) || 'NGN')}</Text>
           </View>
           {proposal.taxAmount && proposal.taxAmount > 0 && (
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Tax</Text>
-              <Text style={styles.summaryValue}>{formatPriceWithCommas(proposal.taxAmount, (mockVendor.currency as Currency) || 'NGN')}</Text>
+              <Text style={styles.summaryValue}>{formatPriceWithCommas(proposal.taxAmount, (vendor.currency as Currency) || 'NGN')}</Text>
             </View>
           )}
           <View style={[styles.summaryRow, styles.summaryTotal]}>
             <Text style={styles.summaryTotalLabel}>
               {(isDraft || isProposalSent) && taxSettings.collectTax ? 'Estimated total' : 'Total'}
             </Text>
-            <Text style={styles.summaryTotalValue}>{formatPriceWithCommas(proposal.total, (mockVendor.currency as Currency) || 'NGN')}</Text>
+            <Text style={styles.summaryTotalValue}>{formatPriceWithCommas(proposal.total, (vendor.currency as Currency) || 'NGN')}</Text>
           </View>
         </View>
 

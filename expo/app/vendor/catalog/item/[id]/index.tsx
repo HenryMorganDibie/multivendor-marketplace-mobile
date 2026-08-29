@@ -35,7 +35,6 @@ import { useCatalog } from '@/contexts/CatalogContext';
 import { useVendor } from '@/contexts/VendorContext';
 import { Colors } from '@/constants/colors';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
 import { HIGHLIGHT_LABEL_OPTIONS } from '@/utils/itemTagging';
 import ForwardToModal, { type ForwardPayload } from '@/components/ForwardToModal';
 import { shareItem, checkShareable } from '@/lib/storefront/shareStorefront';
@@ -67,7 +66,7 @@ export default function ItemDetailsScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   const item = getItemById(id as string);
-  const currency = (mockVendor.currency as Currency) || 'NGN';
+  const currency = (vendor.currency as Currency) || 'NGN';
 
   if (!item) return null;
 

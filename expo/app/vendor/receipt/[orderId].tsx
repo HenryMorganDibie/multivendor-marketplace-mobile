@@ -17,11 +17,12 @@ import { useOrders } from '@/contexts/OrdersContext';
 import { formatCustomerNameFromFull } from '@/utils/formatCustomerName';
 import { formatVendorOrderId } from '@/utils/formatOrderId';
 import { formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 
 export default function ReceiptScreen() {
   const { orderId } = useLocalSearchParams();
   const { orders } = useOrders();
+  const { vendor } = useVendor();
   const order = orders.find(o => o.id === orderId);
   const [showMenu, setShowMenu] = useState(false);
 
@@ -167,7 +168,7 @@ export default function ReceiptScreen() {
                   )}
                 </View>
                 <Text style={styles.itemAmount}>
-                  {formatPriceWithCommas(item.price * item.quantity, (mockVendor.currency as Currency) || 'NGN')}
+                  {formatPriceWithCommas(item.price * item.quantity, (vendor.currency as Currency) || 'NGN')}
                 </Text>
               </View>
             </React.Fragment>
@@ -181,14 +182,14 @@ export default function ReceiptScreen() {
         <View style={styles.settingsCard}>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Subtotal</Text>
-            <Text style={styles.totalValue}>{formatPriceWithCommas(order.subtotal, (mockVendor.currency as Currency) || 'NGN')}</Text>
+            <Text style={styles.totalValue}>{formatPriceWithCommas(order.subtotal, (vendor.currency as Currency) || 'NGN')}</Text>
           </View>
           {order.tax > 0 && (
             <>
               <View style={styles.divider} />
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Tax</Text>
-                <Text style={styles.totalValue}>{formatPriceWithCommas(order.tax, (mockVendor.currency as Currency) || 'NGN')}</Text>
+                <Text style={styles.totalValue}>{formatPriceWithCommas(order.tax, (vendor.currency as Currency) || 'NGN')}</Text>
               </View>
             </>
           )}
@@ -197,14 +198,14 @@ export default function ReceiptScreen() {
               <View style={styles.divider} />
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Discount</Text>
-                <Text style={styles.totalValue}>-{formatPriceWithCommas(order.discount, (mockVendor.currency as Currency) || 'NGN')}</Text>
+                <Text style={styles.totalValue}>-{formatPriceWithCommas(order.discount, (vendor.currency as Currency) || 'NGN')}</Text>
               </View>
             </>
           )}
           <View style={styles.divider} />
           <View style={styles.totalRow}>
             <Text style={styles.grandTotalLabel}>Total Paid</Text>
-            <Text style={styles.grandTotalValue}>{formatPriceWithCommas(order.total, (mockVendor.currency as Currency) || 'NGN')}</Text>
+            <Text style={styles.grandTotalValue}>{formatPriceWithCommas(order.total, (vendor.currency as Currency) || 'NGN')}</Text>
           </View>
         </View>
 

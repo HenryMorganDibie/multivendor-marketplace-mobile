@@ -25,13 +25,14 @@ import LaektivaModal from '@/components/LaektivaModal';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
 import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
 import { getCurrencySymbol, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import { uploadCatalogItemPhotos } from '@/lib/catalog/uploadCatalogItemPhoto';
 
 export default function AddItemScreen() {
   const { categoryId } = useLocalSearchParams<{ categoryId: string }>();
   const { addItem, categories, addCategory } = useCatalog();
   const { plan } = useVendorPlan();
+  const { vendor } = useVendor();
   const [isSaving, setIsSaving] = useState(false);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -335,7 +336,7 @@ export default function AddItemScreen() {
   };
 
   const isValid = name.trim().length > 0 && basePrice.length > 0;
-  const currencySymbol = getCurrencySymbol((mockVendor.currency as Currency) || 'NGN');
+  const currencySymbol = getCurrencySymbol((vendor.currency as Currency) || 'NGN');
 
   return (
     <KeyboardAvoidingView 

@@ -33,7 +33,7 @@ import { HIGHLIGHT_LABEL_OPTIONS } from '@/utils/itemTagging';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
 import LaektivaModal from '@/components/LaektivaModal';
 import { getCurrencySymbol, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import { DraggablePhoto } from '@/components/DraggablePhoto';
 import { Colors } from '@/constants/colors';
 import { uploadCatalogItemPhotos } from '@/lib/catalog/uploadCatalogItemPhoto';
@@ -42,6 +42,7 @@ export default function EditItemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { getItemById, updateItem, deleteItem, categories, addCategory } = useCatalog();
   const { plan } = useVendorPlan();
+  const { vendor } = useVendor();
 
   const item = getItemById(id as string);
 
@@ -336,7 +337,7 @@ export default function EditItemScreen() {
 
   const getSelectedCategory = () => categories.find((cat: Category) => cat.id === selectedCategoryId);
   const isValid = name.trim().length > 0 && basePrice.length > 0;
-  const currencySymbol = getCurrencySymbol((mockVendor.currency as Currency) || 'NGN');
+  const currencySymbol = getCurrencySymbol((vendor.currency as Currency) || 'NGN');
 
   return (
     <KeyboardAvoidingView

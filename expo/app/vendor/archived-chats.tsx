@@ -85,13 +85,21 @@ export default function VendorArchivedChatsScreen() {
     }
 
     const isOrderChat = chat.chatType === 'order_chat';
-    
+
     if (isOrderChat) {
-      const order = getLatestOrderForChat(chat, orders);
-      if (order) {
+      // Navigate using the chat's own orderId rather than only the
+      // re-derived "latest order for this vendor+customer": a customer can
+      // have more than one order with the same vendor, so that
+      // re-derivation alone could open the wrong order, and if this
+      // particular order had since fallen out of the live orders list it
+      // found nothing at all — a silent dead tap. Matches the fix already
+      // applied to the customer-side app/archived-chats.tsx.
+      const matchedOrder = getLatestOrderForChat(chat, orders);
+      const targetOrderId = chat.orderId || matchedOrder?.id;
+      if (targetOrderId) {
         router.push({
           pathname: '/vendor/chats/[orderId]' as any,
-          params: { orderId: order.id },
+          params: { orderId: targetOrderId },
         });
       }
     } else if (!isOrderChat && chat.customerId) {

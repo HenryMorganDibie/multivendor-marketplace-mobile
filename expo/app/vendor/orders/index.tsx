@@ -24,7 +24,7 @@ import { useOrders } from '@/contexts/OrdersContext';
 import StatusBadge from '@/components/StatusBadge';
 import { getVendorOrderStatusLabel } from '@/features/orders/selectors/orderStatusSelectors';
 import { formatPriceCents, formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import LaektivaModal from '@/components/LaektivaModal';
 
 type FilterType = 'all' | 'new' | 'accepted' | 'confirmed' | 'in_progress' | 'past' | 'today' | 'awaiting_payment';
@@ -146,6 +146,7 @@ export default function VendorOrdersScreen() {
   const router = useRouter();
   const { getTodayOrders, todayNote, updateTodayNote, deleteExternalOrder } = useExternalOrders();
   const { orders } = useOrders();
+  const { vendor } = useVendor();
   const { filter: incomingFilter } = useLocalSearchParams<{ filter?: string }>();
   const [activeFilter, setActiveFilter] = useState<FilterType>(
     incomingFilter === 'AWAITING_PAYMENT' ? 'awaiting_payment' : 'all'
@@ -397,8 +398,8 @@ export default function VendorOrdersScreen() {
             </Text>
             <Text style={styles.totalAmount}>
               {isExternal && 'externalReference' in item
-                ? formatPriceWithCommas(item.total, (mockVendor.currency as Currency) || 'NGN')
-                : formatPriceCents((item as Order).total, (mockVendor.currency as Currency) || 'NGN')}
+                ? formatPriceWithCommas(item.total, (vendor.currency as Currency) || 'NGN')
+                : formatPriceCents((item as Order).total, (vendor.currency as Currency) || 'NGN')}
             </Text>
           </View>
         </View>

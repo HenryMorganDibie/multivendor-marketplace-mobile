@@ -41,7 +41,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useExternalOrders, type ExternalOrder } from '@/contexts/ExternalOrdersContext';
 import { useCatalog } from '@/contexts/CatalogContext';
 import { formatPriceWithCommas, getCurrencySymbol, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 
 interface OrderItem {
   id: string;
@@ -265,7 +265,8 @@ export default function EditExternalOrderScreen() {
   const params = useLocalSearchParams();
   const orderId = params.orderId as string;
   const { externalOrders, updateExternalOrder } = useExternalOrders();
-  const vendorCurrency = (mockVendor.currency as Currency) || 'NGN';
+  const { vendor } = useVendor();
+  const vendorCurrency = (vendor.currency as Currency) || 'NGN';
 
   const order = externalOrders.find(o => o.id === orderId);
 

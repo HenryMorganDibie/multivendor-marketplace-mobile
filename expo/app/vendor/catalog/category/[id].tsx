@@ -8,7 +8,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { useCatalog, CatalogItem } from '@/contexts/CatalogContext';
 import { Colors } from '@/constants/colors';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 
 const TAG_COLORS = {
   bestseller: { bg: '#FFF7ED', text: '#EA580C', border: '#FED7AA' },
@@ -49,9 +49,10 @@ export default function CategoryItemsScreen() {
   const openRowRef = useRef<Swipeable | null>(null);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
+  const { vendor } = useVendor();
   const category = getCategoryById(id as string);
   const items = getItemsByCategory(id as string);
-  const currency = (mockVendor.currency as Currency) || 'NGN';
+  const currency = (vendor.currency as Currency) || 'NGN';
 
   if (!category) {
     return null;

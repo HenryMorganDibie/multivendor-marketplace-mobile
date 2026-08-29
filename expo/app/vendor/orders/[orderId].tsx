@@ -70,7 +70,7 @@ import {
 } from '@/data/hooks';
 import { getVendorEventMessage } from '@/utils/systemMessages';
 import { formatPriceWithCommas, getCurrencySymbol, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 
 const TIMELINE_STEPS = [
   { status: 'requested', label: 'Requested', description: 'Order received from customer' },
@@ -243,6 +243,7 @@ export default function VendorOrderDetailsScreen() {
   const { autoAcceptEnabled } = useVendorAutoAccept();
   useVendorPickup();
   const { logEvent } = useAuditLog();
+  const { vendor } = useVendor();
 
   React.useEffect(() => {
     if (order?.paymentHistory) {
@@ -304,7 +305,7 @@ export default function VendorOrderDetailsScreen() {
         void logEvent({
           eventType: 'order_status_changed',
           orderId: order.id,
-          vendorId: 'vendor_mock',
+          vendorId: vendor.id,
           customerId: order.customerId || 'customer_mock',
           previousState: orderStatus,
           newState: 'accepted',
@@ -323,7 +324,7 @@ export default function VendorOrderDetailsScreen() {
         void logEvent({
           eventType: 'order_status_changed',
           orderId: order.id,
-          vendorId: 'vendor_mock',
+          vendorId: vendor.id,
           customerId: order.customerId || 'customer_mock',
           previousState: orderStatus,
           newState: 'rejected',
@@ -356,7 +357,7 @@ export default function VendorOrderDetailsScreen() {
         void logEvent({
           eventType: 'order_status_changed',
           orderId: order.id,
-          vendorId: 'vendor_mock',
+          vendorId: vendor.id,
           customerId: order.customerId || 'customer_mock',
           previousState: orderStatus,
           newState: 'in_progress',
@@ -375,7 +376,7 @@ export default function VendorOrderDetailsScreen() {
         void logEvent({
           eventType: 'order_status_changed',
           orderId: order.id,
-          vendorId: 'vendor_mock',
+          vendorId: vendor.id,
           customerId: order.customerId || 'customer_mock',
           previousState: orderStatus,
           newState: 'completed',
@@ -425,7 +426,7 @@ export default function VendorOrderDetailsScreen() {
         void logEvent({
           eventType: 'order_status_changed',
           orderId: order.id,
-          vendorId: 'vendor_mock',
+          vendorId: vendor.id,
           customerId: order.customerId || 'customer_mock',
           previousState: orderStatus,
           newState: 'cancelled',
@@ -562,7 +563,7 @@ export default function VendorOrderDetailsScreen() {
       void logEvent({
         eventType: paymentType === 'full' ? 'full_payment_marked' : 'partial_payment_marked',
         orderId: order.id,
-        vendorId: 'vendor_mock',
+        vendorId: vendor.id,
         customerId: order.customerId || 'customer_mock',
         metadata: {
           amountReceived: paymentUpdate.amountReceived / 100,
@@ -771,7 +772,7 @@ export default function VendorOrderDetailsScreen() {
                             <View key={addOnIndex} style={styles.addOnRow}>
                               <Text style={styles.addOnText}>+ {addOn.name}</Text>
                               <Text style={styles.addOnPrice}>
-                                {formatPriceWithCommas(addOn.price, (mockVendor.currency as Currency) || 'NGN')}
+                                {formatPriceWithCommas(addOn.price, (vendor.currency as Currency) || 'NGN')}
                               </Text>
                             </View>
                           ))}
@@ -779,7 +780,7 @@ export default function VendorOrderDetailsScreen() {
                       )}
                     </View>
                     <Text style={styles.itemPrice}>
-                      {formatPriceWithCommas(item.price, (mockVendor.currency as Currency) || 'NGN')}
+                      {formatPriceWithCommas(item.price, (vendor.currency as Currency) || 'NGN')}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -813,14 +814,14 @@ export default function VendorOrderDetailsScreen() {
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal</Text>
                 <Text style={styles.summaryValue}>
-                  {formatPriceWithCommas(order.subtotal, (mockVendor.currency as Currency) || 'NGN')}
+                  {formatPriceWithCommas(order.subtotal, (vendor.currency as Currency) || 'NGN')}
                 </Text>
               </View>
               {!isExternal && (
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Tax</Text>
                   <Text style={styles.summaryValue}>
-                    {formatPriceWithCommas(order.tax, (mockVendor.currency as Currency) || 'NGN')}
+                    {formatPriceWithCommas(order.tax, (vendor.currency as Currency) || 'NGN')}
                   </Text>
                 </View>
               )}
@@ -828,7 +829,7 @@ export default function VendorOrderDetailsScreen() {
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Discount</Text>
                   <Text style={[styles.summaryValue, styles.discountValue]}>
-                    -{formatPriceWithCommas(order.discount, (mockVendor.currency as Currency) || 'NGN')}
+                    -{formatPriceWithCommas(order.discount, (vendor.currency as Currency) || 'NGN')}
                   </Text>
                 </View>
               )}
@@ -836,14 +837,14 @@ export default function VendorOrderDetailsScreen() {
                 <View key={i} style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>{adj.label}</Text>
                   <Text style={styles.summaryValue}>
-                    {formatPriceWithCommas(adj.amount, (mockVendor.currency as Currency) || 'NGN')}
+                    {formatPriceWithCommas(adj.amount, (vendor.currency as Currency) || 'NGN')}
                   </Text>
                 </View>
               ))}
               <View style={[styles.summaryRow, styles.summaryRowTotal]}>
                 <Text style={styles.summaryLabelTotal}>Total</Text>
                 <Text style={styles.summaryValueTotal}>
-                  {formatPriceWithCommas(calculatedTotal, (mockVendor.currency as Currency) || 'NGN')}
+                  {formatPriceWithCommas(calculatedTotal, (vendor.currency as Currency) || 'NGN')}
                 </Text>
               </View>
             </View>
@@ -870,7 +871,7 @@ export default function VendorOrderDetailsScreen() {
                       <View key={index} style={styles.paymentHistoryRow}>
                         <View style={styles.paymentHistoryLeft}>
                           <Text style={styles.paymentHistoryAmount}>
-                            {formatPriceWithCommas(payment.amount, (mockVendor.currency as Currency) || 'NGN')}
+                            {formatPriceWithCommas(payment.amount, (vendor.currency as Currency) || 'NGN')}
                           </Text>
                           <Text style={styles.paymentHistoryTimestamp}>
                             {new Date(payment.timestamp).toLocaleDateString('en-US', {
@@ -892,7 +893,7 @@ export default function VendorOrderDetailsScreen() {
                   <View style={styles.paymentRow}>
                     <Text style={styles.paymentLabel}>Total received</Text>
                     <Text style={styles.paymentValuePaid}>
-                      {formatPriceWithCommas(order.amountPaid || 0, (mockVendor.currency as Currency) || 'NGN')}
+                      {formatPriceWithCommas(order.amountPaid || 0, (vendor.currency as Currency) || 'NGN')}
                     </Text>
                   </View>
                 )}
@@ -900,7 +901,7 @@ export default function VendorOrderDetailsScreen() {
                   <View style={styles.paymentRow}>
                     <Text style={styles.paymentLabelDue}>Balance due</Text>
                     <Text style={styles.paymentValueDue}>
-                      {formatPriceWithCommas(balanceDue, (mockVendor.currency as Currency) || 'NGN')}
+                      {formatPriceWithCommas(balanceDue, (vendor.currency as Currency) || 'NGN')}
                     </Text>
                   </View>
                 )}
@@ -972,7 +973,7 @@ export default function VendorOrderDetailsScreen() {
           {isExternal && (() => {
             const extOrder = externalOrders.find(o => o.id === orderId);
             if (!extOrder) return null;
-            const vendorCurrency = (mockVendor.currency as Currency) || 'NGN';
+            const vendorCurrency = (vendor.currency as Currency) || 'NGN';
             return (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Share</Text>
@@ -1359,14 +1360,14 @@ export default function VendorOrderDetailsScreen() {
                 <View style={styles.paymentSheetSummaryItem}>
                   <Text style={styles.paymentSheetSummaryLabel}>Order total</Text>
                   <Text style={styles.paymentSheetSummaryValue}>
-                    {formatPriceWithCommas(calculatedTotal, (mockVendor.currency as Currency) || 'NGN')}
+                    {formatPriceWithCommas(calculatedTotal, (vendor.currency as Currency) || 'NGN')}
                   </Text>
                 </View>
                 <View style={styles.paymentSheetSummaryDivider} />
                 <View style={styles.paymentSheetSummaryItem}>
                   <Text style={styles.paymentSheetSummaryLabel}>Outstanding</Text>
                   <Text style={[styles.paymentSheetSummaryValue, styles.paymentSheetOutstandingValue]}>
-                    {formatPriceWithCommas(balanceDue, (mockVendor.currency as Currency) || 'NGN')}
+                    {formatPriceWithCommas(balanceDue, (vendor.currency as Currency) || 'NGN')}
                   </Text>
                 </View>
               </View>
@@ -1394,7 +1395,7 @@ export default function VendorOrderDetailsScreen() {
                     <View style={styles.paymentOptionTextContainer}>
                       <Text style={styles.paymentOptionText}>Full payment received</Text>
                       <Text style={styles.paymentOptionSubtext}>
-                        {formatPriceWithCommas(balanceDue, (mockVendor.currency as Currency) || 'NGN')}
+                        {formatPriceWithCommas(balanceDue, (vendor.currency as Currency) || 'NGN')}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -1426,7 +1427,7 @@ export default function VendorOrderDetailsScreen() {
                         styles.partialPaymentInput,
                         partialAmountError ? styles.partialPaymentInputError : null,
                       ]}>
-                        <Text style={styles.currencySymbol}>{getCurrencySymbol((mockVendor.currency as Currency) || 'NGN')}</Text>
+                        <Text style={styles.currencySymbol}>{getCurrencySymbol((vendor.currency as Currency) || 'NGN')}</Text>
                         <TextInput
                           style={styles.partialPaymentField}
                           value={partialPaymentAmount}
@@ -1455,7 +1456,7 @@ export default function VendorOrderDetailsScreen() {
                         <View style={styles.remainingBalanceRow}>
                           <Text style={styles.remainingBalanceLabel}>Remaining balance</Text>
                           <Text style={styles.remainingBalanceValue}>
-                            {formatPriceWithCommas(remaining, (mockVendor.currency as Currency) || 'NGN')}
+                            {formatPriceWithCommas(remaining, (vendor.currency as Currency) || 'NGN')}
                           </Text>
                         </View>
                       ) : null}
@@ -1540,7 +1541,7 @@ export default function VendorOrderDetailsScreen() {
             <View style={styles.adjustInputSection}>
               <Text style={styles.adjustInputLabel}>Amount</Text>
               <View style={styles.adjustAmountInput}>
-                <Text style={styles.adjustCurrencySymbol}>{getCurrencySymbol((mockVendor.currency as Currency) || 'NGN')}</Text>
+                <Text style={styles.adjustCurrencySymbol}>{getCurrencySymbol((vendor.currency as Currency) || 'NGN')}</Text>
                 <TextInput
                   style={styles.adjustAmountField}
                   value={adjustmentAmount}

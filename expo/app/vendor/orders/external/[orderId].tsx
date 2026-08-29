@@ -23,7 +23,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Colors } from '@/constants/colors';
 import { useExternalOrders, type ExternalOrder } from '@/contexts/ExternalOrdersContext';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import { buildDetailedShareMessage } from '@/utils/externalOrderShare';
 import LaektivaModal from '@/components/LaektivaModal';
 import OrderHeader from '@/features/orders/components/OrderHeader';
@@ -45,7 +45,8 @@ export default function ExternalOrderDetailsScreen() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
 
-  const vendorCurrency = (mockVendor.currency as Currency) || 'NGN';
+  const { vendor } = useVendor();
+  const vendorCurrency = (vendor.currency as Currency) || 'NGN';
 
   const order = useMemo<ExternalOrder | undefined>(() => {
     return externalOrders.find(o => o.id === orderId);

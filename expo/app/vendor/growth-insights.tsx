@@ -43,7 +43,6 @@ import { useExternalOrders, type ExternalOrder } from '@/contexts/ExternalOrders
 import { useOrders } from '@/contexts/OrdersContext';
 import { useVendor } from '@/contexts/VendorContext';
 import { useVerification } from '@/contexts/VerificationContext';
-import { mockVendor } from '@/mocks/vendorData';
 import { formatCompactCurrency, formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
 import { formatInvoiceCustomerName } from '@/utils/internalCustomerName';
 import { useInvoices } from '@/contexts/InvoiceContext';
@@ -2076,7 +2075,7 @@ export default function GrowthInsightsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { plan, planLimits } = useVendorPlan();
-  const { vendor: _vendor } = useVendor();
+  const { vendor } = useVendor();
   const { verificationData } = useVerification();
   const { externalOrders } = useExternalOrders();
   const { orders } = useOrders();
@@ -2087,7 +2086,7 @@ export default function GrowthInsightsScreen() {
   const [showVisitsTooltip, setShowVisitsTooltip] = useState<boolean>(false);
 
   const isPro = plan === 'pro' || plan === 'pro+';
-  const currency = (mockVendor.currency as Currency) || 'NGN';
+  const currency = (vendor.currency as Currency) || 'NGN';
 
   const handleUpgrade = () => {
     router.push('/vendor/settings/subscription' as any);

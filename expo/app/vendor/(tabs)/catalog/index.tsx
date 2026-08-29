@@ -25,7 +25,6 @@ import { useCountryStatus } from '@/contexts/CountryStatusContext';
 import { Colors } from '@/constants/colors';
 import { getBottomOverlayPadding } from '@/lib/constants/layout';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
 import { useVendor } from '@/contexts/VendorContext';
 import { shareStorefront, checkShareable } from '@/lib/storefront/shareStorefront';
 
@@ -77,7 +76,7 @@ export default function VendorCatalogScreen() {
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const countryStatus = useCountryStatus();
   const isWaitlisted = countryStatus.isWaitlistOnly;
-  const currencySymbol = (mockVendor.currency as Currency) || 'NGN';
+  const currencySymbol = (vendor.currency as Currency) || 'NGN';
 
   const [showSearch, setShowSearch] = useState(false);
   const searchAnim = useRef(new Animated.Value(0)).current;

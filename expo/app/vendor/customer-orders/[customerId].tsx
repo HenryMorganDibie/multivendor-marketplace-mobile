@@ -15,11 +15,9 @@ import { useOrders } from '@/contexts/OrdersContext';
 import { formatVendorOrderId } from '@/utils/formatOrderId';
 import { getOrderStatusColor, getVendorOrderStatusLabel } from '@/features/orders/selectors/orderStatusSelectors';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import { Colors } from '@/constants/colors';
 import SegmentedControl from '@/components/SegmentedControl';
-
-const CURRENCY: Currency = (mockVendor.currency as Currency) || 'NGN';
 
 type TabType = 'active' | 'past';
 
@@ -89,6 +87,8 @@ const pillStyles = StyleSheet.create({
 });
 
 function OrderCard({ order }: { order: Order }) {
+  const { vendor } = useVendor();
+  const currency = (vendor.currency as Currency) || 'NGN';
   const itemCount = order.items.reduce((sum, it) => sum + it.quantity, 0);
   const fulfillment =
     order.fulfillmentMethod === 'pickup' || order.fulfillmentType === 'Pickup'
@@ -135,7 +135,7 @@ function OrderCard({ order }: { order: Order }) {
           </Text>
         </View>
         <Text style={styles.totalAmount}>
-          {formatPriceWithCommas(order.total, CURRENCY)}
+          {formatPriceWithCommas(order.total, currency)}
         </Text>
       </View>
     </TouchableOpacity>

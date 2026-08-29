@@ -30,7 +30,7 @@ import {
 } from '@/features/orders/selectors/orderStatusSelectors';
 import { hasOldUnpaidExternalOrders, sortOrdersByPriority } from '@/utils/orderFilters';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
-import { mockVendor } from '@/mocks/vendorData';
+import { useVendor } from '@/contexts/VendorContext';
 import { useExternalOrders, type ExternalOrder } from '@/contexts/ExternalOrdersContext';
 import { getBottomOverlayPadding } from '@/lib/constants/layout';
 
@@ -300,6 +300,7 @@ export default function VendorOrdersScreen() {
   const { orders } = useOrders();
   const { externalOrders, deleteExternalOrder } = useExternalOrders();
   const { clearOrderBadges } = useVendorNotifications();
+  const { vendor } = useVendor();
 
   const [activeTab, setActiveTab] = useState<StatusTab>('all');
   const [showSearch, setShowSearch] = useState(false);
@@ -416,7 +417,7 @@ export default function VendorOrdersScreen() {
     }
   }, [deleteConfirmId, deleteExternalOrder]);
 
-  const vendorCurrency = (mockVendor.currency as Currency) || 'NGN';
+  const vendorCurrency = (vendor.currency as Currency) || 'NGN';
 
   const renderItem = useCallback(({ item }: { item: OrderListItem }) => {
     if (item._type === 'external') {
