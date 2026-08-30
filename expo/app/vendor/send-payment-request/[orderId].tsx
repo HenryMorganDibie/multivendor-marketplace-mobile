@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { Alert } from '@/utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,14 +15,8 @@ import { ChevronLeft, Package, ChevronDown, Check } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import type { Order } from '@/mocks/ordersData';
 import { useOrders } from '@/contexts/OrdersContext';
-// mockVendor.primaryPaymentMethod/secondaryPaymentMethod below is the
-// "Payment Methods" feature — confirmed elsewhere this session to have zero
-// backend concept anywhere (no Firestore field, no callable). Left as-is,
-// explicitly paused pending its own scoping decision; out of scope for the
-// mockOrders fix this file otherwise needed.
-import { mockVendor } from '@/mocks/vendorData';
 import { useVendor } from '@/contexts/VendorContext';
-import { useAuditLog } from '@/contexts/AuditLogContext';
+import { callable } from '@/lib/firebase';
 import { formatPriceWithCommas, formatAmountForInput, getCurrencySymbol, getCurrencyDecimals, type Currency } from '@/utils/formatPrice';
 
 type PaymentType = 'full' | 'partial';
@@ -34,8 +29,7 @@ const getOutstandingBalance = (o: Order): number => {
 
 export default function SendPaymentRequestScreen() {
   const router = useRouter();
-  const { orderId, fromOrder } = useLocalSearchParams<{ orderId: string; fromOrder?: string }>();
-  const { logEvent } = useAuditLog();
+  const { orderId, fromOrder, chatId } = useLocalSearchParams<{ orderId: string; fromOrder?: string; chatId?: string }>();
   const { vendor } = useVendor();
   const { orders } = useOrders();
   const order = orders.find((o) => o.id === orderId);
@@ -74,12 +68,18 @@ export default function SendPaymentRequestScreen() {
 
   const [selectedOrderId, setSelectedOrderId] = useState<string>(getDefaultSelectedId);
   const [paymentType, setPaymentType] = useState<PaymentType>('full');
-  const [selectedMethod, setSelectedMethod] = useState<string>(
-    mockVendor.primaryPaymentMethod?.type || ''
-  );
   const [amount, setAmount] = useState<string>('');
   const [note, setNote] = useState<string>('');
-  const paymentInstructions = vendor.paymentInstructionsEnabled ? (vendor.paymentInstructions ?? '') : '';
+  const [isSending, setIsSending] = useState<boolean>(false);
+  // The only real, backend-persisted vendor payment field: a single
+  // free-text instructions string (vendors/{vendorId}.paymentInstructions),
+  // gated by paymentInstructionsEnabled, written via the payment-instructions
+  // settings screen. Confirmed by direct investigation that there is no
+  // structured paymentMethods array, no primary/secondary payment method,
+  // anywhere in this backend — this is what the customer will actually see.
+  const paymentInstructionsEnabled = vendor.paymentInstructionsEnabled === true;
+  const paymentInstructions = paymentInstructionsEnabled ? (vendor.paymentInstructions ?? '').trim() : '';
+  const hasPaymentInstructions = paymentInstructionsEnabled && paymentInstructions.length > 0;
   const [showOrderDropdown, setShowOrderDropdown] = useState<boolean>(false);
 
   const selectedOrder = orders.find((o) => o.id === selectedOrderId);
@@ -102,7 +102,7 @@ export default function SendPaymentRequestScreen() {
     }
   }, [selectedOrderId, selectedOrder, paymentType, vendorCurrency]);
 
-  const handleSendRequest = () => {
+  const handleSendRequest = async () => {
     if (!selectedOrderId) {
       Alert.alert('Order Required', 'Please select an order for this payment request.');
       return;
@@ -113,8 +113,20 @@ export default function SendPaymentRequestScreen() {
       return;
     }
 
-    if (!selectedMethod) {
-      Alert.alert('Payment Method Required', 'Please select a payment method.');
+    if (!chatId) {
+      Alert.alert('Conversation Required', 'Open this from the order chat to send a payment request.');
+      return;
+    }
+
+    if (!hasPaymentInstructions) {
+      Alert.alert(
+        'Payment Instructions Required',
+        'Set up your payment instructions before sending a payment request — that is what the customer will see.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Set Up Now', onPress: () => router.push('/vendor/settings/payment-instructions' as any) },
+        ]
+      );
       return;
     }
 
@@ -130,35 +142,36 @@ export default function SendPaymentRequestScreen() {
       return;
     }
 
-    console.log('Sending payment request:', {
-      orderId: selectedOrderId,
-      method: selectedMethod,
-      amount: parseFloat(amount),
-      note,
-    });
+    setIsSending(true);
+    try {
+      const send = callable<
+        { orderId: string; chatId: string; amount: number; message?: string },
+        { success: true; requestId: string; chatId: string; messageId: string }
+      >('sendPaymentRequestInChat');
+      await send({
+        orderId: selectedOrderId,
+        chatId,
+        amount: requestAmount,
+        message: note.trim() || undefined,
+      });
 
-    void logEvent({
-      eventType: 'payment_request_sent',
-      orderId: selectedOrderId,
-      vendorId: selectedOrder.vendorId || 'vendor_mock',
-      customerId: selectedOrder.customerId || 'customer_mock',
-      metadata: {
-        paymentMethod: selectedMethod,
-        amount: parseFloat(amount),
-        paymentType,
-      },
-    });
-
-    Alert.alert(
-      'Payment Request Sent',
-      `Payment request for ${currencySymbol}${amount} has been sent to the customer.`,
-      [
-        {
-          text: 'OK',
-          onPress: () => router.back(),
-        },
-      ]
-    );
+      Alert.alert(
+        'Payment Request Sent',
+        `Payment request for ${currencySymbol}${amount} has been sent to the customer.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => router.back(),
+          },
+        ]
+      );
+    } catch (err) {
+      console.error('[SendPaymentRequest] sendPaymentRequestInChat rejected:', err);
+      const message = err instanceof Error ? err.message : 'Could not send the payment request. Please try again.';
+      Alert.alert('Payment Request Failed', message);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   if (!order) {
@@ -200,7 +213,7 @@ export default function SendPaymentRequestScreen() {
     );
   }
 
-  const isButtonDisabled = !selectedOrderId || !selectedOrder || !selectedMethod || !amount || parseFloat(amount) <= 0;
+  const isButtonDisabled = !selectedOrderId || !selectedOrder || !amount || parseFloat(amount) <= 0 || isSending;
 
   const renderOrderCard = (activeOrder: Order) => {
     const isSelected = selectedOrderId === activeOrder.id;
@@ -411,72 +424,30 @@ export default function SendPaymentRequestScreen() {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>PAYMENT METHOD</Text>
-              <View style={styles.methodsContainer}>
-                {mockVendor.primaryPaymentMethod && (
+              <Text style={styles.sectionTitle}>PAYMENT INSTRUCTIONS</Text>
+              {hasPaymentInstructions ? (
+                <View style={styles.instructionsPreview}>
+                  <Text style={styles.instructionsPreviewLabel}>This is what the customer will see</Text>
+                  <Text style={styles.instructionsPreviewText}>{paymentInstructions}</Text>
+                </View>
+              ) : (
+                <View style={styles.instructionsMissingCard}>
+                  <Text style={styles.instructionsMissingText}>
+                    You haven&apos;t set up payment instructions yet. Add them so the customer knows how to pay you.
+                  </Text>
                   <TouchableOpacity
-                    style={styles.methodCard}
-                    onPress={() => setSelectedMethod(mockVendor.primaryPaymentMethod!.type)}
+                    style={styles.instructionsMissingButton}
+                    onPress={() => router.push('/vendor/settings/payment-instructions' as any)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.methodRadio, selectedMethod === mockVendor.primaryPaymentMethod.type && styles.methodRadioActive]}>
-                      {selectedMethod === mockVendor.primaryPaymentMethod.type && <View style={styles.methodRadioSelected} />}
-                    </View>
-                    <View style={styles.methodInfo}>
-                      <Text style={styles.methodName}>{mockVendor.primaryPaymentMethod.name}</Text>
-                      {mockVendor.primaryPaymentMethod.details.bankName && (
-                        <Text style={styles.methodDetail}>{mockVendor.primaryPaymentMethod.details.bankName}</Text>
-                      )}
-                      {mockVendor.primaryPaymentMethod.details.accountNumber && (
-                        <Text style={styles.methodDetail}>
-                          ****{mockVendor.primaryPaymentMethod.details.accountNumber.slice(-4)}
-                        </Text>
-                      )}
-                      {mockVendor.primaryPaymentMethod.details.accountName && (
-                        <Text style={styles.methodDetail}>{mockVendor.primaryPaymentMethod.details.accountName}</Text>
-                      )}
-                      {mockVendor.primaryPaymentMethod.details.email && (
-                        <Text style={styles.methodDetail}>{mockVendor.primaryPaymentMethod.details.email}</Text>
-                      )}
-                    </View>
+                    <Text style={styles.instructionsMissingButtonText}>Set Up Payment Instructions</Text>
                   </TouchableOpacity>
-                )}
-                {mockVendor.primaryPaymentMethod && mockVendor.secondaryPaymentMethod && (
-                  <View style={styles.rowDivider} />
-                )}
-                {mockVendor.secondaryPaymentMethod && (
-                  <TouchableOpacity
-                    style={styles.methodCard}
-                    onPress={() => setSelectedMethod(mockVendor.secondaryPaymentMethod!.type)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.methodRadio, selectedMethod === mockVendor.secondaryPaymentMethod.type && styles.methodRadioActive]}>
-                      {selectedMethod === mockVendor.secondaryPaymentMethod.type && <View style={styles.methodRadioSelected} />}
-                    </View>
-                    <View style={styles.methodInfo}>
-                      <Text style={styles.methodName}>{mockVendor.secondaryPaymentMethod.name}</Text>
-                      {mockVendor.secondaryPaymentMethod.details.bankName && (
-                        <Text style={styles.methodDetail}>{mockVendor.secondaryPaymentMethod.details.bankName}</Text>
-                      )}
-                      {mockVendor.secondaryPaymentMethod.details.accountNumber && (
-                        <Text style={styles.methodDetail}>
-                          ****{mockVendor.secondaryPaymentMethod.details.accountNumber.slice(-4)}
-                        </Text>
-                      )}
-                      {mockVendor.secondaryPaymentMethod.details.accountName && (
-                        <Text style={styles.methodDetail}>{mockVendor.secondaryPaymentMethod.details.accountName}</Text>
-                      )}
-                      {mockVendor.secondaryPaymentMethod.details.email && (
-                        <Text style={styles.methodDetail}>{mockVendor.secondaryPaymentMethod.details.email}</Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                )}
-              </View>
+                </View>
+              )}
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>PAYMENT INSTRUCTIONS (OPTIONAL)</Text>
+              <Text style={styles.sectionTitle}>NOTE TO CUSTOMER (OPTIONAL)</Text>
               <TextInput
                 style={styles.noteInput}
                 value={note}
@@ -494,15 +465,6 @@ export default function SendPaymentRequestScreen() {
               />
               <Text style={styles.characterCount}>{note.length}/200</Text>
             </View>
-
-            {paymentInstructions.trim() !== '' && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>DEFAULT INSTRUCTIONS</Text>
-                <View style={styles.instructionsPreview}>
-                  <Text style={styles.instructionsPreviewText}>{paymentInstructions}</Text>
-                </View>
-              </View>
-            )}
           </>
         )}
 
@@ -535,7 +497,11 @@ export default function SendPaymentRequestScreen() {
             activeOpacity={0.7}
             testID="send-payment-request-button"
           >
-            <Text style={[styles.sendButtonText, isButtonDisabled && styles.sendButtonTextDisabled]}>Send Request</Text>
+            {isSending ? (
+              <ActivityIndicator color={Colors.white} />
+            ) : (
+              <Text style={[styles.sendButtonText, isButtonDisabled && styles.sendButtonTextDisabled]}>Send Request</Text>
+            )}
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -851,10 +817,40 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
   },
+  instructionsPreviewLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    letterSpacing: 0.3,
+    marginBottom: 8,
+  },
   instructionsPreviewText: {
     fontSize: 15,
     color: Colors.textSecondary,
     lineHeight: 20,
+  },
+  instructionsMissingCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+  },
+  instructionsMissingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+  },
+  instructionsMissingButton: {
+    alignSelf: 'flex-start' as const,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  instructionsMissingButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.white,
   },
   bottomSpacer: {
     height: 40,

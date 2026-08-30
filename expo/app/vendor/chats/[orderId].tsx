@@ -492,7 +492,7 @@ export default function VendorOrderChatScreen() {
     }
 
     setTimeout(() => {
-      router.push(`/vendor/send-payment-request/${order.id}?fromOrder=${order.id}` as any);
+      router.push(`/vendor/send-payment-request/${order.id}?fromOrder=${order.id}&chatId=${encodeURIComponent(chatId)}` as any);
     }, 300);
   };
 
@@ -1596,7 +1596,7 @@ export default function VendorOrderChatScreen() {
               <TouchableOpacity
                 style={styles.sendPaymentInstructionsButton}
                 onPress={() => {
-                  router.push(`/vendor/send-payment-request/${order.id}?fromOrder=${order.id}` as any);
+                  router.push(`/vendor/send-payment-request/${order.id}?fromOrder=${order.id}&chatId=${encodeURIComponent(chatId)}` as any);
                 }}
                 activeOpacity={0.7}
               >
