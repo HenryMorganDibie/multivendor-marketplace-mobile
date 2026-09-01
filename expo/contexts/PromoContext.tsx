@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { auth, callable, db } from '@/lib/firebase';
 import type { VendorPromotion, PromotionType } from '@/mocks/promotionsData';
 import { setExternalPromotions } from '@/mocks/promotionsData';
@@ -153,6 +153,33 @@ function toVendorPromotion(doc: PromotionDoc): VendorPromotion {
     endDate: doc.endDate,
     icon: doc.icon,
   };
+}
+
+/**
+ * One-time read of another vendor's ACTIVE promotions, for a customer
+ * viewing that vendor's storefront. Deliberately not the live PromoContext
+ * subscription above, which is hardcoded to the signed-in vendor's own
+ * vendorId (from auth claims) for their own settings screens — a customer
+ * browsing a storefront isn't signed in as that vendor.
+ *
+ * The storefront previously read from mocks/promotionsData.ts's
+ * getActivePromotions, which only ever matches the ten demo vendor ids —
+ * for any real vendor, promotions a vendor actually created via
+ * create-promo.tsx (writing to this exact vendors/{vendorId}/promotions
+ * collection) never appeared on their own real storefront.
+ */
+export async function getVendorActivePromotions(vendorId: string): Promise<VendorPromotion[]> {
+  if (!vendorId) return [];
+  // No `where('active', ...)` filter here deliberately -- the live
+  // PromoContext subscription above reads the whole subcollection ordered by
+  // createdAt and filters `active` client-side (see `activePromotions`
+  // below), rather than a composite (active + createdAt) index. Matching
+  // that same approach here avoids depending on an index that doesn't exist.
+  const q = query(collection(db, 'vendors', vendorId, 'promotions'), orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => toVendorPromotion(d.data() as PromotionDoc))
+    .filter((p) => p.active);
 }
 
 export const [PromoContext, usePromo] = createContextHook(() => {

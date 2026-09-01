@@ -30,11 +30,8 @@ import {
 import { MenuItem, Category, Vendor } from '@/mocks/vendorData';
 import { getNextOpenTime } from '@/utils/businessHours';
 import { formatPrice } from '@/utils/formatPrice';
-import {
-  getActivePromotions,
-  getPromotionItemIds,
-  getPromotionBadgeForItem,
-} from '@/mocks/promotionsData';
+import type { VendorPromotion } from '@/mocks/promotionsData';
+import { getVendorActivePromotions } from '@/contexts/PromoContext';
 import PromotionCarousel from '@/features/storefront/components/PromotionCarousel';
 
 interface StorefrontCatalogProps {
@@ -118,6 +115,23 @@ export default function StorefrontCatalog({
   const [descriptionExpanded, setDescriptionExpanded] = useState<boolean>(false);
   const [showStickySearch, setShowStickySearch] = useState<boolean>(false);
 
+  // Real promotions this vendor actually created (create-promo.tsx, backed
+  // by vendors/{vendorId}/promotions) — previously read from
+  // mocks/promotionsData.ts's getActivePromotions, which only ever matches
+  // the ten demo vendor ids, so a real vendor's own real promotions never
+  // appeared on their own real storefront. A one-time fetch, not the live
+  // PromoContext subscription, since that context is hardcoded to the
+  // signed-in vendor's own id -- a customer viewing this storefront isn't
+  // signed in as this vendor.
+  const [livePromotions, setLivePromotions] = useState<VendorPromotion[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void getVendorActivePromotions(vendor.id).then((promos) => {
+      if (!cancelled) setLivePromotions(promos);
+    });
+    return () => { cancelled = true; };
+  }, [vendor.id]);
+
   const scrollRef = useRef<ScrollView | null>(null);
   const sectionLayoutsRef = useRef<Map<string, SectionLayout>>(new Map());
   // The y of the sticky bar in scroll-content coordinates (set on layout).
@@ -172,9 +186,24 @@ export default function StorefrontCatalog({
     return <View style={styles.tagChipRow}>{tags}</View>;
   };
 
-  const promoItemIds = getPromotionItemIds(vendor.id);
+  const promoItemIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const promo of livePromotions) {
+      promo.applicableItemIds?.forEach((id) => ids.add(id));
+    }
+    return Array.from(ids);
+  }, [livePromotions]);
   const isPromotionTarget = (itemId: string): boolean => promoItemIds.includes(itemId);
-  const getItemBadgeLabel = (itemId: string): string => getPromotionBadgeForItem(vendor.id, itemId) ?? 'OFFER';
+  const getItemBadgeLabel = (itemId: string): string => {
+    for (const promo of livePromotions) {
+      if (promo.applicableItemIds?.includes(itemId)) {
+        if (promo.type === 'bogo') return 'BUY 1 GET 1';
+        if (promo.type === 'free_item') return 'FREE ITEM';
+        return 'OFFER';
+      }
+    }
+    return 'OFFER';
+  };
 
   const renderListItem = (item: MenuItem) => {
     const quantityInCart = getItemQuantityInCart(item.id);
@@ -591,7 +620,7 @@ export default function StorefrontCatalog({
         </View>
       </View>
 
-      <PromotionCarousel promotions={getActivePromotions(vendor.id)} />
+      <PromotionCarousel promotions={livePromotions} />
 
       {isVendorBlocked && (
         <View style={styles.blockedBanner}>
