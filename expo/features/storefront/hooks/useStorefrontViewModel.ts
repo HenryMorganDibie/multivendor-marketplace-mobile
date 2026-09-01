@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Animated } from 'react-native';
+import { Animated, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { useToast } from '@/hooks/useToast';
@@ -211,7 +211,17 @@ export function useStorefrontViewModel(vendor: Vendor) {
   };
 
   const handleOpenLink = async (url: string) => {
+    // Was console.log-only — the Website/Instagram/TikTok rows in the vendor
+    // details modal looked tappable but did nothing (same class as the
+    // no-op tap targets found elsewhere this session). Matches the
+    // Linking.openURL pattern already used for external links, e.g.
+    // app/settings/privacy.tsx's handleOpenPrivacyPolicy/handleOpenTerms.
     console.log('Opening link:', url);
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      console.error('[STORE] Failed to open link:', url, error);
+    }
   };
 
   const handleAskAI = () => {
@@ -242,7 +252,7 @@ export function useStorefrontViewModel(vendor: Vendor) {
       return;
     }
     console.log('[STORE] Message vendor pressed, resolving thread for vendor:', vendor.id);
-    void handleMessageVendorPress(vendor.id, user.id);
+    void handleMessageVendorPress(vendor.id, user.id, vendor.name);
   };
 
   const handleItemPress = (itemId: string) => {

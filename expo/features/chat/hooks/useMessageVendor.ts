@@ -64,7 +64,7 @@ export function useMessageVendor() {
   );
 
   const handleMessageVendorPress = useCallback(
-    async (vendorId: string, customerId: string): Promise<MessageVendorResult | null> => {
+    async (vendorId: string, customerId: string, vendorName?: string): Promise<MessageVendorResult | null> => {
       if (!vendorId || !customerId) {
         console.warn('[useMessageVendor] Missing vendorId or customerId', { vendorId, customerId });
         return null;
@@ -110,8 +110,14 @@ export function useMessageVendor() {
         }
         chat = existing;
       } else {
-        const vendorName =
-          mockVendors.find((v) => v.id === vendorId)?.name ?? 'Vendor';
+        // mockVendors only ever matches the ten demo ids — for any real vendor
+        // this silently fell back to the literal string 'Vendor' as the local
+        // chat scaffold's display name. The caller (the storefront) already
+        // has the real, live vendor object, so it passes vendorName through;
+        // the mock lookup stays only as a last-resort fallback for any other
+        // caller that doesn't.
+        const resolvedVendorName =
+          vendorName ?? mockVendors.find((v) => v.id === vendorId)?.name ?? 'Vendor';
 
         /**
          * createCommerceConversation has been deployed since this flow was
@@ -138,7 +144,7 @@ export function useMessageVendor() {
           }
         }
 
-        chat = getOrCreateConversation(vendorId, vendorName, 'pre_order_inquiry');
+        chat = getOrCreateConversation(vendorId, resolvedVendorName, 'pre_order_inquiry');
         console.log('[useMessageVendor] Created new pre-order thread:', chat.id);
       }
 

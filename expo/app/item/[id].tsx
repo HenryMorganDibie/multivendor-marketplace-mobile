@@ -324,12 +324,17 @@ function ItemViewContent({
   }, [id, vendorId, vendorMenuItems]);
 
   const handleSeeAll = () => {
-    if (!vendorId) return;
-    console.log('[ITEM] See all pressed, navigating to vendor storefront:', vendorId, 'chatThreadId:', chatThreadId);
+    // '/customer/store/[vendorId]' has no matching route file — the real
+    // storefront lives at '/store/[username]' (app/store/[username].tsx),
+    // keyed by username not vendorId. This was a silent 404/dead-tap on
+    // every "See all" press from an item opened off a real vendor. `vendor`
+    // is already resolved above via vendorRepository.getById.
+    if (!vendor?.username) return;
+    console.log('[ITEM] See all pressed, navigating to vendor storefront:', vendor.username, 'chatThreadId:', chatThreadId);
     router.push({
-      pathname: '/customer/store/[vendorId]' as any,
+      pathname: '/store/[username]' as any,
       params: {
-        vendorId,
+        username: vendor.username,
         ...(chatThreadId ? { returnToChatThreadId: chatThreadId } : {}),
       },
     });
@@ -938,13 +943,17 @@ function ItemViewContent({
         visible={showVendorModal}
         vendor={vendor}
         onClose={() => setShowVendorModal(false)}
-        onViewStore={(vid) => {
+        onViewStore={() => {
+          // Same dead route as handleSeeAll above — '/customer/store/[vendorId]'
+          // doesn't exist. Use the same already-resolved `vendor.username` and
+          // the real '/store/[username]' route.
+          if (!vendor?.username) return;
           setShowVendorModal(false);
           setTimeout(() => {
             router.push({
-              pathname: '/customer/store/[vendorId]' as any,
+              pathname: '/store/[username]' as any,
               params: {
-                vendorId: vid,
+                username: vendor.username,
                 ...(chatThreadId ? { returnToChatThreadId: chatThreadId } : {}),
               },
             });
