@@ -473,6 +473,20 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     const publicRoutes = ['login', 'create-account', 'register', 'verify-otp', 'onboarding', 'complete-profile', 'vendor-setup-complete', 'legal', 'forgot-password', 'i', 'invoice-view', 'store'];
     const isPublicRoute = publicRoutes.includes(firstSegment);
 
+    // Routes that only make sense before signing in. An authenticated user
+    // still on one of these — e.g. right after a successful login — gets
+    // redirected to their home screen below. This is deliberately narrower
+    // than publicRoutes: legal/forgot-password/i/invoice-view/store are all
+    // legitimately visitable by a signed-in user too (a customer reading
+    // Terms, an admin re-checking an invoice link, a customer browsing a
+    // vendor's storefront), so putting them in this list bounced a signed-in
+    // customer straight off any storefront link before it could render —
+    // reproduced live 2026-09-01: tapping a Trending vendor card registered
+    // the view (RecentlyViewedContext fired during the brief mount) but the
+    // route guard bounced back to /customer before the storefront rendered.
+    const authOnlyEntryRoutes = ['login', 'create-account', 'register', 'onboarding', 'vendor-setup-complete'];
+    const isAuthOnlyEntryRoute = authOnlyEntryRoutes.includes(firstSegment);
+
     if (!authState.isAuthenticated) {
       if (!isPublicRoute) {
         safeReplace('/login');
@@ -507,9 +521,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       wantsAccountSwitch && (firstSegment === 'login' || firstSegment === 'create-account' || firstSegment === 'register');
 
     if (
-      isPublicRoute
-      && firstSegment !== 'verify-otp'
-      && firstSegment !== 'complete-profile'
+      isAuthOnlyEntryRoute
       && !isDeliberateAccountSwitch
     ) {
       if (user.role === 'customer') {
