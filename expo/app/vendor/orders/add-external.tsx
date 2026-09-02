@@ -35,6 +35,7 @@ import {
   Truck,
   Wrench,
   Tag,
+  Lock,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -643,6 +644,43 @@ export default function RecordExternalOrderScreen() {
   };
 
   const currencySymbol = getCurrencySymbol(vendorCurrency);
+
+  /**
+   * canAccessExternalOrders (PHASE_4_COLLECTION_MAPPING v10, Section 3) is
+   * false only for Basic. createExternalOrder already rejects a Basic
+   * vendor's submission server-side with permission-denied, but nothing on
+   * this screen checked the flag first — a Basic vendor could fill out the
+   * entire form (items, fulfilment, payment) and only discover the plan
+   * requirement as a raw error on Save. Every other Phase 4 gate in this
+   * codebase (dashboard widgets, reports, business insights) shows an
+   * upgrade card before the user invests effort; this one didn't.
+   */
+  if (plan === 'basic') {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
+          <EditScreenHeader title="Record External Order" onBack={handleBack} showSave={false} />
+          <View style={externalOrderLockStyles.lockedContainer}>
+            <View style={externalOrderLockStyles.lockedIconWrap}>
+              <Lock size={26} color={Colors.textMuted} />
+            </View>
+            <Text style={externalOrderLockStyles.lockedTitle}>External orders require Standard or higher</Text>
+            <Text style={externalOrderLockStyles.lockedDescription}>
+              Upgrade your plan to record orders placed outside the platform (WhatsApp, phone, walk-in) and keep them alongside your platform orders.
+            </Text>
+            <TouchableOpacity
+              style={externalOrderLockStyles.upgradeButton}
+              onPress={() => router.push('/vendor/settings/subscription' as any)}
+              activeOpacity={0.8}
+            >
+              <Text style={externalOrderLockStyles.upgradeButtonText}>Upgrade Plan</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -1439,6 +1477,49 @@ export default function RecordExternalOrderScreen() {
     </View>
   );
 }
+
+const externalOrderLockStyles = StyleSheet.create({
+  lockedContainer: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: 32,
+  },
+  lockedIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.surface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginBottom: 16,
+  },
+  lockedTitle: {
+    fontSize: 17,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    textAlign: 'center' as const,
+    marginBottom: 8,
+  },
+  lockedDescription: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    textAlign: 'center' as const,
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  upgradeButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  upgradeButtonText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
+  },
+});
 
 const styles = StyleSheet.create({
   container: {

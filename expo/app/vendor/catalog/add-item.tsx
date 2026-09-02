@@ -31,7 +31,7 @@ import { uploadCatalogItemPhotos } from '@/lib/catalog/uploadCatalogItemPhoto';
 export default function AddItemScreen() {
   const { categoryId } = useLocalSearchParams<{ categoryId: string }>();
   const { addItem, categories, addCategory } = useCatalog();
-  const { plan } = useVendorPlan();
+  const { plan, planLimits } = useVendorPlan();
   const { vendor } = useVendor();
   const [isSaving, setIsSaving] = useState(false);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
@@ -59,14 +59,19 @@ export default function AddItemScreen() {
   const [lowStockThreshold, setLowStockThreshold] = useState('5');
   const [highlightLabel, setHighlightLabel] = useState<HighlightLabel | null>(null);
   
-  const getMaxPhotos = () => {
-    if (plan === 'basic') return 1;
-    if (plan === 'standard') return 3;
-    if (plan === 'pro') return 5;
-    return 8;
-  };
-
-  const MAX_PHOTOS = getMaxPhotos();
+  /**
+   * photosPerItemLimit comes from the backend's real PlanLimits
+   * (getSubscriptionStatus / resolveEffectivePlan) — 2 / 5 / 10 / 15 for
+   * Basic / Standard / Pro / Pro Plus (PHASE_4_COLLECTION_MAPPING v10,
+   * Section 3). This screen used to hardcode its own 1 / 3 / 5 / 8 table,
+   * the exact "recreate backend business rules in the client and drift"
+   * pattern already found and fixed for the dashboard filter range — a
+   * vendor was shown (and blocked at) the wrong photo count on every plan,
+   * always more restrictive than what createCatalogItem actually enforces.
+   * Falls back to the Basic limit only for the brief window before the
+   * real PlanLimits response lands.
+   */
+  const MAX_PHOTOS = planLimits?.photosPerItemLimit ?? 2;
 
   const unsavedChanges = useUnsavedChanges(
     { name, basePrice, salePrice, description, selectedCategoryId, isAvailable, isTaxExempt, isOutOfStock, addOnGroups, photos },

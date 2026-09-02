@@ -41,7 +41,7 @@ import { uploadCatalogItemPhotos } from '@/lib/catalog/uploadCatalogItemPhoto';
 export default function EditItemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { getItemById, updateItem, deleteItem, categories, addCategory } = useCatalog();
-  const { plan } = useVendorPlan();
+  const { plan, planLimits } = useVendorPlan();
   const { vendor } = useVendor();
 
   const item = getItemById(id as string);
@@ -80,13 +80,16 @@ export default function EditItemScreen() {
     lowStockThreshold: string; highlightLabel: HighlightLabel | null;
   } | null>(null);
 
-  const getMaxPhotos = () => {
-    if (plan === 'basic') return 1;
-    if (plan === 'standard') return 3;
-    if (plan === 'pro') return 5;
-    return 8;
-  };
-  const MAX_PHOTOS = getMaxPhotos();
+  /**
+   * photosPerItemLimit comes from the backend's real PlanLimits
+   * (getSubscriptionStatus / resolveEffectivePlan) — 2 / 5 / 10 / 15 for
+   * Basic / Standard / Pro / Pro Plus (PHASE_4_COLLECTION_MAPPING v10,
+   * Section 3). This screen used to hardcode its own 1 / 3 / 5 / 8 table —
+   * same drift bug as add-item.tsx — always more restrictive than what
+   * updateCatalogItem actually enforces. Falls back to the Basic limit only
+   * for the brief window before the real PlanLimits response lands.
+   */
+  const MAX_PHOTOS = planLimits?.photosPerItemLimit ?? 2;
 
   useEffect(() => {
     if (item) {
