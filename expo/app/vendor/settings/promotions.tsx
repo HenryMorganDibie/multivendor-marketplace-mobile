@@ -18,6 +18,8 @@ import { Colors } from '@/constants/colors';
 import type { VendorPromotion, StackingMode } from '@/mocks/promotionsData';
 import { getPromotionCategory } from '@/mocks/promotionsData';
 import EditScreenHeader from '@/components/EditScreenHeader';
+import { callable } from '@/lib/firebase';
+import { Alert } from '@/utils/alert';
 
 const ICON_MAP: Record<string, any> = {
   percent: Percent,
@@ -162,9 +164,37 @@ export default function PromotionsScreen() {
   const { vendor, updateVendor } = useVendor();
   const [deleteTarget, setDeleteTarget] = useState<VendorPromotion | null>(null);
   const [showStackingPicker, setShowStackingPicker] = useState(false);
+  const [isSavingStackingMode, setIsSavingStackingMode] = useState(false);
 
   const currentStackingMode: StackingMode = vendor.promoStackingMode || 'single';
   const currentStackingLabel = STACKING_MODES.find((m) => m.value === currentStackingMode)?.label || 'Single Promotion';
+
+  // updateVendor() alone only ever wrote this to AsyncStorage -- no backend
+  // callable accepted the field, so the live Firestore listener silently
+  // overwrote a vendor's choice on the next snapshot, and it never reached
+  // a real customer's cart (useCartViewModel.ts's vendorStackingMode reads
+  // the vendor document's promoStackingMode, not local device storage).
+  // Optimistic update stays for responsiveness, but is rolled back if the
+  // real save fails, same pattern as minimum-order-amount.tsx.
+  const handleStackingModeSelect = async (mode: StackingMode) => {
+    const previousMode = currentStackingMode;
+    updateVendor({ promoStackingMode: mode });
+    setShowStackingPicker(false);
+    console.log('[Promotions] Stacking mode changed to:', mode);
+
+    setIsSavingStackingMode(true);
+    try {
+      const update = callable<{ promoStackingMode: StackingMode }, { success: true }>('updateVendorSettings');
+      await update({ promoStackingMode: mode });
+    } catch (error) {
+      console.error('[Promotions] updateVendorSettings (promoStackingMode) failed:', error);
+      updateVendor({ promoStackingMode: previousMode });
+      const message = (error as { message?: string })?.message ?? 'Could not save your stacking mode. Please try again.';
+      Alert.alert('Something went wrong', message);
+    } finally {
+      setIsSavingStackingMode(false);
+    }
+  };
 
   const isServiceVendor = vendor.category?.toLowerCase().includes('service');
 
@@ -284,10 +314,9 @@ export default function PromotionsScreen() {
                       currentStackingMode === mode.value && styles.stackingOptionActive,
                     ]}
                     onPress={() => {
-                      updateVendor({ promoStackingMode: mode.value });
-                      setShowStackingPicker(false);
-                      console.log('[Promotions] Stacking mode changed to:', mode.value);
+                      void handleStackingModeSelect(mode.value);
                     }}
+                    disabled={isSavingStackingMode}
                     activeOpacity={0.7}
                   >
                     <View style={styles.stackingOptionContent}>

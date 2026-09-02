@@ -156,6 +156,12 @@ export function mapVendorDoc(id: string, data: Record<string, unknown>): Vendor 
     minimumOrderAmount: (data.minimumOrderAmount as number) ?? undefined,
     policy: (data.policy as string) ?? undefined,
 
+    // Same bug as minimumOrderAmount/policy: updateVendorSettings writes this
+    // directly onto the document now, so it needs to be read back out here
+    // or a vendor's saved stacking mode never reaches a real customer's cart
+    // (useCartViewModel.ts's vendorStackingMode reads this same field).
+    promoStackingMode: (data.promoStackingMode as Vendor['promoStackingMode']) ?? undefined,
+
     // Same bug as minimumOrderAmount/policy above: updateVendorPaymentInstructions
     // writes these directly onto this document, so they need to be read back
     // out here or a saved value vanishes on the next live snapshot.
