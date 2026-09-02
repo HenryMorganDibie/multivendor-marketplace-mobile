@@ -22,7 +22,7 @@ import type { InboxSnapshot, OrderStatusType } from '@/mocks/inboxData';
 import { Colors } from '@/constants/colors';
 
 /**
- * Filter tabs for the the platform customer picker. Vendors can narrow the list to
+ * Filter tabs for the platform customer picker. Vendors can narrow the list to
  * All / Order chats / Inquiries. Support, AI, creator, blocked, expired and
  * deleted conversations are always excluded — those are not eligible invoice
  * recipients.

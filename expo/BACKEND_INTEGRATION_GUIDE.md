@@ -1,6 +1,6 @@
 # the platform — Backend Integration Guide (for Henry)
 
-This document is the single reference for connecting the the platform mobile app to
+This document is the single reference for connecting the platform mobile app to
 Firebase. The app already runs on a layered, backend-ready architecture; your job
 is to swap the **repository** internals from mock/AsyncStorage reads to Firestore,
 without touching services, contexts, or UI.
@@ -283,7 +283,7 @@ on `OrderEvent`/`PaymentRecord` to ISO strings inside `orderMapper.fromRaw`.
 
 `Order.orderSource` (`OrderSource`) = `internal | external`:
 
-- `internal` — placed inside the the platform app by a customer.
+- `internal` — placed inside the platform app by a customer.
 - `external` — logged manually by the vendor (WhatsApp, Instagram, walk-in, phone).
   Carries an optional `externalReference` (e.g. "Instagram", "Phone call").
 

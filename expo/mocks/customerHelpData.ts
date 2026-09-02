@@ -24,7 +24,7 @@ export const customerHelpCategories: CustomerHelpCategory[] = [
   { id: 'favorites', title: 'Favorites', icon: 'Heart', description: 'Save vendors and items you love' },
   { id: 'privacy-security', title: 'Privacy & Security', icon: 'Lock', description: 'Manage your data and account safety' },
   { id: 'reporting-problem', title: 'Reporting a Problem', icon: 'Flag', description: 'Report issues or suspicious activity' },
-  { id: 'account-support', title: 'Account Support', icon: 'LifeBuoy', description: 'Get help from the the platform team' },
+  { id: 'account-support', title: 'Account Support', icon: 'LifeBuoy', description: 'Get help from the platform team' },
 ];
 
 export const customerHelpArticles: CustomerHelpArticle[] = [
@@ -142,7 +142,7 @@ When you accept, it becomes an active order and follows the standard order lifec
     content: `the platform does not receive, hold, or process customer payments.
 
 ## Direct payment
-All payments happen directly between you and the vendor, outside of the the platform app. The vendor sends you payment instructions when it is time to pay.
+All payments happen directly between you and the vendor, outside of the platform app. The vendor sends you payment instructions when it is time to pay.
 
 ## Payment safety tips
 • Only pay after the vendor accepts your order

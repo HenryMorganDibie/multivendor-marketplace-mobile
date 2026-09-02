@@ -23,7 +23,7 @@ export type PaymentStatus = 'payment_pending' | 'partially_received' | 'payment_
 
 /**
  * Where an order originated.
- * - `internal`: placed inside the the platform app by a customer.
+ * - `internal`: placed inside the platform app by a customer.
  * - `external`: logged manually by the vendor (WhatsApp, Instagram, walk-in, etc.).
  *
  * The legacy value `'the platform'` is normalized to `'internal'` via

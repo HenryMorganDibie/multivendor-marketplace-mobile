@@ -1335,7 +1335,7 @@ export default function CreateInvoiceScreen() {
                 onPress={handleSend}
                 activeOpacity={0.7}
               >
-                {/* Internal customer → invoice is sent into the the platform chat.
+                {/* Internal customer → invoice is sent into the platform chat.
                     External customer → invoice is created and a secure share
                     link is generated (no chat to send into). */}
                 <Text style={styles.sendButtonText}>

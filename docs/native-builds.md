@@ -1,6 +1,6 @@
 # Native builds
 
-How to produce iOS and Android builds of the the platform app, what each one needs,
+How to produce iOS and Android builds of the platform app, what each one needs,
 and what is genuinely blocked until the company store accounts exist.
 
 Everything before this point had only ever run in the Expo web preview. These

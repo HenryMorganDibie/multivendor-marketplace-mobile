@@ -1,10 +1,10 @@
-# the platform — Frontend (Mobile App)
+# Multi-Vendor Marketplace Platform: Mobile App
 
-A cross-platform (iOS / Android / Web) multi-vendor marketplace app: customers discover and order from vendors, vendors manage catalog/orders/invoices/subscriptions, and there's an in-app admin surface. Built with Expo + Expo Router on top of the [Rork](https://rork.com) platform.
+A cross-platform (iOS / Android / Web) multi-vendor marketplace app: customers discover and order from vendors, vendors manage catalog/orders/invoices/subscriptions, and there's an in-app admin surface. Built with Expo + Expo Router on top of the [Rork](https://rork.com) app builder.
 
-**Backend:** [`platform-backend`](https://github.com/platformTech/platform-backend) — Firebase (Firestore, Cloud Functions, Auth, Storage). Most of the app is now wired to it for real — see [Backend integration status](#backend-integration-status) below for exactly what's live versus what's still mock, screen by screen.
+**Backend:** [`multivendor-marketplace-platform`](https://github.com/HenryMorganDibie/multivendor-marketplace-platform), a companion repository: Firebase (Firestore, Cloud Functions, Auth, Storage). Most of the app is now wired to it for real; see [Backend integration status](#backend-integration-status) below for exactly what's live versus what's still mock, screen by screen.
 
-**Brand color:** `#FF7A28` — canonical the platform orange, defined in `expo/constants/colors.ts` and `expo/constants/theme.ts`. Use this consistently across the landing page and any new web interfaces; don't introduce a second orange.
+**Brand color:** `#FF7A28`, defined in `expo/constants/colors.ts` and `expo/constants/theme.ts`. Use this consistently across the landing page and any new web interfaces; don't introduce a second orange.
 
 ---
 

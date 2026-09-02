@@ -118,7 +118,7 @@ When showing catalog items:
 
 Be friendly, clear, and concise. Adapt to the vendor's business type.`;
 
-  const greetingText = `Hi 👋 Welcome to **${vendor.name}**.\n\nI'm the the platform AI assistant for this store. I can help answer questions, explain services, and help you explore what **${vendor.name}** offers.`;
+  const greetingText = `Hi 👋 Welcome to **${vendor.name}**.\n\nI'm the platform AI assistant for this store. I can help answer questions, explain services, and help you explore what **${vendor.name}** offers.`;
 
   const { messages, error, sendMessage, setMessages } = useRorkAgent({
     tools: {

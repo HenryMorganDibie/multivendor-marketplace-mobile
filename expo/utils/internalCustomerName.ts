@@ -72,7 +72,7 @@ export function formatInternalCustomerFromFull(fullName?: string): string {
  *
  * - `customerSource === 'external'` → return the vendor-typed display name
  *   verbatim (vendors may enter whatever name they like for external
- *   customers who are not in the the platform system).
+ *   customers who are not in the platform system).
  * - `customerSource === 'the platform'` (or undefined) → always privacy-safe
  *   "First L." via `formatInternalCustomerFromFull`.
  *

@@ -35,7 +35,7 @@ export default function ShareYourStoreScreen() {
     setShowQR(true);
     Alert.alert(
       'QR Code',
-      'Customers can scan this QR code to visit your store. They must install the the platform app first.',
+      'Customers can scan this QR code to visit your store. They must install the platform app first.',
       [{ text: 'OK', onPress: () => setShowQR(false) }]
     );
   };

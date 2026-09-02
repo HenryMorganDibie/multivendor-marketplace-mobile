@@ -1,7 +1,7 @@
 import * as WebBrowser from 'expo-web-browser';
 
 /**
- * Legal documents live on the the platform website, not in the app.
+ * Legal documents live on the platform website, not in the app.
  *
  * The client's direction, with WhatsApp as the reference: tapping a legal link
  * opens the browser and loads the published page. The app deliberately does not

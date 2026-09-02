@@ -23,7 +23,7 @@ export default function PaymentHelp() {
         <View style={styles.section}>
           <Text style={styles.heading}>How Payment Works</Text>
           <Text style={styles.paragraph}>
-            the platform is a marketplace platform that connects customers with vendors. All payments happen directly between you and the vendor, outside of the the platform app.
+            the platform is a marketplace platform that connects customers with vendors. All payments happen directly between you and the vendor, outside of the platform app.
           </Text>
         </View>
 

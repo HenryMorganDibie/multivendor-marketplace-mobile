@@ -360,7 +360,7 @@ export default function AiStatePreview() {
                 <View style={styles.messageContentWrapper}>
                   <AiLabelRow />
                   <AiBubble>
-                    Hi 👋 Welcome to Preview Bistro. I'm the the platform AI assistant for this store.
+                    Hi 👋 Welcome to Preview Bistro. I'm the platform AI assistant for this store.
                   </AiBubble>
                 </View>
               </View>

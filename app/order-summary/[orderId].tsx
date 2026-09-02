@@ -244,7 +244,7 @@ export default function PublicOrderSummaryScreen() {
           <View style={styles.inviteSection}>
             <Text style={styles.inviteHeader}>Order from {order.vendorName}</Text>
             <Text style={styles.inviteMessage}>
-              For future orders, you can order directly from {order.vendorName} on the the platform app.
+              For future orders, you can order directly from {order.vendorName} on the platform app.
             </Text>
             <TouchableOpacity
               style={styles.visitButton}

@@ -81,7 +81,7 @@ export default function AvailablePlansScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.introText}>
-            Plans are managed securely on the the platform Vendor Portal. Review what each plan includes, then
+            Plans are managed securely on the platform Vendor Portal. Review what each plan includes, then
             continue on the web to subscribe or switch.
           </Text>
 

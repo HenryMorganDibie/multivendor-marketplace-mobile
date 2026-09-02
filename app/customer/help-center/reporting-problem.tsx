@@ -19,7 +19,7 @@ export default function ReportingProblem() {
         <View style={styles.section}>
           <Text style={styles.heading}>Technical Issues</Text>
           <Text style={styles.paragraph}>
-            If you&apos;re experiencing technical problems with the the platform app:
+            If you&apos;re experiencing technical problems with the platform app:
           </Text>
           <View style={styles.bulletList}>
             <Text style={styles.bullet}>• App crashes or freezes</Text>
@@ -103,7 +103,7 @@ export default function ReportingProblem() {
             <Text style={styles.bullet}>• You&apos;ll be notified of the outcome when appropriate</Text>
           </View>
           <Text style={styles.paragraph}>
-            Reports are taken seriously and help keep the the platform community safe.
+            Reports are taken seriously and help keep the platform community safe.
           </Text>
         </View>
 
