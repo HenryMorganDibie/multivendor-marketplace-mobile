@@ -1259,25 +1259,21 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         referralStatus: newAccount.referralStatus,
       };
 
-      if (data.role === 'customer' && data.location) {
-        try {
-          await AsyncStorage.setItem('@the platform_user_location', JSON.stringify({
-            countryCode: data.location.countryCode,
-            countryName: data.location.countryName,
-            currencyCode: '',
-            currencySymbol: '',
-            regionId: data.location.stateCode,
-            regionName: data.location.stateName,
-            city: data.location.areaName,
-            area: data.location.areaName,
-            lastCountryChange: new Date().toISOString(),
-            isOnboarded: true,
-            hasCompletedInitialLocationSetup: true,
-          }));
-        } catch (locErr) {
-          console.error('[AUTH] Failed to persist customer location:', locErr);
-        }
-      }
+      /**
+       * Customer location is NOT persisted here.
+       *
+       * This used to write '@the platform_user_location' directly, bypassing
+       * UserLocationContext's own state entirely (that context only updates
+       * in memory through its setLocation, called from setInitialCountry).
+       * It also hardcoded currencyCode/currencySymbol to '', which is wrong
+       * for every country. Both customer.tsx and verify-otp.tsx already call
+       * setInitialCountry() right after registerAccount() resolves, which
+       * writes the same storage key correctly (real currency, in-memory
+       * state updated) — this block only ever raced that real write with a
+       * worse one, and would have left a customer with a blank currency
+       * forever if any future call site ever registered without the
+       * follow-up call this one was standing in for.
+       */
 
       /**
        * Local persistence must not be able to fail a registration that worked.

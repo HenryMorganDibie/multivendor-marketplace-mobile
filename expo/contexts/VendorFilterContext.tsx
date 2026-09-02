@@ -1,5 +1,5 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Vendor } from '@/mocks/vendorData';
 import { useUserLocation } from './UserLocationContext';
 import { vendorService } from '@/services/vendorService';
@@ -40,6 +40,7 @@ const defaultVendorFilter = {
   getOpenVendors: noopVendors as () => Vendor[],
   getOpenVerifiedVendors: noopVendors as () => Vendor[],
   getVendorsByFulfillment: noopFulfillment,
+  refetchVendors: () => {},
 };
 
 /**
@@ -157,9 +158,14 @@ export const [VendorFilterProvider, useVendorFilterInner] = createContextHook(()
   // is the path Firestore reads will replace.
   const [sourceVendors, setSourceVendors] = useState<Vendor[]>([]);
   const [vendorsLoading, setVendorsLoading] = useState<boolean>(true);
+  // Bumped by refetchVendors() to re-run the load effect below on demand —
+  // the "Refresh" button on the empty-vendors screen used to just log and do
+  // nothing, since nothing ever asked this effect to run again after mount.
+  const [refetchToken, setRefetchToken] = useState<number>(0);
 
   useEffect(() => {
     let active = true;
+    setVendorsLoading(true);
     vendorService
       .getAll()
       .then(vendors => {
@@ -174,6 +180,10 @@ export const [VendorFilterProvider, useVendorFilterInner] = createContextHook(()
     return () => {
       active = false;
     };
+  }, [refetchToken]);
+
+  const refetchVendors = useCallback(() => {
+    setRefetchToken(t => t + 1);
   }, []);
 
   const filteredVendors = useMemo(() => {
@@ -211,12 +221,14 @@ export const [VendorFilterProvider, useVendorFilterInner] = createContextHook(()
     getOpenVendors: derived.getOpen,
     getOpenVerifiedVendors: derived.getOpenVerified,
     getVendorsByFulfillment: derived.getByFulfillment,
+    refetchVendors,
   }), [
     filteredVendors,
     verifiedVendors,
     derived,
     locationLoading,
     vendorsLoading,
+    refetchVendors,
   ]);
 }, defaultVendorFilter);
 

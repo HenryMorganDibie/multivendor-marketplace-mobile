@@ -38,6 +38,7 @@ export default function CustomerHomeScreen() {
     newVendorsNearYou,
     trendingVendors,
     popularVendorsNearYou,
+    refetchVendors,
   } = vendorFilter;
   const { regionName, countryName, city, area, hasCompletedInitialLocationSetup, isLoading: locationLoading } = useUserLocation();
   const [showLocationModal, setShowLocationModal] = useState(!hasCompletedInitialLocationSetup && !locationLoading);
@@ -487,6 +488,7 @@ export default function CustomerHomeScreen() {
                 style={styles.refreshButton}
                 onPress={() => {
                   console.log('[HOME] Refresh pressed, requerying vendors');
+                  refetchVendors();
                 }}
                 activeOpacity={0.7}
               >
