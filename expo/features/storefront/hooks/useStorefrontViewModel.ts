@@ -19,7 +19,7 @@ import { useVendorMenu } from '@/data/hooks';
 import { useOrders } from '@/contexts/OrdersContext';
 import { useSafeBack } from '@/utils/useSafeBack';
 import { Alert } from '@/utils/alert';
-import { vendorPlanAllowsAi } from '@/utils/the platformAiLimits';
+import { vendorPlanAllowsAi } from '@/utils/platformAiLimits';
 import { MenuItem, Vendor } from '@/mocks/vendorData';
 
 export function useStorefrontViewModel(vendor: Vendor) {
@@ -55,7 +55,7 @@ export function useStorefrontViewModel(vendor: Vendor) {
   // Combined with the existing vendor-status gate (UNVERIFIED/SUSPENDED/etc.)
   // which already sets canAccessAI=false. Backend will own the plan tier —
   // Henry can swap `vendor.plan` for a Firestore read later.
-  const canUsethe platformAi = canAccessAI && vendorPlanAllowsAi(vendor);
+  const canUsePlatformAi = canAccessAI && vendorPlanAllowsAi(vendor);
   const { trackVendorView } = useRecentlyViewed();
   const { isFavorite, toggleFavorite } = useFavorites();
   const vendorFavorited = isFavorite(vendor.id);
@@ -122,10 +122,10 @@ export function useStorefrontViewModel(vendor: Vendor) {
   };
 
   const handleMenuPress = async () => {
-    // the platform.com does not resolve, and /@{username} was never the real
+    // theplatform.com does not resolve, and /@{username} was never the real
     // route anyway — /store/[username].tsx is. Matches shareStorefront.ts's
     // storefrontUrl() so there is one link format, not two.
-    const shareUrl = `https://the platform-dev.web.app/store/${vendor.username}`;
+    const shareUrl = `https://platform-dev.web.app/store/${vendor.username}`;
     try {
       await Clipboard.setStringAsync(shareUrl);
       console.log('[Share Store] URL copied to clipboard:', shareUrl);
@@ -229,9 +229,9 @@ export function useStorefrontViewModel(vendor: Vendor) {
       Alert.alert('', 'You cannot initiate communication with this vendor.');
       return;
     }
-    if (!canUsethe platformAi) {
+    if (!canUsePlatformAi) {
       // Basic plan or vendor status blocks AI. Stay silent — the button is
-      // hidden in the catalog when canUsethe platformAi is false. This is a guard
+      // hidden in the catalog when canUsePlatformAi is false. This is a guard
       // against any other entry point.
       return;
     }
@@ -368,7 +368,7 @@ export function useStorefrontViewModel(vendor: Vendor) {
     vendorFavorited,
     canChat,
     canAccessAI,
-    canUsethe platformAi,
+    canUsePlatformAi,
     canAddToCart,
     chatMode,
     filteredItems,

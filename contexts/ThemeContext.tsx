@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Theme = 'light' | 'dark';
 
-const THEME_STORAGE_KEY = '@the platform_theme';
+const THEME_STORAGE_KEY = '@platform_theme';
 
 export const [ThemeProvider, useTheme] = createContextHook(() => {
   const [theme, setTheme] = useState<Theme>('light');

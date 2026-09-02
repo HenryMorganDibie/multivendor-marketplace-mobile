@@ -313,7 +313,7 @@ export default function VendorOrdersScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const the platformOrders = useMemo(
+  const platformOrders = useMemo(
     () => orders.filter((o) => o.orderSource === 'the platform'),
     [orders]
   );
@@ -322,37 +322,37 @@ export default function VendorOrdersScreen() {
     const counts: Record<StatusTab, number> = {
       all: 0, new: 0, accepted: 0, in_progress: 0, ready: 0, completed: 0,
     };
-    counts.all = the platformOrders.length + externalOrders.length;
+    counts.all = platformOrders.length + externalOrders.length;
     TABS.forEach((tab) => {
       if (tab.key === 'completed') {
         counts[tab.key] =
-          the platformOrders.filter((o) => tab.statuses.includes(o.status)).length +
+          platformOrders.filter((o) => tab.statuses.includes(o.status)).length +
           externalOrders.length;
       } else if (tab.key !== 'all') {
-        counts[tab.key] = the platformOrders.filter((o) =>
+        counts[tab.key] = platformOrders.filter((o) =>
           tab.statuses.includes(o.status)
         ).length;
       }
     });
     return counts;
-  }, [the platformOrders, externalOrders]);
+  }, [platformOrders, externalOrders]);
 
   const combinedOrders = useMemo((): OrderListItem[] => {
     const tab = TABS.find((t) => t.key === activeTab);
     if (!tab) return [];
 
-    let the platformFiltered: Order[];
+    let platformFiltered: Order[];
     if (tab.key === 'all') {
-      the platformFiltered = sortOrdersByPriority([...the platformOrders]);
+      platformFiltered = sortOrdersByPriority([...platformOrders]);
     } else if (tab.statuses.length === 0) {
-      the platformFiltered = [];
+      platformFiltered = [];
     } else {
-      the platformFiltered = sortOrdersByPriority(
-        the platformOrders.filter((o) => tab.statuses.includes(o.status))
+      platformFiltered = sortOrdersByPriority(
+        platformOrders.filter((o) => tab.statuses.includes(o.status))
       );
     }
 
-    const items: OrderListItem[] = the platformFiltered.map((o) => ({ _type: 'the platform', order: o }));
+    const items: OrderListItem[] = platformFiltered.map((o) => ({ _type: 'the platform', order: o }));
 
     if (activeTab === 'all' || activeTab === 'completed') {
       externalOrders.forEach((o) => items.push({ _type: 'external', extOrder: o }));
@@ -374,7 +374,7 @@ export default function VendorOrdersScreen() {
     }
 
     return items;
-  }, [activeTab, the platformOrders, externalOrders, searchQuery]);
+  }, [activeTab, platformOrders, externalOrders, searchQuery]);
 
   const hasUnpaidWarning = useMemo(
     () => hasOldUnpaidExternalOrders(orders, 6),

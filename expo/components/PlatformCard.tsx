@@ -1,18 +1,18 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
-import { the platformColors, Radii, Shadows } from '@/constants/theme';
+import { platformColors, Radii, Shadows } from '@/constants/theme';
 
-interface the platformCardProps {
+interface platformCardProps {
   children: React.ReactNode;
   variant?: 'bordered' | 'surface';
   style?: ViewStyle;
 }
 
-export default function the platformCard({
+export default function platformCard({
   children,
   variant = 'surface',
   style,
-}: the platformCardProps) {
+}: platformCardProps) {
   return (
     <View
       style={[
@@ -33,13 +33,13 @@ const styles = StyleSheet.create({
     ...Shadows.xs,
   },
   bordered: {
-    backgroundColor: the platformColors.white,
+    backgroundColor: platformColors.white,
     borderWidth: 1,
-    borderColor: the platformColors.border,
+    borderColor: platformColors.border,
   },
   surface: {
-    backgroundColor: the platformColors.white,
+    backgroundColor: platformColors.white,
     borderWidth: 1,
-    borderColor: the platformColors.border,
+    borderColor: platformColors.border,
   },
 });

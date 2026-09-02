@@ -140,7 +140,7 @@ export function getInvoiceStatusDisplayLabel(status: InvoiceStatus): string {
 
 /** Public, unguessable invoice share URL. Never exposes the readable invoice number. */
 export function getInvoiceShareUrl(shareCode: string): string {
-  return `https://the platform.app/i/${shareCode}`;
+  return `https://theplatform.app/i/${shareCode}`;
 }
 
 /** Financial edits allowed? Paid and void invoices are locked. */
@@ -195,7 +195,7 @@ export interface Invoice {
   conversationId?: string;
   /** Optional address for external customers (delivery / invoice records). */
   customerAddress?: string;
-  /** Unguessable code backing the public URL the platform.app/i/{shareCode} */
+  /** Unguessable code backing the public URL theplatform.app/i/{shareCode} */
   shareCode?: string;
   items: InvoiceLineItem[];
   subtotal: number;
@@ -814,7 +814,7 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
   const getInvoiceById = (id: string): Invoice | undefined =>
     (invoicesQuery.data || []).find((inv) => inv.id === id);
 
-  /** Resolve an invoice from its public share code (the platform.app/i/{shareCode}). */
+  /** Resolve an invoice from its public share code (theplatform.app/i/{shareCode}). */
   const getInvoiceByShareCode = (shareCode: string): Invoice | undefined =>
     (backendInvoices ?? invoicesQuery.data ?? []).find((inv) => inv.shareCode === shareCode);
 

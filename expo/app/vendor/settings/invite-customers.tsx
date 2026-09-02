@@ -19,7 +19,7 @@ export default function ShareYourStoreScreen() {
   
   const displayUsername = username || systemGeneratedUsername || 'loading';
   const storeLink = `the platform://@${displayUsername}`;
-  const webLink = `https://the platform.com/@${displayUsername}`;
+  const webLink = `https://theplatform.com/@${displayUsername}`;
 
   const executeShare = async () => {
     await safeShare({

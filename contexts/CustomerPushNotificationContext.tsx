@@ -7,7 +7,7 @@ import { customerNotificationThrottleService } from '@/utils/customerNotificatio
 import type { OrderStatus } from '@/constants/orderStatus';
 import { shouldBypassCustomerQuietHours, isWithinQuietHours, CustomerNotificationType } from '@/utils/customerNotificationHelper';
 
-const CUSTOMER_PUSH_TOKEN_KEY = '@the platform_customer_push_token';
+const CUSTOMER_PUSH_TOKEN_KEY = '@platform_customer_push_token';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({

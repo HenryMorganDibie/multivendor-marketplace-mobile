@@ -2,7 +2,7 @@
 
 A cross-platform (iOS / Android / Web) multi-vendor marketplace app: customers discover and order from vendors, vendors manage catalog/orders/invoices/subscriptions, and there's an in-app admin surface. Built with Expo + Expo Router on top of the [Rork](https://rork.com) platform.
 
-**Backend:** [`the platform-backend`](https://github.com/the platformTech/the platform-backend) — Firebase (Firestore, Cloud Functions, Auth, Storage). Most of the app is now wired to it for real — see [Backend integration status](#backend-integration-status) below for exactly what's live versus what's still mock, screen by screen.
+**Backend:** [`platform-backend`](https://github.com/platformTech/platform-backend) — Firebase (Firestore, Cloud Functions, Auth, Storage). Most of the app is now wired to it for real — see [Backend integration status](#backend-integration-status) below for exactly what's live versus what's still mock, screen by screen.
 
 **Brand color:** `#FF7A28` — canonical the platform orange, defined in `expo/constants/colors.ts` and `expo/constants/theme.ts`. Use this consistently across the landing page and any new web interfaces; don't introduce a second orange.
 
@@ -11,7 +11,7 @@ A cross-platform (iOS / Android / Web) multi-vendor marketplace app: customers d
 ## Repo layout — read this first
 
 ```
-the platform-mobile/
+platform-mobile/
 ├── rork.json          # Rork platform config — declares "expo" as the app path
 ├── expo/               # ⭐ THE ACTUAL APP — everything below lives here
 │   ├── app/            # Screens (Expo Router, file-based routing)
@@ -19,7 +19,7 @@ the platform-mobile/
 │   ├── contexts/        # ~47 React contexts — app state, one per domain
 │   ├── services/        # Service → Repository → Mapper layers (see below)
 │   ├── constants/       # Colors, theme, pricing, plan-gating tables
-│   ├── backend/         # A small tRPC/Hono API (separate from the platform-backend Firebase Functions — see note below)
+│   ├── backend/         # A small tRPC/Hono API (separate from platform-backend Firebase Functions — see note below)
 │   ├── BACKEND_INTEGRATION_GUIDE.md   # ⭐ Read before wiring anything to Firebase
 │   └── README.md        # Generic Expo/Rork run & deploy instructions
 ├── app/, components/, contexts/, ...   # ⚠️ Root-level duplicates, see below
@@ -30,7 +30,7 @@ the platform-mobile/
 
 **The root-level `app/`, `components/`, `contexts/`, etc. are a near-duplicate of the contents of `expo/`**, committed in the same commits as their `expo/` counterparts (confirmed via `git log`). This is a known artifact of the Rork platform's sync/export mechanism, not something introduced or maintained by hand — **always edit inside `expo/`**, never the root-level copies, or changes will silently diverge between the two trees.
 
-There is also a small **tRPC/Hono API** at `expo/backend/` (routes for abandoned-cart nudges, appointment reminders, notifications) — this is a lightweight app-side API layer, **separate and unrelated to `the platform-backend`** (the real Firebase backend). Don't confuse the two when reading code that imports from `@/backend`.
+There is also a small **tRPC/Hono API** at `expo/backend/` (routes for abandoned-cart nudges, appointment reminders, notifications) — this is a lightweight app-side API layer, **separate and unrelated to `platform-backend`** (the real Firebase backend). Don't confuse the two when reading code that imports from `@/backend`.
 
 ---
 
@@ -93,7 +93,7 @@ Auth (real Firebase Auth, not a local session), vendor discovery and storefront,
 ### What's still incomplete or unmerged
 - **External Orders** — recording a basic order (customer name, catalog items, pickup/delivery) is real and live. Manual/custom line items, delivery/service fee, discount, tax, fulfillment date/time, and screenshot attachments are all still blocked at Save with an honest "not supported yet" message, because the backend doesn't accept them. A full fix for this plus two real display bugs (external orders were invisible in the vendor's own Orders list and in Business Insights) exists on the unmerged branch `claude/partner-program-mobile` — not yet on `main`.
 - **Partner Program** — a complete, production-quality frontend (customer + vendor) exists on that same unmerged branch, with zero backend behind it yet; see `docs/PARTNER_PROGRAM_MOBILE_HANDOFF.md` on that branch for the exact backend gap.
-- **Admin Console (Milestone 5)** — separate repo, backend not started; see `the platform-backend`'s README.
+- **Admin Console (Milestone 5)** — separate repo, backend not started; see `platform-backend`'s README.
 
 This list reflects what's been directly verified as of 2026-08-26, not an exhaustive line-by-line re-audit of every screen — if you find something here that's stale, it's worth a quick grep before trusting it either way. See `BACKEND_INTEGRATION_GUIDE.md` for the fuller per-repository breakdown, which predates most of the wiring above and is due its own refresh.
 
@@ -101,9 +101,9 @@ This list reflects what's been directly verified as of 2026-08-26, not an exhaus
 
 ## Backend integration status
 
-Most of the app now talks to `the platform-backend`/Firebase for real — see the two lists directly above for what's live versus what's still mock or unmerged. This matters for anyone reviewing screens expecting real behavior: a screen looking "done" visually still doesn't guarantee it's wired, so check the lists above (or grep for the relevant repository/service file) rather than assume from the UI alone.
+Most of the app now talks to `platform-backend`/Firebase for real — see the two lists directly above for what's live versus what's still mock or unmerged. This matters for anyone reviewing screens expecting real behavior: a screen looking "done" visually still doesn't guarantee it's wired, so check the lists above (or grep for the relevant repository/service file) rather than assume from the UI alone.
 
-A few contract details worth knowing before wiring begins (from a joint review against `the platform-backend`'s actual Cloud Functions contracts, Feb 2026):
+A few contract details worth knowing before wiring begins (from a joint review against `platform-backend`'s actual Cloud Functions contracts, Feb 2026):
 
 - **Plan tier naming:** the app's internal label is `'pro+'`; the backend stores `'pro_plus'`. Always translate at the boundary via `subscriptionMapper.toBackendTier`/`fromBackendTier` — never let `'pro+'` leak into a Firestore write or `'pro_plus'` leak into UI.
 - **Invoice branding fields are now aligned with the backend's `updateInvoiceBranding` callable**: `footerText` (not `footerNote`), `templateId` as an extensible string (`'default' | 'classic' | 'modern' | ...`, not an entitlement name like `'premium'`), and `businessAddress` is deliberately **not** part of the invoice branding contract — many vendors operate from home, and a private/verification address must never appear on a public invoice by default. See `constants/documentBranding.ts`.

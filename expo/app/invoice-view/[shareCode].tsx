@@ -73,7 +73,7 @@ function getPaymentStatusDisplay(
 }
 
 /**
- * Invoice page — the in-app representation of https://the platform.app/i/{shareCode}.
+ * Invoice page — the in-app representation of https://theplatform.app/i/{shareCode}.
  * Read-only, live: reflects the latest saved invoice state. Branding is applied
  * automatically from the vendor's saved branding settings and current plan.
  *
@@ -357,7 +357,7 @@ export default function PublicInvoiceScreen() {
     thankYouMessage: effectiveBranding.thankYouMessage,
     footerText: effectiveBranding.footerText,
     templateId: effectiveBranding.templateId,
-    poweredBySubtle: effectiveBranding.capabilities.poweredBythe platform === 'subtle',
+    poweredBySubtle: effectiveBranding.capabilities.poweredByPlatform === 'subtle',
     showLogo: effectiveBranding.capabilities.allowLogo,
     showThankYou: effectiveBranding.capabilities.allowThankYouMessage,
     showFooter: effectiveBranding.capabilities.allowCustomFooter,
@@ -413,7 +413,7 @@ export default function PublicInvoiceScreen() {
             <View style={styles.ctaCard}>
               <TouchableOpacity
                 style={styles.ctaPrimary}
-                onPress={() => Linking.openURL('https://the platform.app')}
+                onPress={() => Linking.openURL('https://theplatform.app')}
                 activeOpacity={0.8}
               >
                 <Sparkles size={16} color={Colors.white} />
@@ -421,7 +421,7 @@ export default function PublicInvoiceScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.ctaSecondary}
-                onPress={() => Linking.openURL('https://the platform.app')}
+                onPress={() => Linking.openURL('https://theplatform.app')}
                 activeOpacity={0.8}
               >
                 <Smartphone size={16} color={Colors.primary} />

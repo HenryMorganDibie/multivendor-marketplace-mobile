@@ -29,8 +29,8 @@ interface BlockedUsersContextType {
 
 const BlockedUsersContext = createContext<BlockedUsersContextType | undefined>(undefined);
 
-const BLOCKED_USERS_KEY = '@the platform_blocked_users';
-const ARCHIVED_CHATS_KEY = '@the platform_archived_chats';
+const BLOCKED_USERS_KEY = '@platform_blocked_users';
+const ARCHIVED_CHATS_KEY = '@platform_archived_chats';
 
 export function BlockedUsersProvider({ children }: { children: React.ReactNode }) {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);

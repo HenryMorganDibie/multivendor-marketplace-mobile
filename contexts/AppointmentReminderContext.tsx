@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useOrders } from './OrdersContext';
 import type { Order } from '@/mocks/ordersData';
 
-const REMINDER_SENT_KEY = '@the platform_appointment_reminders_sent';
+const REMINDER_SENT_KEY = '@platform_appointment_reminders_sent';
 const TERMINAL_STATUSES = ['completed', 'rejected', 'cancelled', 'expired'];
 
 export const APPOINTMENT_REMINDER_CUSTOMER_TYPE = 'appointment_reminder_customer' as const;

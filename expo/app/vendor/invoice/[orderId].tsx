@@ -564,7 +564,7 @@ export default function VendorInvoiceDetailScreen() {
     thankYouMessage: effectiveBranding.thankYouMessage,
     footerText: effectiveBranding.footerText,
     templateId: effectiveBranding.templateId,
-    poweredBySubtle: effectiveBranding.capabilities.poweredBythe platform === 'subtle',
+    poweredBySubtle: effectiveBranding.capabilities.poweredByPlatform === 'subtle',
     showLogo: effectiveBranding.capabilities.allowLogo,
     showThankYou: effectiveBranding.capabilities.allowThankYouMessage,
     showFooter: effectiveBranding.capabilities.allowCustomFooter,
@@ -695,7 +695,7 @@ export default function VendorInvoiceDetailScreen() {
                     <Text style={styles.sharingHeader}>Shared using a secure invoice link</Text>
                   </View>
                   <Text style={styles.sharingBody}>
-                    Share the secure link with your customer outside the platform.
+                    Share the secure link with your customer outside theplatform.
                   </Text>
                   <View style={styles.sharingActionsRow}>
                     <TouchableOpacity

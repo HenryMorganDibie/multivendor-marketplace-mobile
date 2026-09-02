@@ -1,10 +1,10 @@
-# Frontend/Backend Plan-Gating Audit v3 (Independently Verified) — rork-the platform vs the platform-backend
+# Frontend/Backend Plan-Gating Audit v3 (Independently Verified) — rork-the platform vs platform-backend
 
 **Verification note:** This is the third pass of this audit. v2 independently re-checked every item from the original v1 audit against the actual source files in both repos and corrected three inaccuracies. v3 extends coverage beyond the original 12-item list: after v2 was sent, a deeper sweep checked every single row of the MVP_Features.pdf tables against the frontend for items that were never in the original audit at all — not just re-verifying claimed bugs, but actively searching for gaps the original audit missed entirely. Two such gaps were found and are added here as items #13 and #14. All numbers were cross-checked against `functions/src/subscriptions/planLimitsSeedData.ts` (`DEFAULT_PLAN_LIMITS`, confirmed as the real backend source of truth) and the official "MVP Features.pdf" spec — no discrepancies found beyond what's documented below.
 
 Compares the vendor plan feature matrix against:
 - **Backend**: `functions/src/subscriptions/planLimitsSeedData.ts` → `DEFAULT_PLAN_LIMITS` (source of truth, independently confirmed 100% match to spec by direct file read)
-- **Frontend**: `rork-the platform/expo/app/**` (screen-by-screen code review, independently re-verified)
+- **Frontend**: `rork-platform/expo/app/**` (screen-by-screen code review, independently re-verified)
 
 Tiers: Basic → Standard → Pro → Pro+ (frontend label `pro+`, backend `pro_plus`)
 

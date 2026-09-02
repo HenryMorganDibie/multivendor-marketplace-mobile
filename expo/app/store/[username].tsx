@@ -50,7 +50,7 @@ function BlockedStorefront({ vendorName, blockType }: { vendorName: string; bloc
     : 'This store is no longer available on the platform';
   const message = isSuspended
     ? `${vendorName} is currently unavailable. Please contact support if you have an active order.`
-    : `${vendorName} has been removed from the platform. Please contact support if you have an active order.`;
+    : `${vendorName} has been removed from theplatform. Please contact support if you have an active order.`;
 
   return (
     <View style={styles.container}>

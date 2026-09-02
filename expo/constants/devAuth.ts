@@ -22,7 +22,7 @@ export const DEV_LOCAL_AUTH_ENABLED = __DEV__;
  *
  * Off because there is nowhere for the code to go: sendEmailOtp writes to the
  * mail collection for the Firebase "Trigger Email" extension to pick up, and
- * that extension has never been installed on the platform-dev (`firebase ext:list`
+ * that extension has never been installed on platform-dev (`firebase ext:list`
  * confirms "there are no extensions installed"). Every document written there
  * sits unprocessed, no `delivery` field ever gets added, no email is ever
  * sent, to any address, real or fake. Registration was a dead end for every

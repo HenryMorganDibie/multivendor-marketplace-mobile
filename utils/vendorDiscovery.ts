@@ -1,5 +1,5 @@
 /**
- * Central vendor discovery visibility rules for the platform.
+ * Central vendor discovery visibility rules for theplatform.
  *
  * These functions are the single source of truth for which vendors appear in
  * public discovery (Home, Explore, Search) and which can be accessed via

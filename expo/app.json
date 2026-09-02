@@ -2,7 +2,7 @@
   "expo": {
     "name": "the platform",
     "slug": "v9dqvin75vxtde3pvf9lz",
-    "owner": "the platform-technologies",
+    "owner": "platform-technologies",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -16,14 +16,14 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.the platform.app"
+      "bundleIdentifier": "com.platform.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.the platform.app"
+      "package": "com.platform.app"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"

@@ -15,7 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/contexts/AuthContext';
 
-const PENDING_VENDOR_REG_KEY = '@the platform_pending_vendor_reg';
+const PENDING_VENDOR_REG_KEY = '@platform_pending_vendor_reg';
 
 export default function VerifyOTPScreen() {
   const { contact, maskedContact, context, password, businessName } = useLocalSearchParams<{

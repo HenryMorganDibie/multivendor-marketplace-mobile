@@ -262,7 +262,7 @@ export default function OrderDetailsScreen() {
     if (!order) return;
     const vendor = order.vendorId === 'v1' ? mockVendor : null;
     if (!vendor) {
-      Alert.alert('Vendor Unavailable', 'This vendor is no longer available on the platform.', [
+      Alert.alert('Vendor Unavailable', 'This vendor is no longer available on theplatform.', [
         { text: 'Explore vendors', onPress: () => router.push('/' as any) },
         { text: 'OK', style: 'cancel' },
       ]);

@@ -3,7 +3,7 @@ import type { CartItem, VendorCart } from '@/types/domain';
 /**
  * cartService — single boundary for cart persistence.
  *
- * SCAFFOLD ONLY. Reads/writes the same `@the platform_vendor_carts` AsyncStorage
+ * SCAFFOLD ONLY. Reads/writes the same `@platform_vendor_carts` AsyncStorage
  * store that `contexts/CartContext` already owns, keeping the one-cart-per-vendor
  * shape intact. CartContext remains the live, reactive source for the UI; this
  * service exposes a stable async API Henry can repoint at Firestore

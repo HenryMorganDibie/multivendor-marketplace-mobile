@@ -66,11 +66,11 @@ export function accessForVendorStatus(status: VendorStatus, hasExistingRelations
       if (hasExistingRelationship) {
         return { allowed: true, readOnly: false };
       }
-      return { allowed: false, readOnly: false, message: 'This store is not yet active on the platform.' };
+      return { allowed: false, readOnly: false, message: 'This store is not yet active on theplatform.' };
     case 'suspended':
       return { allowed: false, readOnly: false, message: 'This store is temporarily unavailable.' };
     case 'deactivated':
-      return { allowed: false, readOnly: false, message: 'This store is no longer available on the platform.' };
+      return { allowed: false, readOnly: false, message: 'This store is no longer available on theplatform.' };
     default:
       return { allowed: false, readOnly: false, message: 'This store is not available.' };
   }

@@ -29,7 +29,7 @@ export interface VendorNotification {
   actorName: string;
 }
 
-const VENDOR_NOTIFICATIONS_STORAGE_KEY = '@the platform_vendor_notifications';
+const VENDOR_NOTIFICATIONS_STORAGE_KEY = '@platform_vendor_notifications';
 
 export const [VendorNotificationProvider, useVendorNotifications] = createContextHook(() => {
   const [notifications, setNotifications] = useState<VendorNotification[]>([]);

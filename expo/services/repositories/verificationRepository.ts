@@ -6,14 +6,14 @@ import { verificationMapper } from '@/services/mappers/verificationMapper';
  * verificationRepository — data-access boundary for vendor verification records.
  *
  * SCAFFOLD ONLY. Reads/writes the same per-vendor
- * `@the platform_vendor_verification_{uid}` AsyncStorage record VerificationContext
+ * `@platform_vendor_verification_{uid}` AsyncStorage record VerificationContext
  * owns. verificationService delegates here.
  *
  * TODO(Henry): replace with a KYC/KYB provider webhook + Firestore
  * `vendors/{vendorId}.verification`.
  */
-const VERIFICATION_KEY = '@the platform_vendor_verification';
-const AUTH_STORAGE_KEY = '@the platform_auth_user';
+const VERIFICATION_KEY = '@platform_vendor_verification';
+const AUTH_STORAGE_KEY = '@platform_auth_user';
 
 export const verificationRepository = {
   /** Resolves the vendor id (explicit, else current session user). */

@@ -4,7 +4,7 @@ import type { Vendor } from '@/mocks/vendorData';
 import type { Order } from '@/mocks/ordersData';
 import type { VendorCart } from '@/contexts/CartContext';
 import type { VendorMenuData, CreateOrderPayload } from '@/types/domain';
-import { generatethe platformOrderId } from '@/utils/orderIdGenerator';
+import { generatePlatformOrderId } from '@/utils/orderIdGenerator';
 import { canAccessViaDirectLink } from '@/utils/vendorDiscovery';
 import { vendorService } from '@/services/vendorService';
 import { catalogService } from '@/services/catalogService';

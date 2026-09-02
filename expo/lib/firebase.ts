@@ -74,15 +74,15 @@ export const db = (() => {
 
 declare global {
   // eslint-disable-next-line no-var
-  var __the platformEmulatorConnected: boolean | undefined;
+  var __PlatformEmulatorConnected: boolean | undefined;
 }
-if (USE_EMULATOR && !globalThis.__the platformEmulatorConnected) {
+if (USE_EMULATOR && !globalThis.__PlatformEmulatorConnected) {
   const emulatorHost = Platform.OS === "android" ? "10.0.2.2" : "127.0.0.1";
   connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
   connectFunctionsEmulator(functions, emulatorHost, 5001);
   connectStorageEmulator(storage, emulatorHost, 9199);
   connectFirestoreEmulator(db, emulatorHost, 8080);
-  globalThis.__the platformEmulatorConnected = true;
+  globalThis.__PlatformEmulatorConnected = true;
 }
 
 export function callable<Req = Record<string, unknown>, Res = unknown>(name: string) {

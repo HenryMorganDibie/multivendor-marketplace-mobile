@@ -4,14 +4,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * authRepository — data-access boundary for authentication records.
  *
  * SCAFFOLD ONLY. Owns the raw reads/writes against the same AsyncStorage keys
- * AuthContext uses (`@the platform_auth_user`, `@the platform_accounts_db`). Services call
+ * AuthContext uses (`@platform_auth_user`, `@platform_accounts_db`). Services call
  * this; no screen/context imports it yet.
  *
  * TODO(Henry): replace these AsyncStorage operations with Firebase Auth +
  * Firestore `users/{uid}` reads/writes. Keep the method names stable.
  */
-export const AUTH_STORAGE_KEY = '@the platform_auth_user';
-export const ACCOUNTS_DB_KEY = '@the platform_accounts_db';
+export const AUTH_STORAGE_KEY = '@platform_auth_user';
+export const ACCOUNTS_DB_KEY = '@platform_accounts_db';
 
 export const authRepository = {
   /** Raw persisted session record, or null. */

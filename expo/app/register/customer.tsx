@@ -40,7 +40,7 @@ function maskEmail(email: string): string {
 }
 
 /** Matches the key verify-otp.tsx reads from once the code is confirmed. */
-export const PENDING_CUSTOMER_REG_KEY = '@the platform_pending_customer_reg';
+export const PENDING_CUSTOMER_REG_KEY = '@platform_pending_customer_reg';
 
 type FieldErrors = Record<string, string | undefined>;
 
@@ -263,7 +263,7 @@ export default function CustomerSignupScreen() {
           <View style={styles.content}>
             <View style={styles.header}>
               <Image
-                source={require('@/assets/images/the platform-logo.png')}
+                source={require('@/assets/images/platform-logo.png')}
                 style={styles.brandLogo}
                 resizeMode="contain"
                 accessibilityRole="image"

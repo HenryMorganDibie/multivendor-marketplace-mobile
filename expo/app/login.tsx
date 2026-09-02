@@ -199,7 +199,7 @@ export default function LoginScreen() {
           <View style={styles.content}>
             <View style={styles.header}>
               <Image
-                source={require('@/assets/images/the platform-logo.png')}
+                source={require('@/assets/images/platform-logo.png')}
                 style={styles.brandLogo}
                 resizeMode="contain"
                 accessibilityRole="image"

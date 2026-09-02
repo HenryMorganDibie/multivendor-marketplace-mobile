@@ -18,8 +18,8 @@ import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/colors';
 import { useAppRating } from '@/contexts/AppRatingContext';
 
-const IOS_APP_STORE_URL = 'https://apps.apple.com/app/the platform/id0000000000';
-const ANDROID_PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.the platform.app';
+const IOS_APP_STORE_URL = 'https://apps.apple.com/app/platform/id0000000000';
+const ANDROID_PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.platform.app';
 
 type Step = 'rating' | 'positive' | 'negative' | 'feedback_sent';
 
@@ -270,7 +270,7 @@ export default function AppRatingPrompt() {
                 </View>
                 <Text style={styles.title}>Thanks for your feedback.</Text>
                 <Text style={styles.subtitle}>
-                  Tell us what we can improve. Your input shapes the platform.
+                  Tell us what we can improve. Your input shapes theplatform.
                 </Text>
 
                 <TextInput
@@ -310,7 +310,7 @@ export default function AppRatingPrompt() {
                 </View>
                 <Text style={styles.title}>Feedback sent.</Text>
                 <Text style={styles.subtitle}>
-                  We appreciate your honesty. We are constantly improving the platform.
+                  We appreciate your honesty. We are constantly improving theplatform.
                 </Text>
               </View>
             )}

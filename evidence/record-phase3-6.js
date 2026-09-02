@@ -1,5 +1,5 @@
 /**
- * Records the Phase 3–6 acceptance run against real the platform-dev data.
+ * Records the Phase 3–6 acceptance run against real platform-dev data.
  *
  * Drives the app's web build with Playwright, which captures video natively.
  * This is how the earlier registration evidence was produced, and it needs no
@@ -12,8 +12,8 @@
  * external link means anything. Each section leaves the state the next needs.
  *
  * Setup:
- *   cd the platform-mobile/expo
- *   cp .env.dev .env          # real the platform-dev, not the emulator
+ *   cd platform-mobile/expo
+ *   cp .env.dev .env          # real platform-dev, not the emulator
  *   npx expo start --web
  *
  * Then:
@@ -36,7 +36,7 @@ const OUT = path.join(__dirname, "phase3-6");
 
 if (!EMAIL || !PASSWORD) {
   console.error(
-    "Set THE PLATFORM_VENDOR_EMAIL and THE PLATFORM_VENDOR_PASSWORD to a real the platform-dev vendor.\n" +
+    "Set THE PLATFORM_VENDOR_EMAIL and THE PLATFORM_VENDOR_PASSWORD to a real platform-dev vendor.\n" +
     "They are read from the environment so no account details end up in the repo."
   );
   process.exit(1);

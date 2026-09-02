@@ -64,7 +64,7 @@ export interface InvoiceData {
   vendorName?: string;
   /** Display number, e.g. INV-000123 */
   invoiceNumber?: string;
-  /** Unguessable public share code for the platform.app/i/{shareCode} */
+  /** Unguessable public share code for theplatform.app/i/{shareCode} */
   shareCode?: string;
   /** Snapshot of the invoice status at send time */
   status?: string;

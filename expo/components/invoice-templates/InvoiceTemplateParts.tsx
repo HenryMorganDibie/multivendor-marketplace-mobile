@@ -356,10 +356,10 @@ export function SectionDivider({
 /** Branded footer shown at the bottom of every invoice.
  *  Until the official the platform logo is provided, this renders as plain
  *  centered text — "Powered by the platform" — with no image placeholder. */
-export function the platformFooter({ subtle = false }: { subtle?: boolean }) {
+export function platformFooter({ subtle = false }: { subtle?: boolean }) {
   return (
-    <View style={styles.the platformFooter}>
-      <Text style={[styles.the platformFooterText, subtle && styles.the platformFooterSubtle]}>
+    <View style={styles.platformFooter}>
+      <Text style={[styles.platformFooterText, subtle && styles.platformFooterSubtle]}>
         Powered by the platform
       </Text>
     </View>
@@ -573,18 +573,18 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     width: '100%',
   },
-  the platformFooter: {
+  platformFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 6,
   },
-  the platformFooterText: {
+  platformFooterText: {
     fontSize: 11,
     fontWeight: '600',
     color: Colors.textSecondary,
   },
-  the platformFooterSubtle: {
+  platformFooterSubtle: {
     color: Colors.textMuted,
   },
   metadataGrid: {
@@ -625,6 +625,6 @@ export default {
   TotalsBlock,
   LabelText,
   SectionDivider,
-  the platformFooter,
+  platformFooter,
   MetadataGrid,
 };

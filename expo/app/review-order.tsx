@@ -31,7 +31,7 @@ import { useChats } from '@/contexts/ChatContext';
 import { mockMenuItems } from '@/mocks/vendorData';
 import { useVendorFilter } from '@/contexts/VendorFilterContext';
 import { getMenuItemDisplayPrice, hasItemSalePrice } from '@/utils/itemPricing';
-import { generatethe platformOrderId } from '@/utils/orderIdGenerator';
+import { generatePlatformOrderId } from '@/utils/orderIdGenerator';
 import { useAuditLog } from '@/contexts/AuditLogContext';
 import { useVendorRelationships } from '@/contexts/VendorRelationshipContext';
 import { useOrders, type PricedCart } from '@/contexts/OrdersContext';
@@ -182,7 +182,7 @@ export default function ReviewOrderScreen() {
     setIsSubmitting(true);
     hasSubmittedRef.current = true;
     const orderRequestId = `REQ-${Date.now()}`;
-    const publicOrderId = generatethe platformOrderId((orderVendor?.slug ?? orderVendorId));
+    const publicOrderId = generatePlatformOrderId((orderVendor?.slug ?? orderVendorId));
 
     const finalNote = [orderNote, customerNote].filter(Boolean).join('\n').trim();
 

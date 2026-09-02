@@ -335,7 +335,7 @@ export const PaymentStateCard = React.memo(function PaymentStateCard({
       {renderContent()}
       <Toast visible={toastVisible} />
       <Text style={styles.legalFooter}>
-        Orders and payments are handled directly by vendors on the platform.
+        Orders and payments are handled directly by vendors on theplatform.
       </Text>
     </Animated.View>
   );

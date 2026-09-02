@@ -118,7 +118,7 @@ export default function AccountPrivacyHelp() {
         <View style={styles.section}>
           <Text style={styles.heading}>Privacy Questions</Text>
           <Text style={styles.paragraph}>
-            For questions about data privacy, security, or account management, contact the platform Support through the Help Center or email support@the platform.com.
+            For questions about data privacy, security, or account management, contact the platform Support through the Help Center or email support@theplatform.com.
           </Text>
         </View>
       </ScrollView>

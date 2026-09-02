@@ -27,7 +27,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCountryStatus } from '@/contexts/CountryStatusContext';
 import { DAY_ONE_CATEGORIES } from '@/constants/categories';
 
-const PENDING_VENDOR_REG_KEY = '@the platform_pending_vendor_reg';
+const PENDING_VENDOR_REG_KEY = '@platform_pending_vendor_reg';
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -715,15 +715,15 @@ export default function VendorRegisterScreen() {
                       )}
                       <Text style={styles.agreementText}>
                         I agree to the{' '}
-                        <Text style={styles.agreementLink} onPress={() => openLink('https://the platform.com/terms')}>
+                        <Text style={styles.agreementLink} onPress={() => openLink('https://theplatform.com/terms')}>
                           Terms of Service
                         </Text>
                         ,{' '}
-                        <Text style={styles.agreementLink} onPress={() => openLink('https://the platform.com/vendor-agreement')}>
+                        <Text style={styles.agreementLink} onPress={() => openLink('https://theplatform.com/vendor-agreement')}>
                           Vendor Agreement
                         </Text>
                         , and{' '}
-                        <Text style={styles.agreementLink} onPress={() => openLink('https://the platform.com/privacy')}>
+                        <Text style={styles.agreementLink} onPress={() => openLink('https://theplatform.com/privacy')}>
                           Privacy Policy
                         </Text>
                       </Text>

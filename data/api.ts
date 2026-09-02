@@ -3,7 +3,7 @@ import type { Vendor } from '@/mocks/vendorData';
 import type { Order } from '@/mocks/ordersData';
 import type { VendorCart } from '@/contexts/CartContext';
 import type { VendorMenuData, CreateOrderPayload } from '@/types/domain';
-import { generatethe platformOrderId } from '@/utils/orderIdGenerator';
+import { generatePlatformOrderId } from '@/utils/orderIdGenerator';
 import { canAppearInPublicDiscovery, canAccessViaDirectLink } from '@/utils/vendorDiscovery';
 
 export async function getVendorByUsername(username: string): Promise<Vendor | null> {

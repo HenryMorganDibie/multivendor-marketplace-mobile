@@ -578,7 +578,7 @@ export default function RequestChangeScreen() {
       <LaektivaModal
         visible={showConfirmModal}
         title="Confirm submission"
-        message="This request will be reviewed by the platform. Changes will not apply until approved."
+        message="This request will be reviewed by theplatform. Changes will not apply until approved."
         primaryButton={{
           label: 'Submit request',
           onPress: handleConfirmSubmit,

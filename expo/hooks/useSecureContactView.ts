@@ -27,7 +27,7 @@ export function useSecureContactView(active: boolean) {
     if (!active) return;
 
     let cancelled = false;
-    const key = 'the platform-contact-card';
+    const key = 'platform-contact-card';
 
     // Lock down screen capture + app-switcher preview while the secure view is open.
     preventScreenCaptureAsync(key).catch((error) => {

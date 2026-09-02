@@ -27,7 +27,7 @@ export interface AuditLog {
   metadata?: Record<string, any>;
 }
 
-const AUDIT_LOG_KEY = '@the platform_audit_logs';
+const AUDIT_LOG_KEY = '@platform_audit_logs';
 
 export const [AuditLogProvider, useAuditLog] = createContextHook(() => {
   const [logs, setLogs] = useState<AuditLog[]>([]);

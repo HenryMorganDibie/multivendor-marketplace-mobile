@@ -21,7 +21,7 @@ interface VendorCustomerNotesContextType {
 
 const VendorCustomerNotesContext = createContext<VendorCustomerNotesContextType | undefined>(undefined);
 
-const NOTES_KEY = '@the platform_vendor_customer_notes';
+const NOTES_KEY = '@platform_vendor_customer_notes';
 
 export function VendorCustomerNotesProvider({ children }: { children: React.ReactNode }) {
   const [notes, setNotes] = useState<CustomerNote[]>([]);

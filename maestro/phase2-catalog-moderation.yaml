@@ -9,9 +9,9 @@
 # still readable rather than a dead row.
 #
 # Run:  maestro test maestro/phase2-catalog-moderation.yaml
-appId: com.the platform.app
+appId: com.platform.app
 env:
-  VENDOR_EMAIL: demo.vendor@the platform.com
+  VENDOR_EMAIL: demo.vendor@theplatform.com
   VENDOR_PASSWORD: DemoPass123!
 ---
 - launchApp:

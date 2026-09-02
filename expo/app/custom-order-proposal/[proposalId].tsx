@@ -378,7 +378,7 @@ export default function CustomerProposalScreen() {
                 </View>
 
                 <Text style={styles.legalFooter}>
-                  Orders and payments are handled directly by vendors on the platform.
+                  Orders and payments are handled directly by vendors on theplatform.
                 </Text>
               </>
             )}

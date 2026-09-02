@@ -10,7 +10,7 @@ surfaced the first time the project was prepared for one.
 ## Prerequisites
 
 ```bash
-cd the platform-mobile/expo
+cd platform-mobile/expo
 bun install
 npx eas-cli login          # a free Expo account; no Apple or Google account needed
 ```
@@ -125,7 +125,7 @@ organisation, with no Apple Developer Program and no Google Play Console.
 | Android | `android-development` | Finished | Installable `.apk` |
 
 Build pages live under
-`expo.dev/accounts/the platform-technologies/projects/<project>/builds/<id>`.
+`expo.dev/accounts/platform-technologies/projects/<project>/builds/<id>`.
 
 The Android build used a debug keystore that EAS generated and stores against
 the organisation, so it belongs to the platform rather than to whoever ran the build.
@@ -162,5 +162,5 @@ build, or running the full Phase 1 and Phase 2 flows on either.
 ## Ownership
 
 The Expo, Apple and Google projects, and every credential and capability under
-them, belong to the platform. A contractor needs delegated access only, and that
+them, belong to theplatform. A contractor needs delegated access only, and that
 access can be revoked without affecting the builds or the apps.

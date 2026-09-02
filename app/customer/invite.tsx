@@ -20,8 +20,8 @@ export default function CustomerInviteScreen() {
 
   const inviteLink = Platform.select({
     ios: 'https://apps.apple.com/app/the platform',
-    android: 'https://play.google.com/store/apps/details?id=com.the platform.app',
-    default: 'https://the platform.com/download',
+    android: 'https://play.google.com/store/apps/details?id=com.platform.app',
+    default: 'https://theplatform.com/download',
   });
 
   const handleCopyLink = async () => {

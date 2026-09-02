@@ -13,10 +13,10 @@ data are given below instead of a screenshot of a screen.
 Two terminals.
 
 ```bash
-# 1. Backend, from the platform-backend/
+# 1. Backend, from platform-backend/
 npx firebase-tools emulators:start --project demo-platform
 
-# 2. Tests, from the platform-backend/scripts/
+# 2. Tests, from platform-backend/scripts/
 npm install                # first time only
 node seed-demo-vendor.js   # phase3-ledger and invoice-delivery need this vendor
 node phase3-ledger-tests.js
@@ -29,7 +29,7 @@ Each prints one line per check and exits non-zero if any fail.
 `phase4-storefront-tests.js` and `phase5-6-insights-tests.js` register their
 own throwaway vendors and do not depend on the seed having run.
 
-For the native run, once a device/emulator and a `the platform-dev` deployment are
+For the native run, once a device/emulator and a `platform-dev` deployment are
 available (neither was in this pass — see the handover doc §4):
 
 ```bash
@@ -120,7 +120,7 @@ travels with the invoice rather than requiring a separate authenticated
 fetch, the `shareToken` itself is stripped from the response, and a
 cancelled invoice's link is revoked rather than still serving content — all
 four are real behaviours of `getPublicInvoice` in
-`the platform-backend/functions/src/invoices/invoiceFunctions.ts`, not assumptions.
+`platform-backend/functions/src/invoices/invoiceFunctions.ts`, not assumptions.
 
 ### 8–10 — storefront publish, unpublish, and the share link
 
@@ -224,7 +224,7 @@ describes the full client-facing flow — branding, invoice create/edit/send,
 external link, payment, reversal, PDF, storefront publish/share, dashboard,
 Business Insights, the honest "Conversion" empty state — in the order the
 states actually allow. It has not been run. `evidence/record-phase3-6.js`,
-the Playwright driver for it, needs a **real deployed `the platform-dev`**
+the Playwright driver for it, needs a **real deployed `platform-dev`**
 environment and vendor credentials, not the local emulator this pass used;
 neither was available here. Everything in this document was verified at the
 callable level, against the emulator, signed in as real (emulator) accounts
@@ -258,9 +258,9 @@ this document does not claim it is.
 
 | Location | Contents |
 |---|---|
-| `the platform-backend/scripts/phase3-ledger-tests.js` | Pre-existing, unmodified, run for this pass |
-| `the platform-backend/scripts/invoice-delivery-tests.js` | Pre-existing, run for this pass |
-| `the platform-backend/scripts/phase4-storefront-tests.js` | New this pass |
-| `the platform-backend/scripts/phase5-6-insights-tests.js` | New this pass |
+| `platform-backend/scripts/phase3-ledger-tests.js` | Pre-existing, unmodified, run for this pass |
+| `platform-backend/scripts/invoice-delivery-tests.js` | Pre-existing, run for this pass |
+| `platform-backend/scripts/phase4-storefront-tests.js` | New this pass |
+| `platform-backend/scripts/phase5-6-insights-tests.js` | New this pass |
 | `maestro/phase3-6-acceptance.yaml` | The intended native flow — not run, see §16 above |
-| `the platform-mobile/docs/phase3-6-handover.md` | Repo/branch state, what's wired, what isn't, what was found |
+| `platform-mobile/docs/phase3-6-handover.md` | Repo/branch state, what's wired, what isn't, what was found |

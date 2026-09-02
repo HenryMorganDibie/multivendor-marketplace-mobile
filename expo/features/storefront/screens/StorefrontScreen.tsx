@@ -93,7 +93,7 @@ function StorefrontContent({ vendor }: StorefrontScreenProps) {
         isStoreOpen={vm.isStoreOpen}
         isVendorBlocked={vm.isVendorBlocked}
         canChat={vm.canChat}
-        canUsethe platformAi={vm.canUsethe platformAi}
+        canUsePlatformAi={vm.canUsePlatformAi}
         canAddToCart={vm.canAddToCart}
         chatMode={vm.chatMode}
         layout={vm.layout}

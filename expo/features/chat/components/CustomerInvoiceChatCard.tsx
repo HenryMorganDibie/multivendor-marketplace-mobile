@@ -104,7 +104,7 @@ export const CustomerInvoiceChatCard = React.memo(function CustomerInvoiceChatCa
   const statusConfig = STATUS_CONFIG[status];
 
   // Partially-paid + paid invoices show the confirmed amount paid and the
-  // remaining balance. Read-only — never a Pay Now / the platform-payment action.
+  // remaining balance. Read-only — never a Pay Now / platform-payment action.
   const amountPaid = invoice ? getAmountPaid(invoice.payments) : 0;
   const balanceDue = invoice ? getBalanceDue(invoice.total, invoice.payments) : 0;
 

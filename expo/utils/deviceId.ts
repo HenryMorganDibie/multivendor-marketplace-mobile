@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const DEVICE_ID_KEY = '@the platform_device_id';
+const DEVICE_ID_KEY = '@platform_device_id';
 
 /**
  * A stable per-install identifier, used to key a push token doc per device

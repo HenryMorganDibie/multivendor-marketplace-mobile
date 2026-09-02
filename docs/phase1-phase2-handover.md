@@ -10,14 +10,14 @@ test you can run, a screenshot, or a commit.
 
 | Repository | Branch | State |
 |---|---|---|
-| `the platform-mobile` | `henry/phase-1-registration` | Pushed, PR open |
-| `the platform-backend` | `main` | Pushed |
-| `the platform-website` | `main` | Pushed |
-| `the platform-vendor-portal` | `main` | Pushed |
+| `platform-mobile` | `henry/phase-1-registration` | Pushed, PR open |
+| `platform-backend` | `main` | Pushed |
+| `platform-website` | `main` | Pushed |
+| `platform-vendor-portal` | `main` | Pushed |
 
-Pull request: **`the platformTech/the platform-mobile` #1**
+Pull request: **`platformTech/platform-mobile` #1**
 
-Everything is in the platform-owned repositories under the `the platformTech` organisation.
+Everything is in platform-owned repositories under the `platformTech` organisation.
 Nothing exists only on a local machine. Working trees are clean in all four.
 
 ## 2. Test suites
@@ -29,10 +29,10 @@ Nothing exists only on a local machine. Working trees are clean in all four.
 | `scripts/sales-counting-tests.js` | 6 | All passing |
 
 ```bash
-# terminal 1, from the platform-backend/
+# terminal 1, from platform-backend/
 npx firebase-tools emulators:start --project demo-platform
 
-# terminal 2, from the platform-backend/scripts/
+# terminal 2, from platform-backend/scripts/
 npm install                          # first run only
 node seed-demo-vendor.js             # Phase 2 needs the seeded vendor
 node phase1-acceptance-tests.js
@@ -45,7 +45,7 @@ the same Cloud Functions the app calls.
 
 ## 3. Builds
 
-Both produced under the `the platform-technologies` Expo organisation. Neither needed
+Both produced under the `platform-technologies` Expo organisation. Neither needed
 the Apple Developer Program or Google Play Console.
 
 | Platform | Profile | Download |

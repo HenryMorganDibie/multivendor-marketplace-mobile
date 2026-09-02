@@ -20,7 +20,7 @@ interface ContactCardsContextType {
 
 const ContactCardsContext = createContext<ContactCardsContextType | undefined>(undefined);
 
-const CONTACT_CARDS_STORAGE_KEY = '@the platform_contact_cards';
+const CONTACT_CARDS_STORAGE_KEY = '@platform_contact_cards';
 
 export function ContactCardsProvider({ children }: { children: ReactNode }) {
   const [cards, setCards] = useState<ContactCard[]>([]);

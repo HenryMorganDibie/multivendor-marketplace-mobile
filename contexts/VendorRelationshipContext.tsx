@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { mockVendors, Vendor } from '@/mocks/vendorData';
 
-const STORAGE_KEY = 'the platform_vendor_relationships';
+const STORAGE_KEY = 'platform_vendor_relationships';
 
 export interface VendorRelationship {
   vendorId: string;

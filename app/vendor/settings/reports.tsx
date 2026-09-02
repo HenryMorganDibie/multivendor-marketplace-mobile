@@ -31,7 +31,7 @@ const MONTHS = [
 const VENDOR_NAME = 'Spicy Restaurant';
 const VENDOR_ID = 'v1';
 const MONTHLY_REPORT_LIMIT = 3;
-const REPORT_TRACKING_KEY = '@the platform_report_generations';
+const REPORT_TRACKING_KEY = '@platform_report_generations';
 
 export default function ReportsScreen() {
   const router = useRouter();

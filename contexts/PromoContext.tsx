@@ -22,7 +22,7 @@ export interface VendorPromotionDraft {
   endDate: string;
 }
 
-const PROMOTIONS_STORAGE_KEY = '@the platform_vendor_promotions';
+const PROMOTIONS_STORAGE_KEY = '@platform_vendor_promotions';
 const MAX_ACTIVE_PROMOTIONS = 3;
 
 function generatePromoTitle(draft: VendorPromotionDraft): string {

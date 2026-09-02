@@ -18,8 +18,8 @@ import { useUserLocation } from '@/contexts/UserLocationContext';
 import { verifyOtp, sendOtp } from '@/lib/auth/verifyOtp';
 import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 
-const PENDING_VENDOR_REG_KEY = '@the platform_pending_vendor_reg';
-const PENDING_CUSTOMER_REG_KEY = '@the platform_pending_customer_reg';
+const PENDING_VENDOR_REG_KEY = '@platform_pending_vendor_reg';
+const PENDING_CUSTOMER_REG_KEY = '@platform_pending_customer_reg';
 
 export default function VerifyOTPScreen() {
   const { contact, maskedContact, context } = useLocalSearchParams<{

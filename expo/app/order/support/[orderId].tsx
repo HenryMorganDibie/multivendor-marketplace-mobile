@@ -240,7 +240,7 @@ const buildMainOptions = (vendorName: string): MainOption[] => [
   {
     id: 'safety_concern',
     label: 'Safety concern',
-    intro: `Your safety matters. These concerns may be reviewed by the platform. What are you experiencing?`,
+    intro: `Your safety matters. These concerns may be reviewed by theplatform. What are you experiencing?`,
     subs: [
       {
         id: 'suspicious_payment',
@@ -273,7 +273,7 @@ const buildMainOptions = (vendorName: string): MainOption[] => [
         actions: [REPORT_VENDOR, BACK_MAIN],
       },
       {
-        id: 'report_the platform',
+        id: 'report_Platform',
         label: 'Report vendor to the platform',
         response: `Tap "Report Vendor" below. the platform reviews safety-related reports including fraud, scams, and abuse. Normal order disputes are not escalated to human support.`,
         actions: [REPORT_VENDOR, BACK_MAIN],

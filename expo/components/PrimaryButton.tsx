@@ -7,7 +7,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { the platformColors, Radii, Shadows } from '@/constants/theme';
+import { platformColors, Radii, Shadows } from '@/constants/theme';
 
 interface PrimaryButtonProps {
   label: string;
@@ -42,7 +42,7 @@ export default function PrimaryButton({
       testID={testID}
     >
       {loading ? (
-        <ActivityIndicator color={the platformColors.white} />
+        <ActivityIndicator color={platformColors.white} />
       ) : (
         <Text style={[styles.text, textStyle]}>{label}</Text>
       )}
@@ -52,7 +52,7 @@ export default function PrimaryButton({
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: the platformColors.primary,
+    backgroundColor: platformColors.primary,
     height: 52,
     borderRadius: Radii.button,
     alignItems: 'center',
@@ -60,12 +60,12 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   buttonDisabled: {
-    backgroundColor: the platformColors.primaryDisabled,
+    backgroundColor: platformColors.primaryDisabled,
   },
   text: {
     fontSize: 16,
     fontWeight: '700',
-    color: the platformColors.white,
+    color: platformColors.white,
     letterSpacing: -0.1,
   },
 });

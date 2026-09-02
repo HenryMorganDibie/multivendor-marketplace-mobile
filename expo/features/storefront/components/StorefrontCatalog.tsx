@@ -47,7 +47,7 @@ interface StorefrontCatalogProps {
   isVendorBlocked: boolean;
   canChat: boolean;
   /** Plan + vendor-status gated. False for Basic vendors. */
-  canUsethe platformAi: boolean;
+  canUsePlatformAi: boolean;
   canAddToCart: boolean;
   chatMode: string;
   layout: {
@@ -95,7 +95,7 @@ export default function StorefrontCatalog({
   isStoreOpen,
   isVendorBlocked,
   canChat,
-  canUsethe platformAi,
+  canUsePlatformAi,
   canAddToCart,
   chatMode,
   layout,
@@ -603,7 +603,7 @@ export default function StorefrontCatalog({
         <View style={styles.ctaSection}>
           {vendor.vendorStatus === 'ACTIVE' && (
             <>
-              {canUsethe platformAi && (
+              {canUsePlatformAi && (
                 <TouchableOpacity onPress={onAskAI} style={styles.primaryCTA}>
                   <Sparkles size={20} color="#FFFFFF" />
                   <Text style={styles.primaryCTAText}>Ask the platform AI</Text>

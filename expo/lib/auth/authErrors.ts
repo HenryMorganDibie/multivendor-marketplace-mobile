@@ -72,7 +72,7 @@ export function mapRegistrationError(error: unknown): MappedAuthError {
   if (/network-request-failed/.test(reason)) {
     return {
       field: 'form',
-      message: 'We could not reach the platform. Check your connection and try again.',
+      message: 'We could not reach theplatform. Check your connection and try again.',
     };
   }
   if (/operation-not-allowed/.test(reason)) {
@@ -142,7 +142,7 @@ export function mapLoginError(error: unknown): MappedAuthError {
   if (/network-request-failed/.test(reason)) {
     return {
       field: 'form',
-      message: 'We could not reach the platform. Check your connection and try again.',
+      message: 'We could not reach theplatform. Check your connection and try again.',
     };
   }
 

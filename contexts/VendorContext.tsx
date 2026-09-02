@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Vendor, mockVendor } from "@/mocks/vendorData";
 
-const VENDOR_PROFILE_STORAGE_KEY = '@the platform_vendor_profile';
+const VENDOR_PROFILE_STORAGE_KEY = '@platform_vendor_profile';
 
 type VendorContextType = {
   vendor: Vendor;

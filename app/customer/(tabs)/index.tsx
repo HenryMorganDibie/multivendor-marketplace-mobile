@@ -444,7 +444,7 @@ export default function CustomerHomeScreen() {
               <Users size={20} color={Colors.textMuted} strokeWidth={2} />
               <Text style={styles.locationRequiredTitle}>No vendors in your area yet</Text>
               <Text style={styles.locationRequiredBody}>
-                There are currently no vendors serving your region. You can invite vendors you know to join the platform.
+                There are currently no vendors serving your region. You can invite vendors you know to join theplatform.
               </Text>
               <TouchableOpacity
                 style={styles.selectLocationButton}

@@ -39,7 +39,7 @@ import {
   getVendorAiRemaining,
   resolveAiQuotaState,
   CUSTOMER_AI_MONTHLY_LIMIT,
-} from '@/utils/the platformAiLimits';
+} from '@/utils/platformAiLimits';
 
 const AI_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 

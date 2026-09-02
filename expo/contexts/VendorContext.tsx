@@ -5,7 +5,7 @@ import { Vendor, mockVendor } from "@/mocks/vendorData";
 import { auth, db } from "@/lib/firebase";
 import { mapVendorDoc } from "@/services/repositories/mapVendorDoc";
 
-const VENDOR_PROFILE_STORAGE_KEY = '@the platform_vendor_profile';
+const VENDOR_PROFILE_STORAGE_KEY = '@platform_vendor_profile';
 
 type VendorContextType = {
   vendor: Vendor;

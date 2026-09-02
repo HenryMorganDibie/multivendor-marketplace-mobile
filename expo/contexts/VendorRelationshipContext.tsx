@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Vendor } from '@/mocks/vendorData';
 import { vendorService } from '@/services/vendorService';
 
-const STORAGE_KEY = 'the platform_vendor_relationships';
+const STORAGE_KEY = 'platform_vendor_relationships';
 
 export interface VendorRelationship {
   vendorId: string;

@@ -472,7 +472,7 @@ export default function CustomerHomeScreen() {
               <Users size={20} color={Colors.textMuted} strokeWidth={2} />
               <Text style={styles.locationRequiredTitle}>No vendors available in your area yet</Text>
               <Text style={styles.locationRequiredBody}>
-                We&apos;re onboarding businesses and more vendors will appear soon. You can also invite vendors you know to join the platform.
+                We&apos;re onboarding businesses and more vendors will appear soon. You can also invite vendors you know to join theplatform.
               </Text>
               <TouchableOpacity
                 style={styles.selectLocationButton}

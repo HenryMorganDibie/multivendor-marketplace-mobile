@@ -26,7 +26,7 @@ export interface AppRatingPromptState {
   triggerSource: AppRatingTriggerSource | null;
 }
 
-const STORAGE_KEY_PREFIX = '@the platform_app_rating_';
+const STORAGE_KEY_PREFIX = '@platform_app_rating_';
 const MAX_PROMPTS_PER_YEAR = 3;
 const DISMISS_COOLDOWN_DAYS = 30;
 const STORE_REDIRECT_COOLDOWN_DAYS = 180;

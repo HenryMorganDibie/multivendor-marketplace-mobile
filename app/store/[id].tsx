@@ -88,7 +88,7 @@ export default function VendorStorefrontScreen() {
         },
         buttonIndex => {
           if (buttonIndex === 1) {
-            const shareUrl = `https://the platform.com/@${vendor.username}`;
+            const shareUrl = `https://theplatform.com/@${vendor.username}`;
             RNShare.share({
               message: `Check out ${vendor.name} (@${vendor.username}) on the platform! ${shareUrl}`,
               url: shareUrl,

@@ -1,4 +1,4 @@
-# Phase 3–6 acceptance, driven end to end against real the platform-dev data.
+# Phase 3–6 acceptance, driven end to end against real platform-dev data.
 #
 # Covers the client's acceptance list in the order the states actually allow:
 # invoice create, edit, internal chat delivery, external link, payment,
@@ -10,16 +10,16 @@
 # state the next one needs.
 #
 # Recording:
-#   adb shell screenrecord --time-limit 180 /sdcard/the platform-01.mp4 &
+#   adb shell screenrecord --time-limit 180 /sdcard/platform-01.mp4 &
 #   maestro test maestro/phase3-6-acceptance.yaml
-#   adb pull /sdcard/the platform-01.mp4
+#   adb pull /sdcard/platform-01.mp4
 #
 # screenrecord caps at three minutes per file, so this takes screenshots at
 # every step as well — those are the durable evidence, and the video is the
 # continuity proof that they came from one session rather than being assembled.
 #
 # Run:  maestro test maestro/phase3-6-acceptance.yaml
-appId: com.the platform.app
+appId: com.platform.app
 ---
 - launchApp:
     clearState: false
@@ -37,7 +37,7 @@ appId: com.the platform.app
 - takeScreenshot: evidence/phase3-6/00-launch
 
 # ── Sign in as the vendor ───────────────────────────────────────────────────
-# A real the platform-dev account. The point of this run is that every figure on
+# A real platform-dev account. The point of this run is that every figure on
 # screen came from the deployed backend, so a demo login would defeat it.
 - tapOn:
     id: "login-identifier-input"

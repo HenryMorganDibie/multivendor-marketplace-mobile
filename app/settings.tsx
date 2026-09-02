@@ -52,18 +52,18 @@ export default function SettingsScreen() {
       case 'helpCenter':
         router.push('/help-center' as any);
         break;
-      case 'inviteTothe platform':
-        handleInviteTothe platform();
+      case 'inviteToPlatform':
+        handleInviteToPlatform();
         break;
     }
   };
 
-  const handleInviteTothe platform = async () => {
+  const handleInviteToPlatform = async () => {
     try {
       const appLink = Platform.select({
         ios: 'https://apps.apple.com/app/the platform',
-        android: 'https://play.google.com/store/apps/details?id=com.the platform.app',
-        default: 'https://the platform.com/download',
+        android: 'https://play.google.com/store/apps/details?id=com.platform.app',
+        default: 'https://theplatform.com/download',
       });
 
       const message = `I use the platform to order directly from businesses without marketplace markups or ads.\nDownload the app and register to start ordering.\n\n${appLink}`;
@@ -233,7 +233,7 @@ export default function SettingsScreen() {
 
             <TouchableOpacity
               style={styles.settingsRow}
-              onPress={() => handleItemPress('inviteTothe platform')}
+              onPress={() => handleItemPress('inviteToPlatform')}
               activeOpacity={0.7}
             >
               <View style={styles.rowLeft}>

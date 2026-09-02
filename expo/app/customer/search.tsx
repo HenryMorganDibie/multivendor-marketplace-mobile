@@ -138,7 +138,7 @@ export default function CustomerSearchScreen() {
 
   const handleInviteVendor = useCallback(async () => {
     await safeShare({
-      message: `Join the platform as a vendor @${username}! Download the app and start selling: https://the platform.app/vendor`,
+      message: `Join the platform as a vendor @${username}! Download the app and start selling: https://theplatform.app/vendor`,
     });
     console.log('[SEARCH] Invite vendor share sheet opened for username:', username);
   }, [username]);

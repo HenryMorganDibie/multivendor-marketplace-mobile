@@ -2,8 +2,8 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const RECENTLY_VIEWED_KEY = '@the platform_recently_viewed';
-const BROWSING_CATEGORIES_KEY = '@the platform_browsing_categories';
+const RECENTLY_VIEWED_KEY = '@platform_recently_viewed';
+const BROWSING_CATEGORIES_KEY = '@platform_browsing_categories';
 const MAX_ENTRIES = 20;
 const MAX_CATEGORIES = 30;
 

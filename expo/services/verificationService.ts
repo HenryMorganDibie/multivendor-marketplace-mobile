@@ -3,7 +3,7 @@ import type { VerificationStatus, VerificationType } from '@/types/domain';
 /**
  * verificationService — single boundary for vendor KYC/KYB verification state.
  *
- * SCAFFOLD ONLY. Reads the same per-vendor `@the platform_vendor_verification_{uid}`
+ * SCAFFOLD ONLY. Reads the same per-vendor `@platform_vendor_verification_{uid}`
  * AsyncStorage record that `contexts/VerificationContext` owns, including the
  * provider-ready `providerData` block. The context stays the live, reactive
  * source for verification banners/gates; this service is the stable async API

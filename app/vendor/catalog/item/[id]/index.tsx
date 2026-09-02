@@ -70,7 +70,7 @@ export default function ItemDetailsScreen() {
     try {
       await Share.share({
         title: item.name,
-        message: `${item.name} — ${formatPriceWithCommas(displayPrice, currency)}\n\nAvailable on the platform.`,
+        message: `${item.name} — ${formatPriceWithCommas(displayPrice, currency)}\n\nAvailable on theplatform.`,
       });
     } catch (_) {}
   };

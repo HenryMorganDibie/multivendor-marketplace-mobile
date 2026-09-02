@@ -43,7 +43,7 @@ function maskEmail(email: string): string {
 }
 
 /** Matches the key verify-otp.tsx reads from once the code is confirmed. */
-const PENDING_VENDOR_REG_KEY = '@the platform_pending_vendor_reg';
+const PENDING_VENDOR_REG_KEY = '@platform_pending_vendor_reg';
 
 type FieldErrors = Record<string, string | undefined>;
 
@@ -447,7 +447,7 @@ export default function VendorSignupScreen() {
           <View style={styles.content}>
             <View style={styles.header}>
               <Image
-                source={require('@/assets/images/the platform-logo.png')}
+                source={require('@/assets/images/platform-logo.png')}
                 style={styles.brandLogo}
                 resizeMode="contain"
                 accessibilityRole="image"

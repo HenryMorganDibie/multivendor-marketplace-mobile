@@ -1,4 +1,4 @@
-# Full Frontend/Backend Contract Audit v3 — rork-the platform vs the platform-backend
+# Full Frontend/Backend Contract Audit v3 — rork-the platform vs platform-backend
 
 Goal: 100% confidence before integration begins. This supersedes the plan-gating audit (still valid,
 see `docs/frontend-backend-gating-audit.md`) by covering *everything else* — callable wiring status,
@@ -20,7 +20,7 @@ will require, and that's fixable now before it's baked into more screens.
 ### 1. Auth identity model — most foundational gap
 - **Backend**: identifies callers via real Firebase Auth (`request.auth.uid`) plus **custom claims**
   `request.auth.token.role` and `request.auth.token.vendorId` for vendor-scoped actions.
-  (`the platform-backend/functions/src/orders/createOrder.ts:29,122-123`, `paymentProofs.ts:14-15`,
+  (`platform-backend/functions/src/orders/createOrder.ts:29,122-123`, `paymentProofs.ts:14-15`,
   `completeRegistration.ts:30,211`)
 - **Frontend**: `AuthContext.tsx` fabricates its own local IDs — `id: \`user_${Date.now()}_${Math.random()...}\`` (lines 657, 903) and `vendor_${Date.now()}_${random}` (line 610). Confirmed: zero Firebase Auth SDK usage, no custom claims, no `getIdTokenResult` anywhere in the file.
 - **Impact**: every backend callable that checks `request.auth.token.role`/`vendorId` will reject
@@ -66,7 +66,7 @@ will require, and that's fixable now before it's baked into more screens.
 | Tax / discount | **not modeled at all** in `InvoiceDoc` | `tax: number; discount: number;` — required fields with no backend home |
 | Initial status | server always sets `"unpaid"` on create, ignoring any client-sent status | client explicitly sends `status: 'draft'` — backend has `"draft"` in its `InvoiceStatus` union (`types4.ts:237`) but `createInvoice` itself never uses it, so "draft" invoices as the frontend imagines them (saved, not yet finalized) may not be a real backend state — needs product clarification |
 | ID | client generates its own `id: \`invoice_${Date.now()}_${random}\`` | backend uses Firestore auto-ID (`invoiceRef.id`) — client-generated IDs must never be treated as authoritative once wired |
-| Public share field | frontend: `shareCode` (short, `generateShareCode()`, used in URL `the platform.app/i/{shareCode}`) | backend: `shareToken` (32-char hex via `crypto.randomBytes(16)`) — different field name AND different format/length for the same concept; the public invoice URL scheme depends on this matching exactly |
+| Public share field | frontend: `shareCode` (short, `generateShareCode()`, used in URL `theplatform.app/i/{shareCode}`) | backend: `shareToken` (32-char hex via `crypto.randomBytes(16)`) — different field name AND different format/length for the same concept; the public invoice URL scheme depends on this matching exactly |
 | Return shape | frontend's `createInvoice()` returns the **full populated `Invoice` object** synchronously | backend's `createInvoice` callable returns only `{ success, invoiceId, invoiceNumber }` — repository layer will need an extra fetch to reconstruct the full object the rest of the app expects |
 | `customerId` | frontend type has `customerId?: string` implying a real customer link | backend `createInvoice` always sets `customerId: null` — no request param accepts it | 
 

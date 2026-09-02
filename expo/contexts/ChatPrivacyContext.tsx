@@ -2,7 +2,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEY = '@the platform_chat_privacy_read_receipts';
+const STORAGE_KEY = '@platform_chat_privacy_read_receipts';
 
 export const [ChatPrivacyProvider, useChatPrivacy] = createContextHook(() => {
   const [readReceiptsEnabled, setReadReceiptsEnabledState] = useState(true);

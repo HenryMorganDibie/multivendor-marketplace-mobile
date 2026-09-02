@@ -30,7 +30,7 @@ type RawStatus = 'ACTIVE' | 'DISABLED' | 'WAITLIST';
  *
  * Now reads the real per-country record. The backend's actual status is a
  * three-way enum (ACTIVE / DISABLED / WAITLIST — see
- * CountryAvailabilityDoc in the platform-backend/functions/src/types3.ts), not
+ * CountryAvailabilityDoc in platform-backend/functions/src/types3.ts), not
  * the two-way ACTIVE/INACTIVE this file originally assumed when it was
  * rewritten off the hardcoded map: WAITLIST is a real, distinct state
  * (soft-gated, vendor already in the app) from DISABLED ("coming soon",

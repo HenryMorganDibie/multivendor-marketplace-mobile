@@ -88,7 +88,7 @@ export default function VendorStorefrontScreen() {
 
   const handleShare = async () => {
     try {
-      const shareUrl = `https://the platform.app/vendor/${vendor.id}`;
+      const shareUrl = `https://theplatform.app/vendor/${vendor.id}`;
       await RNShare.share({
         message: `Check out ${vendor.name} on the platform! ${shareUrl}`,
         url: shareUrl,
@@ -174,7 +174,7 @@ export default function VendorStorefrontScreen() {
 
   const handleAskAI = () => {
     console.log('Ask the platform AI pressed');
-    router.push(`/chat/the platform-ai?vendorName=${encodeURIComponent(vendor.name)}` as any);
+    router.push(`/chat/platform-ai?vendorName=${encodeURIComponent(vendor.name)}` as any);
   };
 
   const handleMessageVendor = () => {

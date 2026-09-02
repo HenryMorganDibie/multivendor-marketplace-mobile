@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDeviceId } from '@/utils/deviceId';
 import { auth, callable } from '@/lib/firebase';
 
-const VENDOR_PUSH_TOKEN_KEY = '@the platform_vendor_push_token';
+const VENDOR_PUSH_TOKEN_KEY = '@platform_vendor_push_token';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({

@@ -7,7 +7,7 @@ import { Platform, StyleSheet, TextStyle } from 'react-native';
  * All legacy keys are preserved for backwards compatibility.
  */
 
-export const the platformColors = {
+export const platformColors = {
   // Brand
   primary: '#FF7A28',
   primarySoft: 'rgba(255,122,40,0.10)',
@@ -139,73 +139,73 @@ export const Typography: Record<string, TextStyle> = {
   displayHero: {
     fontSize: 34,
     fontWeight: '800',
-    color: the platformColors.textPrimary,
+    color: platformColors.textPrimary,
     letterSpacing: -0.8,
     lineHeight: 40,
   },
   displayTitle: {
     fontSize: 30,
     fontWeight: '800',
-    color: the platformColors.textPrimary,
+    color: platformColors.textPrimary,
     letterSpacing: -0.6,
     lineHeight: 36,
   },
   pageTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: the platformColors.textPrimary,
+    color: platformColors.textPrimary,
     letterSpacing: -0.4,
     lineHeight: 30,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: the platformColors.textPrimary,
+    color: platformColors.textPrimary,
     letterSpacing: -0.2,
     lineHeight: 24,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: the platformColors.textPrimary,
+    color: platformColors.textPrimary,
     letterSpacing: -0.1,
     lineHeight: 22,
   },
   body: {
     fontSize: 15,
     fontWeight: '400',
-    color: the platformColors.textPrimary,
+    color: platformColors.textPrimary,
     lineHeight: 22,
   },
   bodyStrong: {
     fontSize: 15,
     fontWeight: '600',
-    color: the platformColors.textPrimary,
+    color: platformColors.textPrimary,
     lineHeight: 22,
     letterSpacing: -0.1,
   },
   smallText: {
     fontSize: 13,
     fontWeight: '400',
-    color: the platformColors.textSecondary,
+    color: platformColors.textSecondary,
     lineHeight: 18,
   },
   smallStrong: {
     fontSize: 13,
     fontWeight: '600',
-    color: the platformColors.textPrimary,
+    color: platformColors.textPrimary,
     lineHeight: 18,
   },
   caption: {
     fontSize: 12,
     fontWeight: '500',
-    color: the platformColors.textTertiary,
+    color: platformColors.textTertiary,
     lineHeight: 16,
   },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: the platformColors.textSecondary,
+    color: platformColors.textSecondary,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
@@ -253,7 +253,7 @@ export const Hairline = StyleSheet.hairlineWidth;
 
 export const ButtonStyles = StyleSheet.create({
   primary: {
-    backgroundColor: the platformColors.primary,
+    backgroundColor: platformColors.primary,
     height: 52,
     borderRadius: Radii.button,
     alignItems: 'center',
@@ -261,20 +261,20 @@ export const ButtonStyles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   primaryDisabled: {
-    backgroundColor: the platformColors.primaryDisabled,
+    backgroundColor: platformColors.primaryDisabled,
   },
   primaryText: {
     fontSize: 16,
     fontWeight: '700',
-    color: the platformColors.white,
+    color: platformColors.white,
     letterSpacing: -0.1,
   },
   secondary: {
-    backgroundColor: the platformColors.white,
+    backgroundColor: platformColors.white,
     height: 52,
     borderRadius: Radii.button,
     borderWidth: 1,
-    borderColor: the platformColors.borderStrong,
+    borderColor: platformColors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
@@ -282,11 +282,11 @@ export const ButtonStyles = StyleSheet.create({
   secondaryText: {
     fontSize: 16,
     fontWeight: '600',
-    color: the platformColors.charcoal,
+    color: platformColors.charcoal,
     letterSpacing: -0.1,
   },
   surface: {
-    backgroundColor: the platformColors.surface,
+    backgroundColor: platformColors.surface,
     height: 46,
     borderRadius: Radii.button,
     alignItems: 'center',
@@ -296,7 +296,7 @@ export const ButtonStyles = StyleSheet.create({
   surfaceText: {
     fontSize: 15,
     fontWeight: '600',
-    color: the platformColors.charcoal,
+    color: platformColors.charcoal,
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -309,27 +309,27 @@ export const ButtonStyles = StyleSheet.create({
   ghostText: {
     fontSize: 15,
     fontWeight: '600',
-    color: the platformColors.primary,
+    color: platformColors.primary,
   },
 });
 
 export const CardStyles = StyleSheet.create({
   base: {
-    backgroundColor: the platformColors.white,
+    backgroundColor: platformColors.white,
     borderWidth: 1,
-    borderColor: the platformColors.border,
+    borderColor: platformColors.border,
     borderRadius: Radii.card,
     padding: 18,
   },
   surface: {
-    backgroundColor: the platformColors.white,
+    backgroundColor: platformColors.white,
     borderWidth: 1,
-    borderColor: the platformColors.border,
+    borderColor: platformColors.border,
     borderRadius: Radii.card,
     padding: 18,
   },
   elevated: {
-    backgroundColor: the platformColors.white,
+    backgroundColor: platformColors.white,
     borderRadius: Radii.cardLarge,
     padding: 18,
     ...(Shadows.sm as object),
@@ -338,21 +338,21 @@ export const CardStyles = StyleSheet.create({
 
 export const InputStyles = StyleSheet.create({
   base: {
-    backgroundColor: the platformColors.surface,
+    backgroundColor: platformColors.surface,
     borderWidth: 1,
     borderColor: 'transparent',
     borderRadius: Radii.input,
     paddingVertical: 15,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: the platformColors.textPrimary,
+    color: platformColors.textPrimary,
   },
   focused: {
-    borderColor: the platformColors.primary,
-    backgroundColor: the platformColors.white,
+    borderColor: platformColors.primary,
+    backgroundColor: platformColors.white,
   },
   error: {
-    borderColor: the platformColors.error,
+    borderColor: platformColors.error,
   },
 });
 
@@ -364,7 +364,7 @@ export const PillStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: Radii.pill,
-    backgroundColor: the platformColors.surface,
+    backgroundColor: platformColors.surface,
     borderWidth: 1,
     borderColor: 'transparent',
     flexDirection: 'row',
@@ -372,16 +372,16 @@ export const PillStyles = StyleSheet.create({
     gap: 6,
   },
   active: {
-    backgroundColor: the platformColors.charcoal,
-    borderColor: the platformColors.charcoal,
+    backgroundColor: platformColors.charcoal,
+    borderColor: platformColors.charcoal,
   },
   baseText: {
     fontSize: 14,
     fontWeight: '600',
-    color: the platformColors.textPrimary,
+    color: platformColors.textPrimary,
     letterSpacing: -0.1,
   },
   activeText: {
-    color: the platformColors.white,
+    color: platformColors.white,
   },
 });

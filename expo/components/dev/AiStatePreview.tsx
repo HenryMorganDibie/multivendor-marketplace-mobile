@@ -47,7 +47,7 @@ import {
 import { Colors } from '@/constants/colors';
 import { formatPrice } from '@/utils/formatPrice';
 import type { Currency } from '@/utils/formatPrice';
-import { CUSTOMER_AI_MONTHLY_LIMIT } from '@/utils/the platformAiLimits';
+import { CUSTOMER_AI_MONTHLY_LIMIT } from '@/utils/platformAiLimits';
 
 /* ------------------------------------------------------------------ */
 /* Preview state enum                                                  */

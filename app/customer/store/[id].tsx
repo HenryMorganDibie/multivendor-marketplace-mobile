@@ -60,7 +60,7 @@ export default function VendorStorefrontScreen() {
   };
 
   const handleMenuPress = async () => {
-    const shareUrl = `https://the platform.com/@${vendor.username}`;
+    const shareUrl = `https://theplatform.com/@${vendor.username}`;
     try {
       await Clipboard.setStringAsync(shareUrl);
       console.log('[Share Store] URL copied to clipboard:', shareUrl);
@@ -135,7 +135,7 @@ export default function VendorStorefrontScreen() {
 
   const handleAskAI = () => {
     console.log('Ask the platform AI pressed');
-    router.push(`/chat/the platform-ai?vendorName=${encodeURIComponent(vendor.name)}` as any);
+    router.push(`/chat/platform-ai?vendorName=${encodeURIComponent(vendor.name)}` as any);
   };
 
   const handleMessageVendor = () => {

@@ -153,7 +153,7 @@ export default function VendorOrdersScreen() {
   const [deleteOrderId, setDeleteOrderId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  const the platformOrders = useMemo(
+  const platformOrders = useMemo(
     () => orders.filter((o) => o.orderSource === 'the platform'),
     [orders]
   );
@@ -161,13 +161,13 @@ export default function VendorOrdersScreen() {
   const filteredOrders = useMemo(() => {
     const externalOrders = getTodayOrders();
 
-    let filtered = the platformOrders;
+    let filtered = platformOrders;
 
     if (activeFilter !== 'all') {
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      filtered = the platformOrders.filter((order) => {
+      filtered = platformOrders.filter((order) => {
         switch (activeFilter) {
           case 'new':
             return order.status === 'requested';
@@ -206,7 +206,7 @@ export default function VendorOrdersScreen() {
     }
 
     return filtered;
-  }, [activeFilter, getTodayOrders, the platformOrders]);
+  }, [activeFilter, getTodayOrders, platformOrders]);
 
   const handleOrderPress = (order: Order) => {
     console.log('Opening vendor order:', order.id);

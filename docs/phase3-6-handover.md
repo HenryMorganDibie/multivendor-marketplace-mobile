@@ -19,8 +19,8 @@ invocation with its real returned data, captured verbatim in
 
 | Repository | Branch | State |
 |---|---|---|
-| `the platform-mobile` | `henry/phase-1-registration` | 0 ahead/behind `origin` — the Phase 3–6 app code (InvoiceContext, VendorDashboardContext, growth-insights, the storefront lookup) is on this same branch and already pushed. Local working tree also has a further set of **uncommitted, in-progress edits** unrelated to this pass (mostly vendor settings screens and a few contexts) — not evaluated here; that is a separate, later commit for whoever is carrying that work. |
-| `the platform-backend` | `main` | 0 ahead/behind `origin` — the Phase 3–6 Cloud Functions (`dashboardAnalytics.ts`, `dashboardInsights.ts`, `invoiceFunctions.ts`, `setVendorPublishStatus.ts`, the payment ledger) are already pushed. This pass adds two new files, untracked and **not committed by this pass** — see §7. |
+| `platform-mobile` | `henry/phase-1-registration` | 0 ahead/behind `origin` — the Phase 3–6 app code (InvoiceContext, VendorDashboardContext, growth-insights, the storefront lookup) is on this same branch and already pushed. Local working tree also has a further set of **uncommitted, in-progress edits** unrelated to this pass (mostly vendor settings screens and a few contexts) — not evaluated here; that is a separate, later commit for whoever is carrying that work. |
+| `platform-backend` | `main` | 0 ahead/behind `origin` — the Phase 3–6 Cloud Functions (`dashboardAnalytics.ts`, `dashboardInsights.ts`, `invoiceFunctions.ts`, `setVendorPublishStatus.ts`, the payment ledger) are already pushed. This pass adds two new files, untracked and **not committed by this pass** — see §7. |
 
 There was no phase-3-6-specific branch to check out; the backend and mobile
 code for these phases landed on the same branches Phase 1–2 used.
@@ -35,10 +35,10 @@ code for these phases landed on the same branches Phase 1–2 used.
 | `scripts/phase5-6-insights-tests.js` | 29 | All passing | **Yes** |
 
 ```bash
-# terminal 1, from the platform-backend/
+# terminal 1, from platform-backend/
 npx firebase-tools emulators:start --project demo-platform
 
-# terminal 2, from the platform-backend/scripts/
+# terminal 2, from platform-backend/scripts/
 npm install                          # first run only
 node seed-demo-vendor.js             # phase3/invoice-delivery need the seeded vendor
 node phase3-ledger-tests.js
@@ -78,11 +78,11 @@ nothing about it. No new EAS build was requested or made here.
 **None exist for Phase 3–6.** `maestro/phase3-6-acceptance.yaml` (the intended
 client-facing UI flow) has not been run. `evidence/record-phase3-6.js` — a
 Playwright script that drives the app's **web build against a real deployed
-`the platform-dev` environment** (not the emulator) and records a continuous
-session — exists but requires `the platform-dev` credentials and a running `expo
+`platform-dev` environment** (not the emulator) and records a continuous
+session — exists but requires `platform-dev` credentials and a running `expo
 start --web` session, neither available in this pass. This is the same gap
 named in the task: the UI-level flow still needs a connected device/emulator
-(or, per its own setup notes, a real `the platform-dev` deployment) to produce
+(or, per its own setup notes, a real `platform-dev` deployment) to produce
 actual screenshots, and that remains true after this pass. Everything in this
 handover was verified at the backend-callable level, not the screen level.
 
@@ -91,8 +91,8 @@ handover was verified at the backend-callable level, not the screen level.
 | File | Covers |
 |---|---|
 | `docs/phase3-6-acceptance.md` | Each criterion mapped to the test or direct call that proves it |
-| `the platform-backend/scripts/phase4-storefront-tests.js` | New — storefront publish/unpublish gating and public resolution |
-| `the platform-backend/scripts/phase5-6-insights-tests.js` | New — dashboard and Business Insights figures, fresh vs. active vendor |
+| `platform-backend/scripts/phase4-storefront-tests.js` | New — storefront publish/unpublish gating and public resolution |
+| `platform-backend/scripts/phase5-6-insights-tests.js` | New — dashboard and Business Insights figures, fresh vs. active vendor |
 | `maestro/phase3-6-acceptance.yaml` | The intended native flow — not run, see §4 |
 
 ---
@@ -113,7 +113,7 @@ constants (`newCustomersThisWeek: 3`, `lowStockCount: 2`,
 
 ### The mobile app IS wired for these phases — verified against `expo/`, not the repo root
 
-`the platform-mobile`'s own `README.md` states plainly: **"Everything real lives
+`platform-mobile`'s own `README.md` states plainly: **"Everything real lives
 inside `expo/`... always edit inside `expo/`, never the root-level copies, or
 changes will silently diverge."** The repository root (`app/`, `contexts/`,
 `data/`, etc.) is a near-duplicate the Rork platform's sync mechanism leaves
@@ -136,7 +136,7 @@ With that said, confirmed wired to the real backend in `expo/`:
   — `updateInvoiceBranding`.
 - `contexts/VendorOnboardingContext.tsx` — `setVendorPublishStatus`.
 - `lib/storefront/shareStorefront.ts` — builds the real
-  `https://the platform.com/store/{username}` link and refuses to share one for a
+  `https://theplatform.com/store/{username}` link and refuses to share one for a
   vendor that isn't published.
 - `services/repositories/vendorRepository.ts` — resolves a vendor by username
   or slug through a Firestore query that **correctly restates all three of the
@@ -171,7 +171,7 @@ storefront/plan screens look real," but the code only verifies — it never
 calls `setVendorPublishStatus`. Worse, it couldn't succeed if it tried: the
 seed never gives the demo vendor a catalog item, and publishing requires one
 approved item. Right now, fresh off `seed-demo-vendor.js`, `demo.vendor@
-the platform.com` is verified and has an active Pro plan but is **not published**
+theplatform.com` is verified and has an active Pro plan but is **not published**
 and **not discoverable**. This is a seed-script gap (confirmed by
 `phase4-storefront-tests.js`, which works around it by building its own
 vendor fixtures rather than relying on the demo vendor for the publish path),
@@ -192,7 +192,7 @@ else that time again.
 
 ### Repo housekeeping, not code
 
-Both `the platform-backend` and `the platform-mobile` currently have local,
+Both `platform-backend` and `platform-mobile` currently have local,
 **uncommitted** changes beyond what this pass added — pre-existing before this
 session started, not diagnosed here, and not this task's to resolve. See §1
 and §7.
@@ -204,10 +204,10 @@ and §7.
 This pass did not commit or push anything, per instruction — Henry reviews
 and commits separately. What exists on disk right now, uncommitted:
 
-- `the platform-backend/scripts/phase4-storefront-tests.js` (new)
-- `the platform-backend/scripts/phase5-6-insights-tests.js` (new)
-- `the platform-mobile/docs/phase3-6-handover.md` (this file, new)
-- `the platform-mobile/docs/phase3-6-acceptance.md` (new)
+- `platform-backend/scripts/phase4-storefront-tests.js` (new)
+- `platform-backend/scripts/phase5-6-insights-tests.js` (new)
+- `platform-mobile/docs/phase3-6-handover.md` (this file, new)
+- `platform-mobile/docs/phase3-6-acceptance.md` (new)
 
 No app code was modified to make any test pass. Where a script's own
 assumption about a response shape was wrong, the script was corrected (see

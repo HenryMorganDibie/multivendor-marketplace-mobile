@@ -134,7 +134,7 @@ function getRevenueTrendData(
   external: Array<{ orderDate: string; total: number }>,
   range: TimeRange
 ): TrendPoint[] {
-  const all = [...the platform, ...external];
+  const all = [...platform, ...external];
   const now = new Date();
 
   if (range === '1D') {
@@ -919,11 +919,11 @@ function generateAIInsights(params: {
   topSource: { name: string; orders: number } | null;
   totalOrders: number;
   totalRevenue: number;
-  the platformOrders: number;
+  platformOrders: number;
   externalOrders: number;
   hasData: boolean;
 }): AIInsight[] {
-  const { conversionRate, repeatRate, topSource, totalOrders, totalRevenue, the platformOrders, externalOrders, hasData } = params;
+  const { conversionRate, repeatRate, topSource, totalOrders, totalRevenue, platformOrders, externalOrders, hasData } = params;
   if (!hasData) return [];
 
   const insights: AIInsight[] = [];
@@ -1007,8 +1007,8 @@ function generateAIInsights(params: {
     }));
   }
 
-  const the platformShare = totalOrders > 0 ? Math.round((the platformOrders / totalOrders) * 100) : 0;
-  if (the platformShare >= 80 && externalOrders === 0) {
+  const platformShare = totalOrders > 0 ? Math.round((platformOrders / totalOrders) * 100) : 0;
+  if (platformShare >= 80 && externalOrders === 0) {
     insights.push(buildScoredInsight({
       id: 'ext-growth',
       title: 'External growth opportunity',
@@ -1045,7 +1045,7 @@ function generateAIInsights(params: {
 
 type VerificationStatusType = 'not_started' | 'pending_review' | 'approved' | 'rejected' | 'retry_required';
 
-function the platformAIInsightsSection({
+function platformAIInsightsSection({
   insights,
   plan,
   hasData,
@@ -2096,7 +2096,7 @@ export default function GrowthInsightsScreen() {
     router.replace('/vendor/(tabs)' as any);
   };
 
-  const the platformOrders = useMemo(
+  const platformOrders = useMemo(
     () => orders.filter(o => o.orderSource !== 'external'),
     [orders]
   );
@@ -2108,22 +2108,22 @@ export default function GrowthInsightsScreen() {
     [externalOrders, timeRange]
   );
 
-  const filteredthe platform = useMemo(() => {
+  const filteredPlatform = useMemo(() => {
     const threshold = getDateThreshold(timeRange);
-    return the platformOrders.filter(o => new Date(o.orderDate) >= threshold);
-  }, [the platformOrders, timeRange]); // threshold is always a Date for the new 5-range set
+    return platformOrders.filter(o => new Date(o.orderDate) >= threshold);
+  }, [platformOrders, timeRange]); // threshold is always a Date for the new 5-range set
 
   const sourceMap = useMemo(() => {
     const map: Record<string, SourceData> = {};
 
-    const the platformCfg = SOURCE_CONFIG['the platform Marketplace'];
+    const platformCfg = SOURCE_CONFIG['the platform Marketplace'];
     map['the platform Marketplace'] = {
       source: 'the platform Marketplace',
-      orders: filteredthe platform.length,
-      revenue: filteredthe platform.reduce((s, o) => s + o.total, 0),
-      customers: new Set(filteredthe platform.map(o => formatInvoiceCustomerName(o.customerName ?? 'unknown', 'the platform'))),
-      color: the platformCfg.color,
-      IconComponent: the platformCfg.IconComponent,
+      orders: filteredPlatform.length,
+      revenue: filteredPlatform.reduce((s, o) => s + o.total, 0),
+      customers: new Set(filteredPlatform.map(o => formatInvoiceCustomerName(o.customerName ?? 'unknown', 'the platform'))),
+      color: platformCfg.color,
+      IconComponent: platformCfg.IconComponent,
     };
 
     ALL_EXTERNAL_SOURCES.forEach(src => {
@@ -2140,7 +2140,7 @@ export default function GrowthInsightsScreen() {
     });
 
     return map;
-  }, [filteredExternal, filteredthe platform]);
+  }, [filteredExternal, filteredPlatform]);
 
   const allSources = useMemo(() => {
     return Object.values(sourceMap).sort((a, b) => b.orders - a.orders);
@@ -2148,7 +2148,7 @@ export default function GrowthInsightsScreen() {
 
   const maxOrders = useMemo(() => Math.max(...allSources.map(s => s.orders), 1), [allSources]);
   const platformMetrics = useMemo(() => {
-    const the platformRevenue = filteredthe platform.reduce((s, o) => s + o.total, 0);
+    const platformRevenue = filteredPlatform.reduce((s, o) => s + o.total, 0);
     const externalRevenue = filteredExternal.reduce((s, o) => s + o.total, 0);
     // Add standalone-invoice payment revenue for the selected period. Invoices
     // linked to an order are skipped so the same payment is not double-counted
@@ -2159,14 +2159,14 @@ export default function GrowthInsightsScreen() {
     const linkedOrderIds = new Set(orders.map((o) => o.id));
     const invoiceRevenue = getInvoiceRevenueForRange(invoices, threshold, new Date(), linkedOrderIds);
     return {
-      the platformOrders: filteredthe platform.length,
+      platformOrders: filteredPlatform.length,
       externalOrders: filteredExternal.length,
-      the platformRevenue,
+      platformRevenue,
       externalRevenue,
-      totalOrders: filteredthe platform.length + filteredExternal.length,
-      totalRevenue: the platformRevenue + externalRevenue + invoiceRevenue,
+      totalOrders: filteredPlatform.length + filteredExternal.length,
+      totalRevenue: platformRevenue + externalRevenue + invoiceRevenue,
     };
-  }, [filteredthe platform, filteredExternal, timeRange, invoices, orders]);
+  }, [filteredPlatform, filteredExternal, timeRange, invoices, orders]);
 
   const hasAnyData = platformMetrics.totalOrders > 0;
 
@@ -2203,7 +2203,7 @@ export default function GrowthInsightsScreen() {
     }
 
     const allCustomers = new Map<string, number>();
-    [...filteredthe platform, ...filteredExternal].forEach(o => {
+    [...filteredPlatform, ...filteredExternal].forEach(o => {
       const name = ('customerName' in o ? o.customerName : null) || 'Walk-in';
       const source = 'orderSource' in o && o.orderSource === 'external' ? 'external' : 'the platform';
       allCustomers.set(formatInvoiceCustomerName(name, source), (allCustomers.get(formatInvoiceCustomerName(name, source)) ?? 0) + 1);
@@ -2213,7 +2213,7 @@ export default function GrowthInsightsScreen() {
     const total = allCustomers.size;
     const repeatRate = total > 0 ? Math.round((repeatCustomers / total) * 100) : 0;
     return { newCustomers, repeatCustomers, repeatRate, total };
-  }, [serverAnalytics, filteredthe platform, filteredExternal]);
+  }, [serverAnalytics, filteredPlatform, filteredExternal]);
 
   /**
    * Storefront visits are not tracked, so they are not reported.
@@ -2233,9 +2233,9 @@ export default function GrowthInsightsScreen() {
    */
   const storefrontMetrics = useMemo(() => ({
     visits: null,
-    ordersPlaced: filteredthe platform.length,
+    ordersPlaced: filteredPlatform.length,
     conversionRate: null,
-  }), [filteredthe platform]);
+  }), [filteredPlatform]);
 
   const topSource = useMemo(() => {
     const sorted = allSources.filter(s => s.orders > 0).sort((a, b) => b.orders - a.orders);
@@ -2254,10 +2254,10 @@ export default function GrowthInsightsScreen() {
     topSource,
     totalOrders: platformMetrics.totalOrders,
     totalRevenue: platformMetrics.totalRevenue,
-    the platformOrders: platformMetrics.the platformOrders,
+    platformOrders: platformMetrics.platformOrders,
     externalOrders: platformMetrics.externalOrders,
     hasData: hasAnyData,
-  }), [storefrontMetrics.conversionRate, customerMetrics.repeatRate, topSource, platformMetrics.totalOrders, platformMetrics.totalRevenue, platformMetrics.the platformOrders, platformMetrics.externalOrders, hasAnyData]);
+  }), [storefrontMetrics.conversionRate, customerMetrics.repeatRate, topSource, platformMetrics.totalOrders, platformMetrics.totalRevenue, platformMetrics.platformOrders, platformMetrics.externalOrders, hasAnyData]);
 
   const smartInsights = useMemo(() => generateSmartInsights({
     // Same as above: 0 means no conversion insight rather than a fabricated one.
@@ -2450,7 +2450,7 @@ export default function GrowthInsightsScreen() {
         />
 
         {/* THE PLATFORM AI INSIGHTS */}
-        <the platformAIInsightsSection
+        <platformAIInsightsSection
           insights={aiInsights}
           plan={plan}
           hasData={hasAnyData}
@@ -2548,15 +2548,15 @@ export default function GrowthInsightsScreen() {
                   <Text style={styles.compareLabel}>the platform Marketplace</Text>
                   <View style={styles.compareBarRow}>
                     <AnimatedBar
-                      value={platformMetrics.the platformOrders}
+                      value={platformMetrics.platformOrders}
                       max={platformMetrics.totalOrders || 1}
                       color={Colors.primary}
                       delay={0}
                     />
-                    <Text style={styles.compareCount}>{platformMetrics.the platformOrders}</Text>
+                    <Text style={styles.compareCount}>{platformMetrics.platformOrders}</Text>
                   </View>
                   <Text style={styles.compareRevenue}>
-                    {formatCompactCurrency(platformMetrics.the platformRevenue, currency)}
+                    {formatCompactCurrency(platformMetrics.platformRevenue, currency)}
                   </Text>
                 </View>
               </View>
@@ -2589,7 +2589,7 @@ export default function GrowthInsightsScreen() {
                   <View style={styles.splitRow}>
                     <View style={[styles.splitDot, { backgroundColor: Colors.primary }]} />
                     <Text style={styles.splitLabel}>
-                      {Math.round((platformMetrics.the platformOrders / platformMetrics.totalOrders) * 100)}% the platform
+                      {Math.round((platformMetrics.platformOrders / platformMetrics.totalOrders) * 100)}% the platform
                     </Text>
                     <View style={[styles.splitDot, { backgroundColor: '#9CA3AF', marginLeft: 12 }]} />
                     <Text style={styles.splitLabel}>

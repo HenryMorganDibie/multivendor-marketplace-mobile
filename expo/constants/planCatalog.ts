@@ -273,7 +273,7 @@ export const MOCK_PLAN_CATALOG: PlanCatalog = {
     promoEndsAt: null,
     renewsAtStandardPrice: true,
   },
-  vendorPortalBaseUrl: 'https://vendor.the platform.com',
+  vendorPortalBaseUrl: 'https://vendor.platform.com',
 
   /* ---------------------------- Country pricing --------------------------- */
   countries: [

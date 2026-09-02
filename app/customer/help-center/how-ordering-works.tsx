@@ -19,7 +19,7 @@ export default function HowOrderingWorks() {
         <View style={styles.section}>
           <Text style={styles.heading}>Browse Vendor Stores</Text>
           <Text style={styles.paragraph}>
-            Customers browse vendor stores on the platform. Each vendor has their own storefront with catalog items, prices, and descriptions. You can explore different categories and view detailed product information.
+            Customers browse vendor stores on theplatform. Each vendor has their own storefront with catalog items, prices, and descriptions. You can explore different categories and view detailed product information.
           </Text>
         </View>
 

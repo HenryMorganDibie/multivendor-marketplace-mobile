@@ -4,7 +4,7 @@ import { toBackendPlanTier, fromBackendPlanTier } from '@/types/domain';
 /**
  * subscriptionService — single boundary for the vendor's subscription/plan.
  *
- * SCAFFOLD ONLY. Reads the same `@the platform_vendor_plan` AsyncStorage record that
+ * SCAFFOLD ONLY. Reads the same `@platform_vendor_plan` AsyncStorage record that
  * `contexts/VendorPlanContext` owns. The context stays the live, reactive source
  * for plan-gated UI; this service is the stable async API Henry will repoint at
  * Firestore (`vendorSubscriptions/{vendorId}`).

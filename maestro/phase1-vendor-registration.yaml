@@ -4,7 +4,7 @@
 # elements a user touches rather than a parallel test-only path.
 #
 # Run:  maestro test maestro/phase1-vendor-registration.yaml
-appId: com.the platform.app
+appId: com.platform.app
 ---
 - launchApp:
     clearState: true
@@ -54,7 +54,7 @@ appId: com.the platform.app
 
 # A fresh address each run, so the flow never trips over "account already
 # exists" from the previous one. Maestro evaluates JS inside ${}.
-- evalScript: ${output.email = 'maestro.vendor.' + Date.now() + '@the platform.test'}
+- evalScript: ${output.email = 'maestro.vendor.' + Date.now() + '@theplatform.test'}
 
 # The keyboard is dismissed between fields. On a phone it covers the lower half
 # of the form, so the next input is genuinely off-screen rather than just

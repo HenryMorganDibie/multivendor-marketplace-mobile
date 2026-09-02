@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
-import { CUSTOMER_AI_MONTHLY_LIMIT } from '@/utils/the platformAiLimits';
+import { CUSTOMER_AI_MONTHLY_LIMIT } from '@/utils/platformAiLimits';
 import { useAuth } from './AuthContext';
 
 /**

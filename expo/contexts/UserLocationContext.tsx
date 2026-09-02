@@ -11,8 +11,8 @@ import {
 } from '@/constants/countries';
 import { Region, getRegionsByCountry, getRegionById } from '@/constants/regions';
 
-const LOCATION_STORAGE_KEY = '@the platform_user_location';
-const LOCATION_LOG_KEY = '@the platform_location_log';
+const LOCATION_STORAGE_KEY = '@platform_user_location';
+const LOCATION_LOG_KEY = '@platform_location_log';
 
 interface UserLocation {
   countryCode: string;

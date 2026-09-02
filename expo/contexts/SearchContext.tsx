@@ -2,7 +2,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SEARCH_HISTORY_KEY = '@the platform_search_history';
+const SEARCH_HISTORY_KEY = '@platform_search_history';
 const MAX_HISTORY = 10;
 
 export interface SearchHistoryEntry {

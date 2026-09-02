@@ -75,7 +75,7 @@ export default function PublicOrderSummaryScreen() {
 
   const handleVisitStorefront = () => {
     if (!order) return;
-    const storeUrl = `https://the platform.com/@${order.vendorSlug}`;
+    const storeUrl = `https://theplatform.com/@${order.vendorSlug}`;
     console.log('[OrderSummary] Opening storefront:', storeUrl);
     Linking.openURL(storeUrl).catch((err) => {
       console.error('[OrderSummary] Failed to open storefront:', err);
@@ -261,7 +261,7 @@ export default function PublicOrderSummaryScreen() {
               <TouchableOpacity
                 style={styles.storeButton}
                 onPress={() => {
-                  Linking.openURL('https://apps.apple.com/app/the platform/id000000000').catch(() => {});
+                  Linking.openURL('https://apps.apple.com/app/platform/id000000000').catch(() => {});
                 }}
                 activeOpacity={0.7}
               >
@@ -271,7 +271,7 @@ export default function PublicOrderSummaryScreen() {
               <TouchableOpacity
                 style={styles.storeButton}
                 onPress={() => {
-                  Linking.openURL('https://play.google.com/store/apps/details?id=com.the platform.app').catch(() => {});
+                  Linking.openURL('https://play.google.com/store/apps/details?id=com.platform.app').catch(() => {});
                 }}
                 activeOpacity={0.7}
               >

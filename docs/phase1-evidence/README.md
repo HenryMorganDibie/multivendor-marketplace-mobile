@@ -34,11 +34,11 @@ The links were verified individually against the running app:
 
 | Link | Opens |
 |---|---|
-| Terms of Use | `https://the platform.com/terms-of-service` |
-| Privacy Policy | `https://the platform.com/privacy-policy` |
-| Vendor Agreement | `https://the platform.com/vendor-terms` |
+| Terms of Use | `https://theplatform.com/terms-of-service` |
+| Privacy Policy | `https://theplatform.com/privacy-policy` |
+| Vendor Agreement | `https://theplatform.com/vendor-terms` |
 
-Those routes exist and render in the the platform-website repo. They currently show
+Those routes exist and render in the platform-website repo. They currently show
 "Content pending publication" because the legal copy has not been published
 through the CMS yet, so there is deliberately no screenshot of the destination:
 it would show a page waiting on content rather than anything about this phase.

@@ -45,9 +45,9 @@ export default function ChangeUsernameScreen() {
    * back from the vendor doc (documented technical debt: username state is
    * meant to move out of that context). The practical effect is that any
    * device which didn't itself perform the signup — a reinstall, a second
-   * device, cleared storage — invents a fresh "@the platform-XXXXX" and shows it
+   * device, cleared storage — invents a fresh "@platform-XXXXX" and shows it
    * as the vendor's current username. Caught live: this screen offered to
-   * change "@the platform-DRK67" for a vendor whose real username was
+   * change "@platform-DRK67" for a vendor whose real username was
    * "phaseaudit_vendor".
    *
    * isRealVendor matters here: reading vendor.username unconditionally just

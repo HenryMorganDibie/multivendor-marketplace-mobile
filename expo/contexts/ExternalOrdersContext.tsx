@@ -11,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * genuine backend orders.
  *
  * It is not migrated to the real backend (createExternalOrder,
- * the platform-backend/functions/src/orders/createOrder.ts) in this pass,
+ * platform-backend/functions/src/orders/createOrder.ts) in this pass,
  * deliberately: several fields this context supports — deliveryFee,
  * serviceFee, tax, manual discount, fulfillmentDate/fulfillmentTime — have
  * no backend equivalent at all (confirmed by direct code inspection, not

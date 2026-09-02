@@ -158,7 +158,7 @@ export default function SelectUsernameScreen() {
             <View style={styles.header}>
               <Text style={styles.title}>Choose your username</Text>
               <Text style={styles.subtitle}>
-                Your username is your public business address on the platform. This cannot be changed later.
+                Your username is your public business address on theplatform. This cannot be changed later.
               </Text>
             </View>
 

@@ -60,9 +60,9 @@ interface RegistrationData {
   area?: string;
 }
 
-const AUTH_STORAGE_KEY = '@the platform_auth_user';
-const ACCOUNTS_DB_KEY = '@the platform_accounts_db';
-const ONBOARDING_KEY = '@the platform_onboarding_seen';
+const AUTH_STORAGE_KEY = '@platform_auth_user';
+const ACCOUNTS_DB_KEY = '@platform_accounts_db';
+const ONBOARDING_KEY = '@platform_onboarding_seen';
 
 interface AccountRecord {
   id: string;
@@ -513,7 +513,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           
           if (data.plan === 'basic') {
             const AsyncStorageModule = await import('@react-native-async-storage/async-storage');
-            const VENDOR_PLAN_STORAGE_KEY = '@the platform_vendor_plan';
+            const VENDOR_PLAN_STORAGE_KEY = '@platform_vendor_plan';
             await AsyncStorageModule.default.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify({
               plan: 'basic',
               businessCountry: 'Nigeria',
@@ -531,7 +531,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           console.log('[AUTH] Using user-selected username:', generatedUsername);
           
           const AsyncStorageModule = await import('@react-native-async-storage/async-storage');
-          const VENDOR_PLAN_STORAGE_KEY = '@the platform_vendor_plan';
+          const VENDOR_PLAN_STORAGE_KEY = '@platform_vendor_plan';
           await AsyncStorageModule.default.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify({
             plan: data.plan || 'standard',
             businessCountry: 'Nigeria',
@@ -569,7 +569,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       await saveAccountsDb(accounts);
 
       if (data.role === 'vendor') {
-        const vendorProfileKey = '@the platform_vendor_profile';
+        const vendorProfileKey = '@platform_vendor_profile';
         const vendorProfile = {
           id: newAccount.id,
           name: data.businessName || '',

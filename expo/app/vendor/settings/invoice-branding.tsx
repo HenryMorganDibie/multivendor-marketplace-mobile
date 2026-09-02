@@ -282,7 +282,7 @@ export default function InvoiceBrandingScreen() {
       thankYouMessage: previewBranding.thankYouMessage,
       footerText: previewBranding.footerText,
       templateId: previewBranding.templateId,
-      poweredBySubtle: previewBranding.capabilities.poweredBythe platform === 'subtle',
+      poweredBySubtle: previewBranding.capabilities.poweredByPlatform === 'subtle',
       showLogo: previewBranding.capabilities.allowLogo,
       showThankYou: previewBranding.capabilities.allowThankYouMessage,
       showFooter: previewBranding.capabilities.allowCustomFooter,

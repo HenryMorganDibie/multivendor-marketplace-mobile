@@ -103,7 +103,7 @@ interface VendorPlanData {
   subscriptionReason: SubscriptionReason;
 }
 
-const VENDOR_PLAN_STORAGE_KEY = '@the platform_vendor_plan';
+const VENDOR_PLAN_STORAGE_KEY = '@platform_vendor_plan';
 
 export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
   const [planData, setPlanData] = useState<VendorPlanData>({

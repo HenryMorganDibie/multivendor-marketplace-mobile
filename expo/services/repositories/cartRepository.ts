@@ -4,13 +4,13 @@ import type { VendorCart } from '@/types/domain';
 /**
  * cartRepository — data-access boundary for vendor carts.
  *
- * SCAFFOLD ONLY. Owns reads/writes against the same `@the platform_vendor_carts`
+ * SCAFFOLD ONLY. Owns reads/writes against the same `@platform_vendor_carts`
  * AsyncStorage store CartContext uses. cartService delegates here. CartContext
  * remains the live, reactive source for the UI.
  *
  * TODO(Henry): replace with Firestore `users/{uid}/carts/{vendorId}`.
  */
-export const CART_STORAGE_KEY = '@the platform_vendor_carts';
+export const CART_STORAGE_KEY = '@platform_vendor_carts';
 
 export const cartRepository = {
   /** All raw persisted carts (unfiltered). */

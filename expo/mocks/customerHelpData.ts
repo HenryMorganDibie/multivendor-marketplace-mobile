@@ -266,7 +266,7 @@ Only include the details needed for the order, and only share when necessary for
     id: 'managing-privacy',
     categoryId: 'privacy-security',
     title: 'Managing your privacy',
-    content: `You control what you share on the platform.
+    content: `You control what you share on theplatform.
 
 ## Your data
 • Review the Privacy & Data screen in Settings

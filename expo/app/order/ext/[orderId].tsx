@@ -43,7 +43,7 @@ export default function PublicExternalOrderScreen() {
 
   const handleDownloadApp = () => {
     console.log('Download app tapped');
-    Linking.openURL('https://the platform.com/download').catch((err) => {
+    Linking.openURL('https://theplatform.com/download').catch((err) => {
       console.error('Failed to open download link:', err);
     });
   };

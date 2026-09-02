@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notificationThrottleService } from '@/utils/notificationThrottle';
 
-const VENDOR_PUSH_TOKEN_KEY = '@the platform_vendor_push_token';
+const VENDOR_PUSH_TOKEN_KEY = '@platform_vendor_push_token';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({

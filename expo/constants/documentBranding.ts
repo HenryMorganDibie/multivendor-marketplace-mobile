@@ -4,7 +4,7 @@ import type { VendorPlan, PlanLimits } from '@/contexts/VendorPlanContext';
  * Plan-based document branding capabilities for invoices and receipts.
  *
  * This mirrors the backend-provided `PlanLimits` object
- * (functions/src/types4.ts in the platform-backend) so Henry can swap the source
+ * (functions/src/types4.ts in platform-backend) so Henry can swap the source
  * of truth to Firestore later without touching UI. Branding is applied
  * automatically based on the vendor's plan — vendors never toggle it
  * manually. Tier boundaries below are intentionally kept in lockstep with
@@ -39,7 +39,7 @@ export interface DocumentBranding {
   /** Printable receipt / packing slip support (Pro+; may be shown as locked/future) */
   allowPrintableDocs: boolean;
   /** How the "Powered by the platform" attribution renders */
-  poweredBythe platform: 'visible' | 'subtle';
+  poweredByPlatform: 'visible' | 'subtle';
 }
 
 // Note (print layout): "Optimize for print" is NOT a vendor branding
@@ -58,7 +58,7 @@ const BASIC: DocumentBranding = {
   allowCustomFooter: false,
   allowPremiumTemplates: false,
   allowPrintableDocs: false,
-  poweredBythe platform: 'visible',
+  poweredByPlatform: 'visible',
 };
 
 const STANDARD: DocumentBranding = {
@@ -76,7 +76,7 @@ const PRO: DocumentBranding = {
   allowThankYouMessage: true,
   allowBrandedHeader: true,
   allowCustomFooter: true,
-  poweredBythe platform: 'subtle',
+  poweredByPlatform: 'subtle',
 };
 
 const PRO_PLUS: DocumentBranding = {
@@ -110,7 +110,7 @@ export function getDocumentBranding(plan: VendorPlan, realLimits?: PlanLimits | 
       allowCustomFooter: realLimits.canSetFooterText,
       allowPremiumTemplates: realLimits.canUsePremiumTemplates,
       allowPrintableDocs: realLimits.canUsePrintLayout,
-      poweredBythe platform: realLimits.canSetBrandColor ? 'subtle' : 'visible',
+      poweredByPlatform: realLimits.canSetBrandColor ? 'subtle' : 'visible',
     };
   }
   return getDocumentBrandingFallback(plan);

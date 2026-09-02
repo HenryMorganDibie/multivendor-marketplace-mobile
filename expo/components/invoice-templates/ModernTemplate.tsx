@@ -10,7 +10,7 @@ import {
   formatMoney,
   useInvoiceLayout,
   CompactItemList,
-  the platformFooter,
+  platformFooter,
   LabelText,
   MoneyText,
   type InvoiceTemplateData,
@@ -172,7 +172,7 @@ export default function ModernTemplate({
       ) : null}
 
       <View style={{ marginTop: layout.sectionGap }}>
-        <the platformFooter subtle={branding.poweredBySubtle} />
+        <platformFooter subtle={branding.poweredBySubtle} />
       </View>
     </View>
   );

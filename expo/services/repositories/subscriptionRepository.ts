@@ -3,13 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 /**
  * subscriptionRepository — data-access boundary for the vendor plan record.
  *
- * SCAFFOLD ONLY. Reads/writes the same `@the platform_vendor_plan` AsyncStorage
+ * SCAFFOLD ONLY. Reads/writes the same `@platform_vendor_plan` AsyncStorage
  * record VendorPlanContext owns. subscriptionService delegates here; the context
  * remains the live, reactive source for plan-gated UI.
  *
  * TODO(Henry): replace with Firestore `vendorSubscriptions/{vendorId}`.
  */
-export const VENDOR_PLAN_STORAGE_KEY = '@the platform_vendor_plan';
+export const VENDOR_PLAN_STORAGE_KEY = '@platform_vendor_plan';
 
 export const subscriptionRepository = {
   /** Raw persisted plan record, or null. */

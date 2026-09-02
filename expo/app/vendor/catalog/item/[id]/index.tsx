@@ -47,7 +47,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // shipping an app release. Env-overridable so staging can point elsewhere.
 const CATALOG_MODERATION_HELP_URL =
   process.env.EXPO_PUBLIC_CATALOG_MODERATION_HELP_URL ??
-  'https://the platform.com/help/item-review';
+  'https://theplatform.com/help/item-review';
 
 export default function ItemDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

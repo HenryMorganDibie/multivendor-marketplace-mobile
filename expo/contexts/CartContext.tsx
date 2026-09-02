@@ -2,7 +2,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const CART_STORAGE_KEY = '@the platform_vendor_carts';
+const CART_STORAGE_KEY = '@platform_vendor_carts';
 const PERSIST_DEBOUNCE_MS = 600;
 
 export interface CartAddOn {

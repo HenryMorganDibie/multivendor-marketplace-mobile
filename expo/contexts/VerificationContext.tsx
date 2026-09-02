@@ -59,7 +59,7 @@ export interface VerificationData {
   providerData: MockVerificationProviderData;
 }
 
-const VERIFICATION_KEY = '@the platform_vendor_verification';
+const VERIFICATION_KEY = '@platform_vendor_verification';
 
 function generateReferenceId(): string {
   const ts = Date.now().toString(36).toUpperCase();

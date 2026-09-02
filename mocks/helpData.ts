@@ -103,7 +103,7 @@ export const helpCategories: HelpCategory[] = [
 
 export const helpArticles: HelpArticle[] = [
   {
-    id: 'does-the platform-process-payments',
+    id: 'does-platform-process-payments',
     categoryId: 'payments',
     title: 'Does the platform process payments?',
     content: 'the platform does not process, hold, or move money.\n\nCustomers pay you directly using your own payment methods.',
@@ -166,7 +166,7 @@ export const helpArticles: HelpArticle[] = [
     planInfo: 'All plans',
   },
   {
-    id: 'does-the platform-limit-orders',
+    id: 'does-platform-limit-orders',
     categoryId: 'orders',
     title: 'Does the platform limit how many orders I can accept?',
     content: 'the platform does not limit the number of orders you can accept on any plan.\n\nWe believe vendors should never be restricted from selling to their customers or growing their business. Your success should not be capped or slowed down by the platform you use.\n\nInstead of limiting orders, the platform\'s plans are based on how much automation and operational support you want, not how much you sell.\n\nThis means:\n- You can accept unlimited orders on all plans\n- You always control your revenue\n- Upgrades are optional and based on convenience, not pressure\n\nHigher plans exist to help reduce manual work — not to limit your growth.',
@@ -208,7 +208,7 @@ export const helpArticles: HelpArticle[] = [
     planInfo: 'Pro, Pro+',
   },
   {
-    id: 'does-the platform-track-inventory-automatically',
+    id: 'does-platform-track-inventory-automatically',
     categoryId: 'inventory',
     title: 'Does the platform track inventory automatically?',
     content: 'No. Inventory tracking is optional.\n\nYou can manually set quantities for items if you want to track stock levels.',
@@ -267,7 +267,7 @@ export const helpArticles: HelpArticle[] = [
     id: 'can-disable-pickup',
     categoryId: 'pickup-fulfillment',
     title: 'Can I disable pickup for my store?',
-    content: 'Pickup is the primary fulfillment method on the platform.\n\nYou cannot disable pickup, but you can set custom pickup instructions or require delivery coordination.',
+    content: 'Pickup is the primary fulfillment method on theplatform.\n\nYou cannot disable pickup, but you can set custom pickup instructions or require delivery coordination.',
     planInfo: 'All plans',
   },
   {
@@ -306,7 +306,7 @@ export const helpArticles: HelpArticle[] = [
     planInfo: 'Standard and above',
   },
   {
-    id: 'how-contact-the platform-support',
+    id: 'how-contact-platform-support',
     categoryId: 'support-access',
     title: 'How do I contact the platform support?',
     content: 'You can contact the platform support through the Help Center.\n\nTap "Contact Support" at the bottom of the Help Center page to submit a request.',
@@ -323,7 +323,7 @@ export const helpArticles: HelpArticle[] = [
     id: 'who-can-access-vendor-account',
     categoryId: 'support-access',
     title: 'Who can access my vendor account?',
-    content: 'Only you can access your vendor account.\n\nthe platform does not support multi-user or team access at this time.',
+    content: 'Only you can access your vendor account.\n\nPlatform does not support multi-user or team access at this time.',
     planInfo: 'All plans',
   },
   {
@@ -587,7 +587,7 @@ Store appearance:
     title: 'Verification & Trust',
     content: `Why we require verification
 
-Verification helps build trust between vendors and customers on the platform. Verified vendors appear in Home, Explore, and Search — giving them full visibility to new customers browsing the marketplace.
+Verification helps build trust between vendors and customers on theplatform. Verified vendors appear in Home, Explore, and Search — giving them full visibility to new customers browsing the marketplace.
 
 Unverified vendors can still receive orders by sharing their storefront link directly, but they will not appear in discovery surfaces until verification is complete.
 

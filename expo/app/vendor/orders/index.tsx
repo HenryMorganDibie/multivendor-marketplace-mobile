@@ -175,18 +175,18 @@ export default function VendorOrdersScreen() {
    * legacy local records (identified below by shareToken, a field the real
    * Order type never has) are the separate, AsyncStorage-only case.
    */
-  const the platformOrders = orders;
+  const platformOrders = orders;
 
   const filteredOrders = useMemo(() => {
     const externalOrders = getTodayOrders();
 
-    let filtered = the platformOrders;
+    let filtered = platformOrders;
 
     if (activeFilter !== 'all') {
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      filtered = the platformOrders.filter((order) => {
+      filtered = platformOrders.filter((order) => {
         switch (activeFilter) {
           case 'new':
             return order.status === 'requested';
@@ -227,7 +227,7 @@ export default function VendorOrdersScreen() {
     }
 
     return filtered;
-  }, [activeFilter, getTodayOrders, the platformOrders]);
+  }, [activeFilter, getTodayOrders, platformOrders]);
 
   const handleOrderPress = (order: Order) => {
     console.log('Opening vendor order:', order.id);
@@ -299,7 +299,7 @@ export default function VendorOrdersScreen() {
     // shareToken only exists on the legacy AsyncStorage-only ExternalOrder
     // shape - orderSource: 'external' is not a safe discriminant here since
     // a real backend order created via createExternalOrder carries the same
-    // value. See the the platformOrders comment above for the full explanation.
+    // value. See the platformOrders comment above for the full explanation.
     const isExternal = 'shareToken' in item;
     const totalItemCount = item.items.reduce((sum, i) => sum + i.quantity, 0);
 

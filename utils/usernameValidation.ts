@@ -90,7 +90,7 @@ export function generateSystemUsername(): string {
   for (let i = 0; i < 5; i++) {
     shortId += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return `the platform-${shortId}`;
+  return `platform-${shortId}`;
 }
 
 export function isUsernameSearch(query: string): boolean {

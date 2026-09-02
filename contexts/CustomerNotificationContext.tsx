@@ -30,7 +30,7 @@ export interface CustomerNotification {
   trackingLink?: string;
 }
 
-const NOTIFICATIONS_STORAGE_KEY = '@the platform_customer_notifications';
+const NOTIFICATIONS_STORAGE_KEY = '@platform_customer_notifications';
 
 export const [CustomerNotificationProvider, useCustomerNotifications] = createContextHook(() => {
   const [notifications, setNotifications] = useState<CustomerNotification[]>([]);

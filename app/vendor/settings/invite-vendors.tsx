@@ -24,14 +24,14 @@ export default function InviteVendorsScreen() {
 
   const handleShareCode = async () => {
     await safeShare({
-      message: `Join the platform as a vendor and grow your business! Use my referral code: ${referralCode}\n\nhttps://the platform.app/vendor?ref=${referralCode}`,
+      message: `Join the platform as a vendor and grow your business! Use my referral code: ${referralCode}\n\nhttps://theplatform.app/vendor?ref=${referralCode}`,
     });
     console.log('Share sheet opened with referral code');
   };
 
   const handleShareLink = async () => {
     await safeShare({
-      message: `Join the platform as a vendor and grow your business! Use my referral code: ${referralCode}\n\nhttps://the platform.app/vendor?ref=${referralCode}`,
+      message: `Join the platform as a vendor and grow your business! Use my referral code: ${referralCode}\n\nhttps://theplatform.app/vendor?ref=${referralCode}`,
     });
     console.log('Share invite link opened');
   };
