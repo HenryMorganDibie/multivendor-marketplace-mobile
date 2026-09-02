@@ -42,20 +42,6 @@ function maskEmail(email: string): string {
 /** Matches the key verify-otp.tsx reads from once the code is confirmed. */
 export const PENDING_CUSTOMER_REG_KEY = '@the platform_pending_customer_reg';
 
-/**
- * Reduce whatever was typed to a single capitalised letter.
- *
- * \p{L} rather than A-Z on purpose: a customer whose surname starts with Ñ, Ø
- * or É is entitled to their own initial, and an A-Z filter silently swallowed
- * the keystroke and left the field looking broken. Digits, punctuation and
- * whitespace are dropped as they are typed, so the field cannot hold anything
- * but one letter.
- */
-export function normalizeLastInitial(raw: string): string {
-  const letters = raw.replace(/[^\p{L}]/gu, '');
-  return letters.slice(0, 1).toUpperCase();
-}
-
 type FieldErrors = Record<string, string | undefined>;
 
 export default function CustomerSignupScreen() {
@@ -64,7 +50,7 @@ export default function CustomerSignupScreen() {
   const { setInitialCountry } = useUserLocation();
 
   const [firstName, setFirstName] = useState<string>('');
-  const [lastInitial, setLastInitial] = useState<string>('');
+  const [lastName, setLastName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
@@ -111,7 +97,7 @@ export default function CustomerSignupScreen() {
 
   const isFormComplete =
     firstName.trim().length >= 2 &&
-    lastInitial.trim().length >= 1 &&
+    lastName.trim().length >= 1 &&
     isEmail(email) &&
     checkPassword(password).valid &&
     confirmPassword === password &&
@@ -157,7 +143,7 @@ export default function CustomerSignupScreen() {
     setFormError('');
     const newErrors: FieldErrors = {};
     if (firstName.trim().length < 2) newErrors.firstName = 'Enter your first name';
-    if (lastInitial.trim().length < 1) newErrors.lastInitial = 'Enter your last initial';
+    if (lastName.trim().length < 1) newErrors.lastName = 'Enter your last name';
     if (!isEmail(email)) newErrors.email = 'Enter a valid email address.';
     const pw = checkPassword(password);
     if (!pw.valid) newErrors.password = pw.error ?? 'Please choose a stronger password';
@@ -216,7 +202,7 @@ export default function CustomerSignupScreen() {
         password,
         role: 'customer' as const,
         firstName: firstName.trim(),
-        lastName: lastInitial.trim().toUpperCase(),
+        lastName: lastName.trim(),
         location: location!,
       };
 
@@ -305,27 +291,25 @@ export default function CustomerSignupScreen() {
                 {errors.firstName ? <Text style={styles.errorText}>{errors.firstName}</Text> : null}
               </View>
               <View style={[styles.inputSection, styles.rowItem]}>
-                <Text style={styles.label}>Last Initial</Text>
+                <Text style={styles.label}>Last Name</Text>
                 <TextInput
-                  style={[styles.input, focusedField === 'lastInitial' && styles.inputFocused, errors.lastInitial ? styles.inputError : null]}
-                  value={lastInitial}
-                  onChangeText={(t) => { setLastInitial(normalizeLastInitial(t)); clearError('lastInitial'); }}
-                  onFocus={() => setFocusedField('lastInitial')}
+                  style={[styles.input, focusedField === 'lastName' && styles.inputFocused, errors.lastName ? styles.inputError : null]}
+                  value={lastName}
+                  onChangeText={(t) => { setLastName(t); clearError('lastName'); }}
+                  onFocus={() => setFocusedField('lastName')}
                   onBlur={() => setFocusedField('')}
-                  placeholder="D"
+                  placeholder="Doe"
                   placeholderTextColor="#9CA3AF"
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  maxLength={1}
+                  autoCapitalize="words"
                   editable={!isLoading}
-                  testID="customer-lastinitial"
+                  testID="customer-lastname"
                 />
-                {errors.lastInitial ? <Text style={styles.errorText}>{errors.lastInitial}</Text> : null}
+                {errors.lastName ? <Text style={styles.errorText}>{errors.lastName}</Text> : null}
               </View>
             </View>
 
-            <Text style={styles.helperText} testID="customer-lastinitial-helper">
-              We collect only your last initial to help protect your privacy.
+            <Text style={styles.helperText} testID="customer-lastname-helper">
+              To protect your privacy, vendors only ever see your first name and last initial.
             </Text>
 
             <View style={styles.inputSection}>
