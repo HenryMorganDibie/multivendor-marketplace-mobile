@@ -52,10 +52,16 @@ import { mockVendors, type Vendor } from '@/mocks/vendorData';
 import { vendorRepository } from '@/services/repositories/vendorRepository';
 import { isVendorCurrentlyOpen, getNextOpenTime } from '@/utils/vendorAvailability';
 
+// 'confirmed' deliberately excluded: it exists in the backend's OrderStatus
+// type (types2.ts) but VENDOR_TRANSITIONS/CUSTOMER_TRANSITIONS in
+// updateOrderStatus.ts never allow any order into it - accepted goes
+// straight to in_progress. Showing it as a step here made every real order
+// silently "skip" a stage the moment it moved to in_progress, which reads as
+// a stuck/broken progress bar rather than the intended per-status enum
+// mismatch (backend declares a status it never actually emits).
 const ORDER_STEPS = [
   { key: 'requested', label: 'Requested', sublabel: 'Sent to vendor' },
   { key: 'accepted', label: 'Accepted', sublabel: 'Vendor accepted' },
-  { key: 'confirmed', label: 'Confirmed', sublabel: 'Payment confirmed' },
   { key: 'in_progress', label: 'In Progress', sublabel: 'Being fulfilled' },
   { key: 'completed', label: 'Completed', sublabel: 'Order fulfilled' },
 ] as const;
@@ -64,9 +70,9 @@ function getActiveStepIndex(status: string): number {
   switch (status) {
     case 'requested': return 0;
     case 'accepted': return 1;
-    case 'confirmed': return 2;
-    case 'in_progress': return 3;
-    case 'completed': return 4;
+    case 'confirmed': return 1;
+    case 'in_progress': return 2;
+    case 'completed': return 3;
     default: return -1;
   }
 }

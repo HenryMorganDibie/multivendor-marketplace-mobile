@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,6 @@ import {
 import { Minus, Plus, X } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import type { CartItem } from '@/contexts/CartContext';
-import { mockMenuItems } from '@/mocks/vendorData';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
 
 interface CartItemDetailModalProps {
@@ -41,13 +40,9 @@ export function CartItemDetailModal({
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const [localQty, setLocalQty] = useState(item?.quantity ?? 1);
 
-  const menuItem = useMemo(() => {
-    if (!item) return null;
-    return mockMenuItems.find((m) => m.id === item.id) ?? null;
-  }, [item]);
-
-  const basePrice = menuItem?.price ?? item?.price ?? 0;
-  const salePrice = menuItem?.salePrice;
+  const hasOriginalPrice = item?.originalPrice !== undefined && item.originalPrice > item.price;
+  const basePrice = hasOriginalPrice ? item!.originalPrice! : (item?.price ?? 0);
+  const salePrice = hasOriginalPrice ? item?.price : undefined;
   const displayPrice = salePrice ?? basePrice;
   const addOnsTotal = item?.addOns?.reduce((s, a) => s + a.price, 0) ?? 0;
   const unitPrice = displayPrice + addOnsTotal;
@@ -180,10 +175,6 @@ export function CartItemDetailModal({
                   </Text>
                 )}
               </View>
-
-              {menuItem?.description ? (
-                <Text style={styles.description}>{menuItem.description}</Text>
-              ) : null}
 
               {item.addOns && item.addOns.length > 0 && (
                 <View style={styles.addOnsBlock}>

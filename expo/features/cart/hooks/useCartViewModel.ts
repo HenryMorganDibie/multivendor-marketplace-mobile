@@ -98,10 +98,22 @@ export function useCartViewModel() {
   const [expandedDetails, setExpandedDetails] = useState(false);
 
   const [selectedFulfillment, setSelectedFulfillment] = useState<FulfillmentType>(
-    mockVendor.fulfillmentTypes.length === 1
-      ? (mockVendor.fulfillmentTypes[0] as FulfillmentType)
+    effectiveVendor.fulfillmentTypes.length === 1
+      ? (effectiveVendor.fulfillmentTypes[0] as FulfillmentType)
       : 'Pickup'
   );
+
+  // The live vendor resolves asynchronously (see effectiveVendor above), so
+  // the useState initializer above only ever saw the mockVendor fixture on
+  // first render. Once the real vendor loads, re-derive the selection the
+  // same way so a delivery-only (or pickup-only) vendor doesn't leave the
+  // customer stuck on a default the vendor doesn't actually offer, with the
+  // toggle disabled because it only has one real option.
+  useEffect(() => {
+    if (effectiveVendor.fulfillmentTypes.length === 1) {
+      setSelectedFulfillment(effectiveVendor.fulfillmentTypes[0] as FulfillmentType);
+    }
+  }, [effectiveVendor.fulfillmentTypes]);
 
   const [orderNote, setOrderNote] = useState('');
   const [promoCode, setPromoCode] = useState('');
