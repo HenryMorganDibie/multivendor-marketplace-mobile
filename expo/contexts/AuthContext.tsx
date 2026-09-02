@@ -2,7 +2,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useSegments, useGlobalSearchParams } from 'expo-router';
-import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword, signOut, type User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth as firebaseAuth, db as firestore, callable } from '@/lib/firebase';
 import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
@@ -998,12 +998,22 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       // exists on this device.
       let backendUsername: string | undefined;
       let backendVendorId: string | undefined;
+      // Captured here, not read back off firebaseAuth.currentUser in the catch
+      // below: currentUser reflects whatever the SDK's auth state happens to be
+      // at the moment cleanup runs, which is not guaranteed to still be the
+      // user this call just created (another listener, another in-flight auth
+      // call, or the created session having already been torn down). Holding
+      // the actual reference this call received means cleanup deletes the
+      // account this call is responsible for, not whichever one currentUser
+      // points at when the catch executes.
+      let createdUser: FirebaseUser | null = null;
       try {
         const credential = await createUserWithEmailAndPassword(
           firebaseAuth,
           data.identifier.trim(),
           data.password,
         );
+        createdUser = credential.user;
         await credential.user.getIdToken(true);
 
         // users/{uid} is created by the onUserCreate auth trigger, which runs
@@ -1071,7 +1081,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
          * would know to look.
          */
         try {
-          if (firebaseAuth.currentUser) await deleteUser(firebaseAuth.currentUser);
+          if (createdUser) await deleteUser(createdUser);
         } catch (cleanupError) {
           console.error('[AUTH] Could not clean up partial account:', cleanupError);
           return {
