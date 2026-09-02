@@ -519,6 +519,20 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
       return false;
     }
 
+    // A real order can only be confirmed through reviewPaymentProof, which
+    // requires an actual paymentProofs document — there is nothing for the
+    // vendor to be "confirming" without one. This used to fall through to a
+    // fake local success with no backend call at all whenever proofId was
+    // missing (listener hadn't resolved yet, or the customer's "marked
+    // paid" state was itself never backed by a real submission), which is
+    // exactly what let the UI flash confirmed and then revert with nothing
+    // ever persisted.
+    const isDemo = DEMO_ORDER_ACCOUNTS[accountId ?? ''];
+    if (!proofId && !isDemo) {
+      console.error(`[OrdersContext] Cannot confirm payment: no payment proof document for order ${orderId}`);
+      return false;
+    }
+
     const now = new Date().toISOString();
     const newEvent: OrderEvent = {
       eventType: 'payment_confirmed',
@@ -527,16 +541,23 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
       message: `${order.vendorName} confirmed payment.`,
     };
 
+    // Only paymentState is set optimistically, and only because it is
+    // exactly what mapOrderDoc's toPaymentState() derives from the real
+    // paymentStatus ('PROOF_ACCEPTED') once Firestore's own update lands —
+    // so there is nothing here for that later snapshot to contradict.
+    // status and paymentStatus are NOT touched: reviewPaymentProof never
+    // sets order.status to 'confirmed' (that value is not reachable through
+    // the real order-status state machine) and never writes a
+    // 'payment_received' paymentStatus (the real enum is PROOF_ACCEPTED) —
+    // writing either here was exactly the mismatch that made the backend's
+    // own snapshot immediately overwrite this optimistic update.
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id !== orderId) return o;
         const snapshot = buildOrderSnapshot(o);
         return {
           ...o,
-          status: 'confirmed' as OrderStatus,
           paymentState: 'VENDOR_PAYMENT_CONFIRMED' as const,
-          paymentStatus: 'payment_received' as const,
-          amountPaid: o.total,
           orderSnapshot: snapshot,
           eventHistory: [...(o.eventHistory ?? []), { ...newEvent, receiptSnapshot: snapshot }],
         };
@@ -544,12 +565,7 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     );
     console.log(`[OrdersContext] Vendor confirmed payment: ${orderId}`);
 
-    // This button used to only touch local state — the order in Firestore
-    // never changed, so the customer's app never learned the vendor had
-    // confirmed. proofId comes from the real paymentProofs subcollection
-    // doc the screen is listening to; without one there's nothing real to
-    // review (demo order, or the listener hasn't resolved yet).
-    if (proofId && !DEMO_ORDER_ACCOUNTS[accountId ?? '']) {
+    if (proofId && !isDemo) {
       const review = callable<Record<string, unknown>, { success: true }>('reviewPaymentProof');
       void review({ orderId, proofId, decision: 'accept' }).catch((err) => {
         console.error('[Orders] reviewPaymentProof (accept) rejected:', err);
@@ -586,6 +602,12 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     }
     if (order.paymentState !== 'CUSTOMER_MARKED_PAID') {
       console.error(`[OrdersContext] Cannot mark not paid: payment state is ${order.paymentState}`);
+      return false;
+    }
+
+    const isDemo = DEMO_ORDER_ACCOUNTS[accountId ?? ''];
+    if (!proofId && !isDemo) {
+      console.error(`[OrdersContext] Cannot mark not paid: no payment proof document for order ${orderId}`);
       return false;
     }
 

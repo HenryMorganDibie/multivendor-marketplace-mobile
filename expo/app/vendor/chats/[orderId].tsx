@@ -1537,7 +1537,7 @@ export default function VendorOrderChatScreen() {
         </View>
       )}
 
-      {isPaymentConfirmed && order?.status === 'confirmed' && (
+      {isPaymentConfirmed && (
         <View style={styles.paymentConfirmedBanner}>
           <View style={styles.paymentConfirmedContent}>
             <Check size={16} color={Colors.success} strokeWidth={2.5} />
