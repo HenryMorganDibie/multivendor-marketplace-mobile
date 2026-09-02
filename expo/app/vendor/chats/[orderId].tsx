@@ -2216,7 +2216,13 @@ export default function VendorOrderChatScreen() {
               style={styles.secureContactCard}
               pointerEvents="none"
             >
-              {secureContactData?.name && (
+              {/* sendChatMessage.ts writes contactCardData.fullName/.phoneNumber
+                  onto the real message doc, not name/phone - those only exist
+                  on a local-only optimistic echo. Without this fallback, the
+                  vendor's "view contact details" modal - the entire point of
+                  a shared contact card - showed a blank name and phone for
+                  every real (Firestore) contact-card share. */}
+              {(secureContactData?.fullName ?? secureContactData?.name) && (
                 <View style={styles.secureContactSection}>
                   <Text style={styles.secureContactLabel}>Full Name</Text>
                   <Text
@@ -2224,12 +2230,12 @@ export default function VendorOrderChatScreen() {
                     selectable={false}
                     accessibilityLabel="Customer full name"
                   >
-                    {secureContactData.name}
+                    {secureContactData?.fullName ?? secureContactData?.name}
                   </Text>
                 </View>
               )}
 
-              {secureContactData?.phone && (
+              {(secureContactData?.phoneNumber ?? secureContactData?.phone) && (
                 <View style={styles.secureContactSection}>
                   <Text style={styles.secureContactLabel}>Phone Number</Text>
                   <Text
@@ -2237,7 +2243,7 @@ export default function VendorOrderChatScreen() {
                     selectable={false}
                     accessibilityLabel="Customer phone number"
                   >
-                    {secureContactData.phone}
+                    {secureContactData?.phoneNumber ?? secureContactData?.phone}
                   </Text>
                 </View>
               )}

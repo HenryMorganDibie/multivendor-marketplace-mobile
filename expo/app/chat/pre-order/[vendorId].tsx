@@ -256,16 +256,20 @@ function PreOrderChatContent({ vendorId, vendor }: { vendorId: string; vendor: V
               <Text style={styles.contactCardHeaderText}>📇 Contact details shared</Text>
             </View>
             <View style={styles.contactCardContent}>
-              {message.contactCardData.name && (
+              {/* Backend (sendChatMessage.ts) writes fullName/phoneNumber onto
+                  the message, not name/phone - those only exist on a
+                  local-only optimistic echo, so a real contact-card share
+                  rendered with a blank name and phone without this fallback. */}
+              {(message.contactCardData.fullName ?? message.contactCardData.name) && (
                 <>
                   <Text style={styles.contactCardLabel}>Name</Text>
-                  <Text style={styles.contactCardValue}>{message.contactCardData.name}</Text>
+                  <Text style={styles.contactCardValue}>{message.contactCardData.fullName ?? message.contactCardData.name}</Text>
                 </>
               )}
-              {message.contactCardData.phone && (
+              {(message.contactCardData.phoneNumber ?? message.contactCardData.phone) && (
                 <>
                   <Text style={styles.contactCardLabel}>Phone</Text>
-                  <Text style={styles.contactCardValue}>{message.contactCardData.phone}</Text>
+                  <Text style={styles.contactCardValue}>{message.contactCardData.phoneNumber ?? message.contactCardData.phone}</Text>
                 </>
               )}
               {message.contactCardData.address && (

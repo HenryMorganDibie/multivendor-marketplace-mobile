@@ -402,6 +402,16 @@ export default function CanonicalChatScreen() {
   };
 
   const handleSendContactCard = (card: any) => {
+    // sendChatMessage.ts requires contactCardData.fullName/.phoneNumber and
+    // throws invalid-argument otherwise — the local ContactCard shape uses
+    // name/phone, so passing `card` straight through made every contact-card
+    // send fail silently (the .catch below only logs). Map to the field
+    // names the backend actually validates.
+    const backendContactCardData = {
+      fullName: card.name,
+      phoneNumber: card.phone,
+      address: card.address,
+    };
     if (chatId) {
       chatService
         .sendMessage({
@@ -409,7 +419,7 @@ export default function CanonicalChatScreen() {
           type: 'contact-card',
           content: '',
           sender: 'customer',
-          contactCardData: card,
+          contactCardData: backendContactCardData,
         })
         .then((m) => console.log('[LEGACY CHAT] Contact card persisted via chatService:', m.id))
         .catch((err) => console.log('[LEGACY CHAT] sendMessage (contact-card) failed:', err));

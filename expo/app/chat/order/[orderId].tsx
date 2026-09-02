@@ -364,6 +364,13 @@ export default function OrderChatScreen() {
     };
 
     if (chatId) {
+      // sendChatMessage.ts requires contactCardData.fullName/.phoneNumber
+      // (throws invalid-argument otherwise) — sending name/phone/note here
+      // made every contact-card share in an order chat fail. Map to the
+      // field names the backend actually validates; note has no backend
+      // field and is intentionally dropped for the wire payload (matches
+      // the phase3 spec's "snapshot contains only fullName/phoneNumber/
+      // address" acceptance test), same as the local-only render above.
       chatService
         .sendMessage({
           chatId,
@@ -371,10 +378,9 @@ export default function OrderChatScreen() {
           content: 'Contact details shared',
           sender: 'customer',
           contactCardData: {
-            name: card.name,
-            phone: card.phone,
+            fullName: card.name,
+            phoneNumber: card.phone,
             address: card.address,
-            note: card.note,
           },
         })
         .then((m) => console.log('[ORDER CHAT] Contact card persisted via chatService:', m.id))
@@ -885,16 +891,20 @@ export default function OrderChatScreen() {
               <Text style={styles.contactCardHeaderText}>Contact details shared</Text>
             </View>
             <View style={styles.contactCardContent}>
-              {message.contactCardData.name && (
+              {/* Backend (sendChatMessage.ts) writes fullName/phoneNumber, not
+                  name/phone - those only exist on the local optimistic echo.
+                  Without this fallback a real (Firestore-round-tripped)
+                  contact-card message rendered with a blank name and phone. */}
+              {(message.contactCardData.fullName ?? message.contactCardData.name) && (
                 <>
                   <Text style={styles.contactCardLabel}>Name</Text>
-                  <Text style={styles.contactCardValue}>{message.contactCardData.name}</Text>
+                  <Text style={styles.contactCardValue}>{message.contactCardData.fullName ?? message.contactCardData.name}</Text>
                 </>
               )}
-              {message.contactCardData.phone && (
+              {(message.contactCardData.phoneNumber ?? message.contactCardData.phone) && (
                 <>
                   <Text style={styles.contactCardLabel}>Phone</Text>
-                  <Text style={styles.contactCardValue}>{message.contactCardData.phone}</Text>
+                  <Text style={styles.contactCardValue}>{message.contactCardData.phoneNumber ?? message.contactCardData.phone}</Text>
                 </>
               )}
               {message.contactCardData.address && (

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { auth, callable } from '@/lib/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { auth, callable, db } from '@/lib/firebase';
 
 const STORAGE_KEY = '@vendor_chat_drafts';
 /** How long to wait after the last keystroke before syncing a draft to the
@@ -32,6 +33,35 @@ export function VendorDraftProvider({ children }: { children: ReactNode }) {
     return () => {
       Object.values(remoteSaveTimers.current).forEach(clearTimeout);
     };
+  }, []);
+
+  /**
+   * saveDraft/clearDraft above write to users/{uid}/chatDrafts/{chatId}, but
+   * nothing ever read that collection back — a draft restored via
+   * loadDrafts() only ever came from this device's own AsyncStorage, so the
+   * "follow the vendor across devices" comment on syncDraftToBackend wasn't
+   * actually true: a draft typed on device A never appeared on device B.
+   * Per the Phase 3 spec (chatDrafts rules), direct client reads are the
+   * intended path here (no dedicated getDrafts callable exists) — a plain
+   * owner-scoped Firestore query. Merges rather than replaces so an in-flight
+   * local edit is never clobbered by an older remote snapshot.
+   */
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const unsubscribe = onSnapshot(
+      collection(db, 'users', uid, 'chatDrafts'),
+      (snap) => {
+        const remote: DraftMap = {};
+        snap.forEach((docSnap) => {
+          const content = docSnap.data().content as string | undefined;
+          if (content) remote[docSnap.id] = content;
+        });
+        setDrafts((prev) => ({ ...remote, ...prev }));
+      },
+      (error) => console.error('[VendorDrafts] chatDrafts listener failed:', error)
+    );
+    return unsubscribe;
   }, []);
 
   const loadDrafts = async () => {

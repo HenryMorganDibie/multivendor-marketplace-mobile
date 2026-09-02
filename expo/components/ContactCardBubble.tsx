@@ -10,6 +10,14 @@ interface ContactCardBubbleProps {
 }
 
 export function ContactCardBubble({ data, timestamp, label = 'Contact Card' }: ContactCardBubbleProps) {
+  // The backend (sendChatMessage.ts) writes contactCardData.fullName/
+  // .phoneNumber onto the message, not name/phone — those only exist on the
+  // local optimistic echo built from the device's saved ContactCard. Without
+  // this fallback, a contact card round-tripped through Firestore (i.e. every
+  // real send/receive) rendered with a blank name and phone.
+  const displayName = data.fullName ?? data.name;
+  const displayPhone = data.phoneNumber ?? data.phone;
+
   const formatTime = (ts: string) => {
     const date = new Date(ts);
     return date.toLocaleTimeString('en-US', {
@@ -40,11 +48,11 @@ export function ContactCardBubble({ data, timestamp, label = 'Contact Card' }: C
         importantForAccessibility="no"
       >
         <Text style={styles.cardLabel}>{data.label || label}</Text>
-        {data.name && (
-          <Text style={styles.cardDetail}>{data.name}</Text>
+        {displayName && (
+          <Text style={styles.cardDetail}>{displayName}</Text>
         )}
-        {data.phone && (
-          <Text style={styles.cardDetail}>{data.phone}</Text>
+        {displayPhone && (
+          <Text style={styles.cardDetail}>{displayPhone}</Text>
         )}
         {data.address && (
           <Text style={styles.cardDetail}>{data.address}</Text>

@@ -5,8 +5,16 @@ export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
 
 export interface ContactCardData {
   label?: string;
-  name: string;
-  phone: string;
+  // sendChatMessage.ts (backend) writes fullName/phoneNumber into
+  // messages/{id}.contactCardData — that's the shape a message actually
+  // round-trips through Firestore with. name/phone/note are kept for the
+  // local-only optimistic echo built at send time from the device's saved
+  // ContactCard (ContactCardsContext), which uses those field names. Render
+  // call sites should prefer fullName/phoneNumber and fall back to name/phone.
+  name?: string;
+  phone?: string;
+  fullName?: string;
+  phoneNumber?: string;
   address: string;
   note?: string;
 }
