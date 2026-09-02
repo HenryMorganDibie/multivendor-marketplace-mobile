@@ -133,18 +133,26 @@ export function useMessageVendor() {
          * conversation screen; the send path surfaces a real error the next
          * time a message is actually sent.
          */
+        let realChatId: string | undefined;
         if (!DEV_LOCAL_AUTH_ENABLED || auth.currentUser) {
           try {
             const create = callable<{ vendorId: string }, { success: true; chatId: string; created: boolean }>(
               'createCommerceConversation',
             );
-            await create({ vendorId });
+            const res = await create({ vendorId });
+            // This id (commerce_{customerId}_{vendorId}) is the actual
+            // chatThreads document sendChatMessage writes into. Discarding
+            // it and letting getOrCreateConversation fabricate its own id
+            // below meant every message sent through the resulting local
+            // scaffold targeted a document that didn't exist, and
+            // sendChatMessage rejected it outright.
+            realChatId = res.data.chatId;
           } catch (err) {
             console.error('[useMessageVendor] createCommerceConversation failed:', err);
           }
         }
 
-        chat = getOrCreateConversation(vendorId, resolvedVendorName, 'pre_order_inquiry');
+        chat = getOrCreateConversation(vendorId, resolvedVendorName, 'pre_order_inquiry', realChatId);
         console.log('[useMessageVendor] Created new pre-order thread:', chat.id);
       }
 

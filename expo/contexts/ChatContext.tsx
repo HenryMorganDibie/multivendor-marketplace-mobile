@@ -180,7 +180,7 @@ export const [ChatProvider, useChats] = createContextHook(() => {
     );
   }, [currentVendorId]);
 
-  const getOrCreateConversation = useCallback((vendorId: string, vendorName: string, chatType: ChatType = 'pre_order_inquiry'): Chat => {
+  const getOrCreateConversation = useCallback((vendorId: string, vendorName: string, chatType: ChatType = 'pre_order_inquiry', realChatId?: string): Chat => {
     const all = chatService.getAllSync();
     const existing = all.find(
       c => c.vendorId === vendorId && c.customerId === currentCustomerId
@@ -191,8 +191,15 @@ export const [ChatProvider, useChats] = createContextHook(() => {
       return existing;
     }
 
+    // realChatId is the canonical id createCommerceConversation already
+    // created server-side (commerce_{customerId}_{vendorId}). Without it,
+    // this fabricated a different, throwaway id that sendChatMessage would
+    // then reject with "Chat thread not found" the moment a message was
+    // actually sent -- the backend thread and the local scaffold pointed at
+    // two different documents. The Date.now() fallback stays only for a
+    // caller that has no server thread to attach to yet (demo/local-auth).
     const newChat: Chat = {
-      id: `chat-${vendorId}-${currentCustomerId}-${Date.now()}`,
+      id: realChatId ?? `chat-${vendorId}-${currentCustomerId}-${Date.now()}`,
       vendorId,
       vendorName,
       customerId: currentCustomerId,
@@ -212,13 +219,24 @@ export const [ChatProvider, useChats] = createContextHook(() => {
     return newChat;
   }, [currentCustomerId, currentCustomerName]);
 
+  // Despite the name, this only ever restarts an inquiry inside a
+  // conversation that already exists (chatType/vendorCanReply reset +
+  // a "New Inquiry" system message) -- it cannot create one from nothing,
+  // because doing that correctly means calling createCommerceConversation
+  // first and using ITS returned chatId (see getOrCreateConversation's
+  // realChatId param / useMessageVendor.ts), which this function has no way
+  // to do synchronously. Its one caller (useMessageVendor.ts) only ever
+  // invokes this from inside an `if (existing)` branch, so the !existing
+  // case below is not reachable today -- kept as a loud failure rather than
+  // a silent null so a future caller that skips that guarantee finds out
+  // immediately instead of quietly no-opping.
   const startNewInquiry = useCallback((vendorId: string): Chat | null => {
     const existing = chatService.getAllSync().find(
       c => c.vendorId === vendorId && c.customerId === currentCustomerId
     );
 
     if (!existing) {
-      console.log('[ChatContext] No existing conversation found for new inquiry, vendorId:', vendorId);
+      console.error('[ChatContext] startNewInquiry called with no existing conversation for vendorId:', vendorId, '-- this function cannot create one; the caller must already hold a conversation to restart.');
       return null;
     }
 

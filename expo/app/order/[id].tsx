@@ -232,12 +232,15 @@ export default function OrderDetailsScreen() {
     if (!order) return;
     const success = markCustomerPaid(order.id, proofs);
     if (success) {
-      // order.customerId should always be set for a real, live order, but
-      // the fallback used to be the hardcoded fixture id 'customer-001' —
-      // wrong for any real signed-in customer, and it would have silently
-      // matched (or created a mismatch against) a chat that belongs to
-      // nobody real. The signed-in customer's own id is the correct fallback.
-      const chat = getConversationByPair(order.vendorId, order.customerId || user?.id || 'customer-001');
+      // order.customerId should always be set for a real, live order, but the
+      // fallback used to be the hardcoded fixture id 'customer-001' -- wrong
+      // for any real signed-in customer, and it would have silently matched
+      // (or created a mismatch against) a chat that belongs to nobody real.
+      // The signed-in customer's own id is the only real fallback; if that is
+      // also missing there is no real customer to resolve a chat for.
+      const chat = order.customerId || user?.id
+        ? getConversationByPair(order.vendorId, order.customerId || user!.id)
+        : undefined;
       if (chat) {
         addMessageToChat(chat.id, {
           type: 'system',
@@ -275,12 +278,15 @@ export default function OrderDetailsScreen() {
           uploadedAt: new Date().toISOString(),
         };
         addPaymentProof(order.id, proof);
-        // order.customerId should always be set for a real, live order, but
-      // the fallback used to be the hardcoded fixture id 'customer-001' —
-      // wrong for any real signed-in customer, and it would have silently
-      // matched (or created a mismatch against) a chat that belongs to
-      // nobody real. The signed-in customer's own id is the correct fallback.
-      const chat = getConversationByPair(order.vendorId, order.customerId || user?.id || 'customer-001');
+        // order.customerId should always be set for a real, live order, but the
+      // fallback used to be the hardcoded fixture id 'customer-001' -- wrong
+      // for any real signed-in customer, and it would have silently matched
+      // (or created a mismatch against) a chat that belongs to nobody real.
+      // The signed-in customer's own id is the only real fallback; if that is
+      // also missing there is no real customer to resolve a chat for.
+      const chat = order.customerId || user?.id
+        ? getConversationByPair(order.vendorId, order.customerId || user!.id)
+        : undefined;
         if (chat) {
           addMessageToChat(chat.id, {
             type: 'system',
