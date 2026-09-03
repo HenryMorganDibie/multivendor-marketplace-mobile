@@ -19,6 +19,8 @@ import { Colors } from '@/constants/colors';
 import { callable } from '@/lib/firebase';
 import { Alert } from '@/utils/alert';
 import { useApplePurchase } from '@/hooks/useApplePurchase';
+import { useGooglePurchase, GOOGLE_PURCHASE_CONFIGURED } from '@/hooks/useGooglePurchase';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   resolveCatalogForCountry,
   getOrderedActivePlanIds,
@@ -66,17 +68,24 @@ export default function UpgradePlanScreen() {
   const orderedPlanIds = useMemo(() => getOrderedActivePlanIds(), []);
   const currentPlanId: PlanId = plan === 'pro+' ? 'pro_plus' : (plan as PlanId);
 
-  // On iOS, verifyAppleTransaction activates the plan directly and this
-  // fires immediately (no need to wait on the webhook the way the
-  // Stripe/Paystack/Flutterwave hosted-checkout path below does) — that
-  // path is StoreKit's own equivalent of "the webhook already landed."
-  const handleApplePurchaseConfirmed = useCallback((confirmedPlan: string | null) => {
+  const { user } = useAuth();
+
+  // On iOS/Android, verifyAppleTransaction / verifyGoogleTransaction
+  // activate the plan directly and this fires immediately (no need to
+  // wait on the webhook the way the Stripe/Paystack/Flutterwave hosted-
+  // checkout path below does) — that path is StoreKit's/Play Billing's
+  // own equivalent of "the webhook already landed."
+  const handleNativePurchaseConfirmed = useCallback((confirmedPlan: string | null) => {
     void refreshSubscriptionStatus();
     if (confirmedPlan) {
       Alert.alert('Plan updated', `You're now on the ${confirmedPlan.replace('_', ' ')} plan.`);
     }
   }, [refreshSubscriptionStatus]);
-  const { purchasePlan } = useApplePurchase(handleApplePurchaseConfirmed);
+  const { purchasePlan: purchaseApplePlan } = useApplePurchase(handleNativePurchaseConfirmed);
+  // A vendor's own uid IS their vendorId (completeRegistration.ts:
+  // `const vendorId = uid`) -- there is no separate vendorId field on a
+  // vendor-role user.
+  const { purchasePlan: purchaseGooglePlan } = useGooglePurchase(user?.id, handleNativePurchaseConfirmed);
 
   /**
    * This used to call the local-only updatePlan() and grant the plan
@@ -93,17 +102,30 @@ export default function UpgradePlanScreen() {
    * cold-cache sign-in redirect a paying vendor to /select-username. See the
    * note in VendorPlanContext.refreshSubscriptionStatus.
    *
-   * iOS branches to Apple's own in-app purchase instead of the hosted
-   * checkout page below — App Store guidelines require a digital
+   * iOS always branches to Apple's own in-app purchase instead of the
+   * hosted checkout page below — App Store guidelines require a digital
    * subscription like this one to go through StoreKit on iOS, not an
-   * external payment page opened via Linking.openURL.
+   * external payment page opened via Linking.openURL, and the real
+   * product ids already exist for it.
+   *
+   * Android branches to Google Play Billing only once GOOGLE_PURCHASE_
+   * CONFIGURED is true (real product ids exist in Play Console) — until
+   * then it deliberately falls through to the same hosted-checkout path
+   * as web, which is what real Android vendors are actually using today.
+   * Routing Android into an unconfigured native flow the moment this
+   * ships would silently break subscribing on Android entirely, not just
+   * leave a feature unfinished.
    */
   const handleUpgrade = useCallback(async (backendPlanId: PlanId) => {
     if (backendPlanId === 'basic') return;
     setCheckingOutPlan(backendPlanId);
     try {
       if (Platform.OS === 'ios') {
-        await purchasePlan(backendPlanId);
+        await purchaseApplePlan(backendPlanId);
+        return;
+      }
+      if (Platform.OS === 'android' && GOOGLE_PURCHASE_CONFIGURED) {
+        await purchaseGooglePlan(backendPlanId);
         return;
       }
       const planForCheckout = backendPlanId === 'pro_plus' ? 'pro_plus' : backendPlanId;
@@ -128,7 +150,7 @@ export default function UpgradePlanScreen() {
     } finally {
       setCheckingOutPlan(null);
     }
-  }, [refreshSubscriptionStatus, purchasePlan]);
+  }, [refreshSubscriptionStatus, purchaseApplePlan, purchaseGooglePlan]);
 
   const getPlanStatus = useCallback((planId: PlanId): 'current' | 'upgrade' | 'downgrade' => {
     if (planId === currentPlanId) return 'current';
