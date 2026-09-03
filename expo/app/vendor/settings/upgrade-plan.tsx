@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
   Linking,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useRouter } from 'expo-router';
@@ -17,6 +18,7 @@ import EditScreenHeader from '@/components/EditScreenHeader';
 import { Colors } from '@/constants/colors';
 import { callable } from '@/lib/firebase';
 import { Alert } from '@/utils/alert';
+import { useApplePurchase } from '@/hooks/useApplePurchase';
 import {
   resolveCatalogForCountry,
   getOrderedActivePlanIds,
@@ -64,6 +66,18 @@ export default function UpgradePlanScreen() {
   const orderedPlanIds = useMemo(() => getOrderedActivePlanIds(), []);
   const currentPlanId: PlanId = plan === 'pro+' ? 'pro_plus' : (plan as PlanId);
 
+  // On iOS, verifyAppleTransaction activates the plan directly and this
+  // fires immediately (no need to wait on the webhook the way the
+  // Stripe/Paystack/Flutterwave hosted-checkout path below does) — that
+  // path is StoreKit's own equivalent of "the webhook already landed."
+  const handleApplePurchaseConfirmed = useCallback((confirmedPlan: string | null) => {
+    void refreshSubscriptionStatus();
+    if (confirmedPlan) {
+      Alert.alert('Plan updated', `You're now on the ${confirmedPlan.replace('_', ' ')} plan.`);
+    }
+  }, [refreshSubscriptionStatus]);
+  const { purchasePlan } = useApplePurchase(handleApplePurchaseConfirmed);
+
   /**
    * This used to call the local-only updatePlan() and grant the plan
    * instantly with zero payment — see frontend-subscription-alignment-scope.md
@@ -78,11 +92,20 @@ export default function UpgradePlanScreen() {
    * inferring "just upgraded" from a plan change is what made every
    * cold-cache sign-in redirect a paying vendor to /select-username. See the
    * note in VendorPlanContext.refreshSubscriptionStatus.
+   *
+   * iOS branches to Apple's own in-app purchase instead of the hosted
+   * checkout page below — App Store guidelines require a digital
+   * subscription like this one to go through StoreKit on iOS, not an
+   * external payment page opened via Linking.openURL.
    */
   const handleUpgrade = useCallback(async (backendPlanId: PlanId) => {
     if (backendPlanId === 'basic') return;
     setCheckingOutPlan(backendPlanId);
     try {
+      if (Platform.OS === 'ios') {
+        await purchasePlan(backendPlanId);
+        return;
+      }
       const planForCheckout = backendPlanId === 'pro_plus' ? 'pro_plus' : backendPlanId;
       const checkout = callable<
         { plan: string },
@@ -105,7 +128,7 @@ export default function UpgradePlanScreen() {
     } finally {
       setCheckingOutPlan(null);
     }
-  }, [refreshSubscriptionStatus]);
+  }, [refreshSubscriptionStatus, purchasePlan]);
 
   const getPlanStatus = useCallback((planId: PlanId): 'current' | 'upgrade' | 'downgrade' => {
     if (planId === currentPlanId) return 'current';
