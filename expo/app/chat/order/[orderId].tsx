@@ -35,6 +35,7 @@ import { useCustomOrders } from '@/contexts/CustomOrderContext';
 import { useInbox } from '@/contexts/InboxContext';
 import { useChatRead } from '@/contexts/ChatReadContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useChats } from '@/contexts/ChatContext';
 
 import { getChatAvailability } from '@/utils/chatAvailability';
 import OrderChangesCard from '@/components/OrderChangesCard';
@@ -147,6 +148,20 @@ export default function OrderChatScreen() {
 
   const { orders, getOrder, setOrderPendingChanges } = useOrders();
   const order = getOrder(orderId);
+
+  // useChats() re-renders this component on every chat-store write
+  // (ChatContext's own tick mechanism) -- consumed here purely for that
+  // re-render, not for its `chats` value, so that getChatByOrderId (which
+  // reads the shared store directly, not through this hook) is
+  // recomputed on every render rather than once and never again.
+  //
+  // Without this, a real backend chat that hydrates asynchronously after
+  // this screen's first render was invisible until some unrelated state
+  // change happened to force a re-render: resolvedChat was a plain
+  // computation with nothing wired to notice the store had changed, so a
+  // customer opening an order chat before the first Firestore snapshot
+  // landed could get stuck on a broken/empty screen indefinitely.
+  useChats();
   const resolvedChat = getChatByOrderId(orderId);
   const chatId = resolvedChat?.id ?? '';
   const blockedUser = chatId ? getBlockedUserByChatId(chatId) : undefined;
