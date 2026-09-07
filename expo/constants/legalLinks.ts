@@ -9,7 +9,7 @@ import * as WebBrowser from 'expo-web-browser';
  * advice, and shipping them inside the app means an app-store release every
  * time a clause moves.
  *
- * The paths below are the real routes in the platform-website repo, confirmed
+ * The paths below are the real routes in platform-website repo, confirmed
  * against its app router rather than guessed. Each page is built and reads its
  * body from the CMS; they currently render "Content pending publication"
  * because the legal copy has not been published yet. That is a content

@@ -16,9 +16,9 @@ import { Alert } from '@/utils/alert';
 import type { PlanId } from '@/constants/planCatalog';
 
 /**
- * Google Play product ids, mirroring laetiva-backend's
+ * Google Play product ids, mirroring platform-backend's
  * GOOGLE_PRODUCT_ID_TO_PLAN (googleServerApi.ts). Placeholder strings --
- * the real ids don't exist until Nneoma creates the products in Play
+ * the real ids don't exist until the client creates the products in Play
  * Console; fill in to match exactly whatever she actually creates
  * (Play Console has its own naming rules, does not have to match Apple's
  * product id strings).

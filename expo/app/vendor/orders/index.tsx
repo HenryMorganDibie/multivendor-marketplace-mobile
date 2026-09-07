@@ -299,7 +299,7 @@ export default function VendorOrdersScreen() {
     // shareToken only exists on the legacy AsyncStorage-only ExternalOrder
     // shape - orderSource: 'external' is not a safe discriminant here since
     // a real backend order created via createExternalOrder carries the same
-    // value. See the platformOrders comment above for the full explanation.
+    // value. See platformOrders comment above for the full explanation.
     const isExternal = 'shareToken' in item;
     const totalItemCount = item.items.reduce((sum, i) => sum + i.quantity, 0);
 
