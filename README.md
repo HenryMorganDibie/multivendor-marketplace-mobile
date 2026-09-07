@@ -1,6 +1,8 @@
 # Multi-Vendor Marketplace Platform: Mobile App
 
-A cross-platform (iOS / Android / Web) multi-vendor marketplace app: customers discover and order from vendors, vendors manage catalog/orders/invoices/subscriptions, and there's an in-app admin surface. Built with Expo + Expo Router on top of the [Rork](https://rork.com) app builder.
+A cross-platform (iOS / Android / Web) multi-vendor marketplace app: customers discover and order from vendors, vendors manage catalog/orders/invoices/subscriptions, and there's an in-app admin surface. Built with Expo + Expo Router on top of the [Rork](https://rork.com) app builder. Client-facing half of the same project as the [backend repo](https://github.com/HenryMorganDibie/multivendor-marketplace-platform).
+
+**Commit history note:** the first commit on this repo rolls up the app's pre-existing state (originally scaffolded via the Rork AI app builder plus an initial contributor) into one import. Every commit after that is mine, with real, individually-diffed changes. See [Backend integration status](#backend-integration-status) below for what I've since wired to the real backend versus what's still mock, screen by screen.
 
 **Backend:** [`multivendor-marketplace-platform`](https://github.com/HenryMorganDibie/multivendor-marketplace-platform), a companion repository: Firebase (Firestore, Cloud Functions, Auth, Storage). Most of the app is now wired to it for real; see [Backend integration status](#backend-integration-status) below for exactly what's live versus what's still mock, screen by screen.
 
@@ -122,3 +124,10 @@ If you find another frontend/backend contract mismatch while integrating, flag i
 Primary color `#FF7A28` (`Colors.primary`) is used consistently across buttons, focus states, active tab indicators, and links — see `expo/constants/colors.ts` for the full palette (semantic tokens for text, surface, border, status colors, etc.) and `expo/constants/theme.ts` for the same tokens organized as reusable style objects. Use these tokens rather than hardcoding hex values in new screens.
 
 Document (invoice/receipt) branding is plan-gated separately from the app's own theming — see `expo/constants/documentBranding.ts` and the Backend integration status section above.
+
+---
+
+## Author
+
+**Henry Dibie** — Backend & AI Systems Engineer. Took over active development on this app partway through its life (see the commit history note above) and wired most of it to the real backend in the [companion repo](https://github.com/HenryMorganDibie/multivendor-marketplace-platform).
+[LinkedIn](https://linkedin.com/in/kinghenrymorgan) · [GitHub](https://github.com/HenryMorganDibie)
