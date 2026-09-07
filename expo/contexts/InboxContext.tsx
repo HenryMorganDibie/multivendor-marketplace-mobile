@@ -1,5 +1,5 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   InboxSnapshot,
   ConversationType,
@@ -76,6 +76,20 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
   const [customerPage, setCustomerPage] = useState(1);
   const [vendorPage, setVendorPage] = useState(1);
 
+  // The subscribeAll effect below registers once (empty deps) so it never
+  // resubscribes, but `user` resolves asynchronously after mount (auth state
+  // loads, then role comes off custom claims). A plain closure over `user`
+  // would freeze on whatever it was during that first, pre-auth render -
+  // null for every real account - so the vendor-side role check inside the
+  // callback would compare against null forever and silently discard every
+  // new-conversation insert for real vendors. A ref sidesteps that: the
+  // callback reads the current value on each call instead of a snapshot
+  // from when the effect was created.
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   // Auth resolves after first render, and the signed-in account can change
   // without the provider unmounting (log out, register, log back in), so the
   // seed is re-evaluated on every identity change rather than only at init.
@@ -150,7 +164,7 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
         // who's signed in, and a chat legitimately absent from, say, the
         // vendor inbox (because this account is a customer) should stay
         // absent there, not gain a row nothing will ever read correctly.
-        if (isVendorSide !== (user?.role === 'vendor')) return prev;
+        if (isVendorSide !== (userRef.current?.role === 'vendor')) return prev;
 
         // A real thread this chatService.subscribeAll notification is about
         // has no row yet - previously this function only patched existing
