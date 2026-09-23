@@ -11,11 +11,19 @@ import EditScreenHeader from '@/components/EditScreenHeader';
 
 export default function AutoSendPickupScreen() {
   const { autoSendEnabled, setAutoSend, hasPickupDetails, isLoaded } = useVendorPickup();
-  const { plan, isLoading: isPlanLoading } = useVendorPlan();
+  const { isLoading: isPlanLoading, planLimits } = useVendorPlan();
   const router = useRouter();
   const [showPickupModal, setShowPickupModal] = useState(false);
 
-  const isPlanGated = plan === 'basic' || plan === 'standard';
+  // Reads the real PlanLimits.canAutoSendPickupDetails flag rather than
+  // re-deriving "which plans get this" from the plan name — the exact
+  // hardcoded-business-rule-in-the-client pattern already found and fixed
+  // for catalog/photo limits elsewhere in this app, which drifts silently
+  // the moment the backend's gating rule changes (e.g. a future plan
+  // revision) without this screen being touched. While planLimits hasn't
+  // loaded yet, default to gated rather than briefly showing the toggle as
+  // available.
+  const isPlanGated = !planLimits?.canAutoSendPickupDetails;
   const isToggleDisabled = !isLoaded || isPlanLoading || isPlanGated;
 
   const handleToggle = async (value: boolean) => {

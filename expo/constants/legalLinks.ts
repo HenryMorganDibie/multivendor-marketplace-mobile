@@ -1,7 +1,7 @@
 import * as WebBrowser from 'expo-web-browser';
 
 /**
- * Legal documents live on the platform website, not in the app.
+ * Legal documents live on the Platform website, not in the app.
  *
  * The client's direction, with WhatsApp as the reference: tapping a legal link
  * opens the browser and loads the published page. The app deliberately does not
@@ -9,7 +9,7 @@ import * as WebBrowser from 'expo-web-browser';
  * advice, and shipping them inside the app means an app-store release every
  * time a clause moves.
  *
- * The paths below are the real routes in platform-website repo, confirmed
+ * The paths below are the real routes in the multivendor-marketplace-platform (website/) repo, confirmed
  * against its app router rather than guessed. Each page is built and reads its
  * body from the CMS; they currently render "Content pending publication"
  * because the legal copy has not been published yet. That is a content
@@ -17,11 +17,11 @@ import * as WebBrowser from 'expo-web-browser';
  * documents go live, with no app change.
  *
  * Every legal URL in the app comes from this file so there is one place to
- * correct. Still to confirm: the domain. The app references theplatform.com,
- * theplatform.app and vendor.platform.com in different places. This uses
- * theplatform.com, matching the existing terms and privacy references.
+ * correct. Still to confirm: the domain. The app references example.com,
+ * platform.app and vendor.example.com in different places. This uses
+ * example.com, matching the existing terms and privacy references.
  */
-const SITE_BASE_URL = 'https://theplatform.com';
+const SITE_BASE_URL = 'https://example.com';
 
 export const LEGAL_LINKS = {
   termsOfUse: `${SITE_BASE_URL}/terms-of-service`,

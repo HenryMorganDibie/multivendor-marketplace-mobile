@@ -1,6 +1,6 @@
 # Native builds
 
-How to produce iOS and Android builds of the platform app, what each one needs,
+How to produce iOS and Android builds of the Platform app, what each one needs,
 and what is genuinely blocked until the company store accounts exist.
 
 Everything before this point had only ever run in the Expo web preview. These
@@ -10,12 +10,12 @@ surfaced the first time the project was prepared for one.
 ## Prerequisites
 
 ```bash
-cd platform-mobile/expo
+cd this repo/expo
 bun install
 npx eas-cli login          # a free Expo account; no Apple or Google account needed
 ```
 
-The Expo account must be the platform's, not a contractor's. Builds, credentials and
+The Expo account must be Platform's, not a contractor's. Builds, credentials and
 the project slug all live under whichever account runs them.
 
 ## Build profiles
@@ -116,7 +116,7 @@ complete a registration against a backend running on a different computer.
 
 ## First build results
 
-Both profiles built successfully on the first attempt, under the platform's Expo
+Both profiles built successfully on the first attempt, under Platform's Expo
 organisation, with no Apple Developer Program and no Google Play Console.
 
 | Platform | Profile | Result | Artifact |
@@ -128,7 +128,7 @@ Build pages live under
 `expo.dev/accounts/platform-technologies/projects/<project>/builds/<id>`.
 
 The Android build used a debug keystore that EAS generated and stores against
-the organisation, so it belongs to the platform rather than to whoever ran the build.
+the organisation, so it belongs to Platform rather than to whoever ran the build.
 
 Note on roles: renaming the project on Expo requires Owner or Admin. A
 contractor holding only the Developer role cannot rename it, cannot change
@@ -162,5 +162,5 @@ build, or running the full Phase 1 and Phase 2 flows on either.
 ## Ownership
 
 The Expo, Apple and Google projects, and every credential and capability under
-them, belong to theplatform. A contractor needs delegated access only, and that
+them, belong to Platform. A contractor needs delegated access only, and that
 access can be revoked without affecting the builds or the apps.

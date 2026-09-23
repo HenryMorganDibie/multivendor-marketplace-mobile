@@ -1,9 +1,10 @@
 import React, { useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, PanResponder } from 'react-native';
-import { BellOff } from 'lucide-react-native';
+import { BellOff, Package } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { ChatTypeBadge, ChatTypeBadgeVariant } from '@/components/ChatTypeBadge';
 import { getAvatarColor } from '@/utils/avatarColor';
+import type { MessageType } from '@/mocks/chatData';
 
 /**
  * Per-list registry for swipe-to-reveal — scoped to a React ref passed via context
@@ -28,6 +29,7 @@ interface OrderConversationListItemProps {
   statusChip?: StatusChip;
   chatTypeBadge?: ChatTypeBadgeVariant;
   previewText?: string;
+  previewType?: MessageType;
   isDraft?: boolean;
   timestamp: string;
   showUnreadDot?: boolean;
@@ -81,6 +83,7 @@ function ConversationRow({
   secondaryText,
   tertiaryText,
   previewText,
+  previewType,
   isDraft,
   timestamp,
   isUnread,
@@ -95,6 +98,7 @@ function ConversationRow({
   | 'secondaryText'
   | 'tertiaryText'
   | 'previewText'
+  | 'previewType'
   | 'isDraft'
   | 'timestamp'
   | 'isUnread'
@@ -155,6 +159,14 @@ function ConversationRow({
           {previewText ? (
             <View style={styles.previewContainer}>
               {isDraft && <Text style={styles.draftLabel}>Draft: </Text>}
+              {!isDraft && previewType === 'catalog_item' && (
+                <Package
+                  size={13}
+                  color={isUnread ? Colors.textSecondary : Colors.textMuted}
+                  strokeWidth={2}
+                  style={styles.previewIcon}
+                />
+              )}
               <Text
                 style={[styles.previewText, isDraft && styles.draftText, isUnread && styles.previewTextUnread]}
                 numberOfLines={1}
@@ -183,6 +195,7 @@ export function OrderConversationListItem({
   secondaryText,
   tertiaryText,
   previewText,
+  previewType,
   isDraft = false,
   timestamp,
   showUnreadDot = false,
@@ -319,6 +332,7 @@ export function OrderConversationListItem({
           secondaryText={secondaryText}
           tertiaryText={tertiaryText}
           previewText={previewText}
+          previewType={previewType}
           isDraft={isDraft}
           timestamp={timestamp}
           isUnread={isUnread}
@@ -360,6 +374,7 @@ export function OrderConversationListItem({
             secondaryText={secondaryText}
             tertiaryText={tertiaryText}
             previewText={previewText}
+            previewType={previewType}
             isDraft={isDraft}
             timestamp={timestamp}
             isUnread={isUnread}
@@ -530,6 +545,9 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontWeight: '600' as const,
     flexShrink: 0,
+  },
+  previewIcon: {
+    marginRight: 4,
   },
   draftText: {
     color: Colors.textMuted,

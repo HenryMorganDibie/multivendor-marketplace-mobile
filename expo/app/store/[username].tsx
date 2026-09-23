@@ -47,10 +47,10 @@ function BlockedStorefront({ vendorName, blockType }: { vendorName: string; bloc
   const bgColor = isSuspended ? 'rgba(220,38,38,0.08)' : 'rgba(107,114,128,0.12)';
   const title = isSuspended
     ? 'This store is temporarily unavailable'
-    : 'This store is no longer available on the platform';
+    : 'This store is no longer available on Platform';
   const message = isSuspended
     ? `${vendorName} is currently unavailable. Please contact support if you have an active order.`
-    : `${vendorName} has been removed from theplatform. Please contact support if you have an active order.`;
+    : `${vendorName} has been removed from Platform. Please contact support if you have an active order.`;
 
   return (
     <View style={styles.container}>
@@ -78,6 +78,7 @@ function BlockedStorefront({ vendorName, blockType }: { vendorName: string; bloc
 export default function StoreRoute() {
   const { username } = useLocalSearchParams<{ username: string }>();
   const vendorCtx = useVendorContext();
+  const safeBack = useSafeBack();
 
   const normalizedUsername = (username ?? '').trim().toLowerCase().replace(/^@/, '');
   const { data: resolvedVendor, isLoading: vendorLoading } = useVendor(normalizedUsername);
@@ -99,7 +100,7 @@ export default function StoreRoute() {
       <View style={styles.container}>
         <SafeAreaView edges={['top']} style={styles.safeArea}>
           <View style={styles.header}>
-            <TouchableOpacity style={styles.headerButton}>
+            <TouchableOpacity style={styles.headerButton} onPress={() => safeBack()}>
               <ChevronLeft size={24} color={Colors.text} />
             </TouchableOpacity>
           </View>

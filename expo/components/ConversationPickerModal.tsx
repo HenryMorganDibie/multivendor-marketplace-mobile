@@ -22,7 +22,7 @@ import type { InboxSnapshot, OrderStatusType } from '@/mocks/inboxData';
 import { Colors } from '@/constants/colors';
 
 /**
- * Filter tabs for the platform customer picker. Vendors can narrow the list to
+ * Filter tabs for the Platform customer picker. Vendors can narrow the list to
  * All / Order chats / Inquiries. Support, AI, creator, blocked, expired and
  * deleted conversations are always excluded — those are not eligible invoice
  * recipients.
@@ -109,7 +109,7 @@ const getOrderStatusText = (item: InboxSnapshot, orders: Order[]): string | unde
  * Reuses the same InboxContext data + row component as the vendor Chats screen
  * so customers, order IDs, badges, and previews stay identical. No mock names.
  *
- * Privacy: internal the platform customers are always shown as "First L." here so
+ * Privacy: internal Platform customers are always shown as "First L." here so
  * the vendor never sees a customer's full surname during invoice creation.
  * Support / AI / creator / blocked / expired / deleted conversations are
  * excluded — they are not eligible invoice recipients.
@@ -166,7 +166,7 @@ export default function ConversationPickerModal({
   const isSearching = !!search.trim();
 
   const renderItem = ({ item }: { item: InboxSnapshot }) => {
-    // Privacy: always "First L." for internal the platform customers.
+    // Privacy: always "First L." for internal Platform customers.
     const displayName = formatInternalCustomerFromFull(item.title);
     const orderIdLabel = getOrderIdentifier(item, orders);
     const statusLabel = getOrderStatusText(item, orders);
@@ -183,6 +183,7 @@ export default function ConversationPickerModal({
           tertiaryText={statusLabel}
           chatTypeBadge={chatTypeBadge}
           previewText={item.lastMessageText || 'Tap to start messaging'}
+          previewType={item.lastMessageType}
           timestamp={formatLastActivity(item.lastMessageAt)}
           isUnread={isUnread}
           unreadCount={item.unreadCount}

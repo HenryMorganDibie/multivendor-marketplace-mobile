@@ -52,7 +52,7 @@ export default function VendorVerificationRequiredScreen() {
             <Text style={styles.title}>Identity verification required</Text>
             
             <Text style={styles.body}>
-              To protect customers and vendors, the platform requires identity verification before selling. Verification is handled securely by a trusted third-party provider.
+              To protect customers and vendors, Platform requires identity verification before selling. Verification is handled securely by a trusted third-party provider.
             </Text>
 
             <View style={styles.detailsContainer}>

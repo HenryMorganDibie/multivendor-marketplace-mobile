@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  InteractionManager,
   Modal } from 'react-native';
 import { Alert } from '@/utils/alert';
 import { getAvatarColor } from '@/utils/avatarColor';
@@ -20,12 +21,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { ChevronLeft, Send, Plus, ArrowUp, User, X, Award, ShoppingBag, DollarSign, MapPin, MessageSquare, ClipboardList, FileText, Receipt, Copy, Package, ChevronRight, Check, AlertCircle, Search, Pencil, Flag, Star, Images, ChevronUp, ChevronDown } from 'lucide-react-native';
 import { PaymentRequestCard } from '@/components/PaymentRequestCard';
-import type { ChatMessage, ContactCardData } from '@/mocks/chatData';
+import type { ChatMessage, ContactCardData, PaymentRequestSnapshot } from '@/mocks/chatData';
 import { getChatByOrderId } from '@/mocks/chatData';
+import { generateIdempotencyKey } from '@/utils/idempotencyKey';
 
-import { collection, onSnapshot, orderBy, limit as firestoreLimit, query } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, orderBy, limit as firestoreLimit, query } from 'firebase/firestore';
 import { ref, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { db, storage, callable } from '@/lib/firebase';
 import { useOrders } from '@/contexts/OrdersContext';
 import { useChats } from '@/contexts/ChatContext';
 import { chatService } from '@/services/chatService';
@@ -48,6 +50,8 @@ import { formatCustomerNameFromFull } from '@/utils/formatCustomerName';
 import { getChatAvailability } from '@/utils/chatAvailability';
 import { CHAT_BANNERS, CHAT_INPUT_PLACEHOLDERS } from '@/constants/chatStrings';
 import { useSecureContactView } from '@/hooks/useSecureContactView';
+import { useVendorQuickReplies } from '@/hooks/useVendorQuickReplies';
+import { getActiveSlashQuery, filterQuickRepliesByQuery, applyQuickReplySelection } from '@/utils/quickReplyShortcuts';
 import { validateChatMessage } from '@/utils/chatValidation';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
 
@@ -108,10 +112,44 @@ const shouldShowPinnedCard = (o: { status: string; completedAt?: string }): bool
   return false;
 };
 
+/**
+ * functions/unavailable and functions/deadline-exceeded, and any error with
+ * no .code at all, leave the server's receipt of this attempt unknown.
+ * Every other coded FunctionsError means the callable ran and returned a
+ * structured rejection. Mirrors send-payment-request/[orderId].tsx's own
+ * classifier exactly (kept local here too, per the same "no shared utility
+ * for two callers yet" decision) so the two screens never disagree about
+ * whether a failure should retain the idempotency key.
+ */
+function classifyResendCallableFailure(err: unknown): 'ambiguous' | 'definitive-rejection' {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (code === 'functions/unavailable' || code === 'functions/deadline-exceeded') return 'ambiguous';
+  if (typeof code === 'string' && code.length > 0) return 'definitive-rejection';
+  return 'ambiguous';
+}
+
+function computeResendCanonicalPayloadJson(orderId: string, chatId: string, amount: number, message: string | null): string {
+  return JSON.stringify({ orderId, chatId, amount, message });
+}
+
 export default function VendorOrderChatScreen() {
   const { orderId } = useLocalSearchParams();
   const scrollViewRef = useRef<ScrollView>(null);
+  const messageInputRef = useRef<TextInput>(null);
   const [messageText, setMessageText] = useState('');
+  const [messageSelection, setMessageSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  // No guard existed here at all - a rapid double-tap (or a double-fire
+  // click/touch event on web) fired chatService.sendMessage twice with the
+  // same content before either call resolved, since there was nothing to
+  // stop a second tap while the first was still in flight.
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  // isSendingMessage (React state) is not a reliable mutex on its own: two
+  // event-handler invocations from a fast double-tap can both read the
+  // stale pre-update value before either one triggers a re-render, so both
+  // still pass the check. sendLockRef is checked and set synchronously,
+  // before the state update or any await, closing that gap; isSendingMessage
+  // stays purely for disabling the button visually.
+  const sendLockRef = useRef(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showSecureContactModal, setShowSecureContactModal] = useState(false);
   const [secureContactData, setSecureContactData] = useState<ContactCardData | null>(null);
@@ -132,7 +170,6 @@ export default function VendorOrderChatScreen() {
   const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [selectedCatalogItems, setSelectedCatalogItems] = useState<string[]>([]);
   const [showQuickRepliesModal, setShowQuickRepliesModal] = useState(false);
-  const [quickReplies, setQuickReplies] = useState<{id: string; shortcut: string; message: string}[]>([]);
   const [showOrderSelectionModal, setShowOrderSelectionModal] = useState(false);
   const [documentType, setDocumentType] = useState<'invoice' | 'receipt' | null>(null);
   const [copiedReceiptId, setCopiedReceiptId] = useState<{[key: string]: boolean}>({});
@@ -157,8 +194,13 @@ export default function VendorOrderChatScreen() {
   // from the fixture store and its orders from the mock array, so a real vendor
   // opened somebody else's conversation about somebody else's order.
   const { chats } = useChats();
-  const { vendor } = useVendor();
-  const { requests: changeRequests } = useChangeRequests();
+  const { vendor, identityStatus } = useVendor();
+  // See VendorContext's identityStatus doc comment: a real signed-in vendor
+  // whose identity hasn't resolved yet must never send/act as if `vendor`
+  // were their confirmed real business. A demo or already-resolved session
+  // is unaffected.
+  const canActAsVendor = identityStatus !== 'loading' && identityStatus !== 'unavailable';
+  const { requests: changeRequests, subscribeToOrder } = useChangeRequests();
 
   // Real commerce threads never set a scalar `orderId` (only the backend's
   // relatedOrderIds[] array, via injectOrderContext), so `c.orderId ===
@@ -172,6 +214,15 @@ export default function VendorOrderChatScreen() {
   const order = orderFromContext || orders.find(o => o.id === orderId);
   const isCompleted = order?.status === 'completed';
   const isRejected = false;
+
+  useEffect(() => {
+    if (!order) return;
+    const itemsTotal = order.items.reduce((sum, item) => {
+      const addOnTotal = item.addOns?.reduce((s, a) => s + a.price, 0) ?? 0;
+      return sum + (item.price + addOnTotal) * item.quantity;
+    }, 0);
+    subscribeToOrder(orderId as string, order.vendorName, itemsTotal);
+  }, [order, orderId, subscribeToOrder]);
 
   const latestChangeRequest = useMemo(() => {
     if (!orderId) return null;
@@ -328,32 +379,7 @@ export default function VendorOrderChatScreen() {
     }
   }, [isPaymentSubmitted, order?.customerName]);
 
-  // The real management screen (vendor/settings/quick-replies.tsx) reads/writes
-  // vendors/{vendorId}/quickReplies via real callables — this screen's picker
-  // read a global AsyncStorage key nothing ever wrote to, so it was always
-  // empty regardless of what a vendor had actually saved.
-  useEffect(() => {
-    const vendorIdForReplies = vendor?.id;
-    if (!vendorIdForReplies) return;
-    const unsubscribe = onSnapshot(
-      query(collection(db, 'vendors', vendorIdForReplies, 'quickReplies'), orderBy('sortOrder', 'asc')),
-      (snap) => {
-        setQuickReplies(
-          snap.docs.map((d) => {
-            const data = d.data();
-            const shortcutRaw = String(data.shortcut ?? '');
-            return {
-              id: d.id,
-              shortcut: shortcutRaw.startsWith('/') ? shortcutRaw.slice(1) : shortcutRaw,
-              message: (data.message as string) ?? '',
-            };
-          })
-        );
-      },
-      (err) => console.error('[VendorOrderChat] quickReplies subscription failed:', err)
-    );
-    return unsubscribe;
-  }, [vendor?.id]);
+  const { quickReplies } = useVendorQuickReplies(vendor?.id);
 
   const getInitials = (name: string): string => {
     const parts = name.trim().split(' ');
@@ -398,42 +424,54 @@ export default function VendorOrderChatScreen() {
   }
 
   const handleSendMessage = async () => {
-    if (messageText.trim()) {
-      const messageContent = messageText.trim();
+    if (messageText.trim() === '' || sendLockRef.current) return;
 
-      const validation = validateChatMessage(messageContent);
-      if (!validation.isValid) {
-        setValidationError(validation.errorMessage || 'Invalid message');
-        setTimeout(() => setValidationError(null), 4000);
-        return;
-      }
+    if (!canActAsVendor) {
+      Alert.alert('Could not send', 'We could not verify your vendor account. Please try again or contact support.');
+      return;
+    }
 
-      clearDraft(chatId);
-      setMessageText('');
+    sendLockRef.current = true;
 
-      try {
-        await chatService.sendMessage({
-          chatId,
-          type: 'text',
-          content: messageContent,
-          sender: 'vendor',
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Could not send message.';
-        Alert.alert('Could not send', message);
-        return;
-      }
+    const messageContent = messageText.trim();
 
-      const orderIdStr = orderId as string;
-      const conv = vendorInbox.find(item => item.orderId === orderIdStr);
-      if (conv) {
-        updateInboxAfterMessage({
-          conversationId: conv.conversationId,
-          lastMessageText: messageContent,
-          lastSenderId: vendor.id,
-          senderRole: 'vendor',
-        });
-      }
+    const validation = validateChatMessage(messageContent);
+    if (!validation.isValid) {
+      setValidationError(validation.errorMessage || 'Invalid message');
+      setTimeout(() => setValidationError(null), 4000);
+      sendLockRef.current = false;
+      return;
+    }
+
+    setIsSendingMessage(true);
+    clearDraft(chatId);
+    setMessageText('');
+
+    try {
+      await chatService.sendMessage({
+        chatId,
+        type: 'text',
+        content: messageContent,
+        sender: 'vendor',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not send message.';
+      Alert.alert('Could not send', message);
+      return;
+    } finally {
+      setIsSendingMessage(false);
+      sendLockRef.current = false;
+    }
+
+    const orderIdStr = orderId as string;
+    const conv = vendorInbox.find(item => item.orderId === orderIdStr);
+    if (conv) {
+      updateInboxAfterMessage({
+        conversationId: conv.conversationId,
+        lastMessageText: messageContent,
+        lastSenderId: vendor.id,
+        senderRole: 'vendor',
+      });
     }
   };
 
@@ -470,7 +508,68 @@ export default function VendorOrderChatScreen() {
     return lastPayment;
   }, [chat?.messages]);
 
+  // Same three-way schemaVersion interpretation as PaymentRequestCard:
+  // absent -> legacy, 2 -> structured, anything else -> unsupported/future
+  // (never reinterpreted as legacy).
+  const existingPaymentRequestSchemaVersion = existingPaymentRequest?.paymentRequestData?.schemaVersion;
+  const isExistingPaymentRequestStructured = existingPaymentRequestSchemaVersion === 2;
+  const isExistingPaymentRequestUnsupportedVersion =
+    existingPaymentRequestSchemaVersion !== undefined && existingPaymentRequestSchemaVersion !== 2;
+
   const [showExistingPaymentModal, setShowExistingPaymentModal] = useState(false);
+  const [existingRequestSnapshot, setExistingRequestSnapshot] = useState<PaymentRequestSnapshot | null>(null);
+  const [existingRequestFetchState, setExistingRequestFetchState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+
+  // Resend idempotency state -- mirrors send-payment-request/[orderId].tsx's
+  // proven ref-based state machine exactly (kept local, not shared, per the
+  // same decision made for that screen's classifier).
+  const resendIdempotencyKeyRef = useRef<string | null>(null);
+  const resendLastAttemptedPayloadJsonRef = useRef<string | null>(null);
+  const resendPendingAmbiguousAttemptRef = useRef<boolean>(false);
+  const isResendingRef = useRef<boolean>(false);
+
+  function resolveResendIdempotencyKeyForAttempt(canonicalPayloadJson: string): string {
+    const reuseExistingKey =
+      resendPendingAmbiguousAttemptRef.current &&
+      resendIdempotencyKeyRef.current !== null &&
+      resendLastAttemptedPayloadJsonRef.current === canonicalPayloadJson;
+
+    const key = reuseExistingKey ? resendIdempotencyKeyRef.current! : generateIdempotencyKey();
+    resendIdempotencyKeyRef.current = key;
+    resendLastAttemptedPayloadJsonRef.current = canonicalPayloadJson;
+    resendPendingAmbiguousAttemptRef.current = false;
+    return key;
+  }
+
+  // schemaVersion 2 only: fetch the canonical paymentRequests/{requestId}
+  // document when the modal opens, not continuously -- the raw destination
+  // is never duplicated into the message itself.
+  useEffect(() => {
+    if (!showExistingPaymentModal) return;
+    const pd = existingPaymentRequest?.paymentRequestData;
+    if (!pd || pd.schemaVersion !== 2 || !pd.requestId) return;
+    if (existingRequestFetchState !== 'idle') return;
+    setExistingRequestFetchState('loading');
+    getDoc(doc(db, 'paymentRequests', pd.requestId))
+      .then((snap) => {
+        if (!snap.exists()) {
+          setExistingRequestFetchState('error');
+          return;
+        }
+        setExistingRequestSnapshot(snap.data() as PaymentRequestSnapshot);
+        setExistingRequestFetchState('success');
+      })
+      .catch(() => setExistingRequestFetchState('error'));
+  }, [showExistingPaymentModal, existingPaymentRequest, existingRequestFetchState]);
+
+  // Reset so a later, different active request (or reopening after a
+  // fetch failure) gets a fresh attempt rather than showing stale state.
+  useEffect(() => {
+    if (!showExistingPaymentModal) {
+      setExistingRequestFetchState('idle');
+      setExistingRequestSnapshot(null);
+    }
+  }, [showExistingPaymentModal]);
 
   const handleSendPaymentRequest = () => {
     setShowActionsMenu(false);
@@ -496,18 +595,115 @@ export default function VendorOrderChatScreen() {
     }, 300);
   };
 
-  const handleResendPaymentRequest = () => {
-    setShowExistingPaymentModal(false);
-    Alert.alert(
-      'Payment Request Resent',
-      'The payment request has been resent to the customer.',
-      [{ text: 'OK' }]
-    );
+  const handleResendPaymentRequest = async () => {
+    if (!existingPaymentRequest?.paymentRequestData || !order) return;
+    if (!canActAsVendor) {
+      Alert.alert('Could not resend', 'We could not verify your vendor account. Please try again or contact support.');
+      return;
+    }
+
+    if (isResendingRef.current) return;
+    isResendingRef.current = true;
+
+    try {
+      setShowExistingPaymentModal(false);
+      // There is no separate resend endpoint - sendPaymentRequestInChat
+      // itself supersedes any still-active request for this order (see its
+      // own comment on the priorActiveSnap query) and posts a fresh message,
+      // which is exactly what "resend" means here. This button previously
+      // called nothing and showed a fake success alert regardless of
+      // whether a customer had ever actually received anything.
+      const normalizedMessage = existingPaymentRequest.paymentRequestData.message ?? null;
+      const canonicalPayloadJson = computeResendCanonicalPayloadJson(
+        order.id,
+        chatId,
+        existingPaymentRequest.paymentRequestData.amount,
+        normalizedMessage,
+      );
+      const idempotencyKey = resolveResendIdempotencyKeyForAttempt(canonicalPayloadJson);
+
+      try {
+        const send = callable<
+          { orderId: string; chatId: string; amount: number; message?: string; idempotencyKey: string },
+          { success: true }
+        >('sendPaymentRequestInChat');
+        await send({
+          orderId: order.id,
+          chatId,
+          amount: existingPaymentRequest.paymentRequestData.amount,
+          message: normalizedMessage || undefined,
+          idempotencyKey,
+        });
+
+        resendIdempotencyKeyRef.current = null;
+        resendLastAttemptedPayloadJsonRef.current = null;
+        resendPendingAmbiguousAttemptRef.current = false;
+
+        Alert.alert('Payment Request Resent', 'The payment request has been resent to the customer.', [{ text: 'OK' }]);
+      } catch (error) {
+        const classification = classifyResendCallableFailure(error);
+        if (classification === 'ambiguous') {
+          resendPendingAmbiguousAttemptRef.current = true;
+        } else {
+          resendIdempotencyKeyRef.current = null;
+          resendLastAttemptedPayloadJsonRef.current = null;
+          resendPendingAmbiguousAttemptRef.current = false;
+        }
+        console.error('[VendorOrderChat] Failed to resend payment request:', error);
+        Alert.alert('Could not resend', error instanceof Error ? error.message : 'Please try again.');
+      }
+    } finally {
+      isResendingRef.current = false;
+    }
   };
 
   const handleCopyPaymentInstructions = async () => {
     if (!existingPaymentRequest?.paymentRequestData) return;
     const pd = existingPaymentRequest.paymentRequestData;
+
+    if (pd.schemaVersion !== undefined && pd.schemaVersion !== 2) {
+      // Unsupported/future schema -- never reinterpret as legacy, never copy.
+      Alert.alert('Could not copy', "This payment request can't be shown in this version of the app. Please update the app.");
+      return;
+    }
+
+    if (pd.schemaVersion === 2) {
+      if (typeof pd.currency !== 'string' || !pd.currency.trim()) {
+        // Malformed data (should be unreachable given backend guarantees) --
+        // fail safe rather than guess a currency.
+        Alert.alert('Could not copy', "This payment request's data is incomplete and can't be copied.");
+        return;
+      }
+      const requestCurrency = pd.currency as Currency;
+      let instructions = `Amount: ${formatPriceWithCommas(pd.amount, requestCurrency)}`;
+      const destination = existingRequestSnapshot?.paymentDestinationSnapshot?.paymentDestination;
+      const acceptCash = existingRequestSnapshot?.paymentDestinationSnapshot?.acceptCash;
+      if (existingRequestFetchState !== 'success') {
+        instructions += `\nMethod: (payment details still loading -- reopen this screen and try again)`;
+      } else if (destination === null || destination === undefined) {
+        instructions += `\nMethod: Cash`;
+      } else if (destination.type === 'bank_transfer') {
+        instructions += `\nMethod: Bank Transfer\nRecipient: ${destination.recipientName}\nInstitution: ${destination.institutionName}`;
+        if (destination.identifier.type === 'account_number') {
+          instructions += `\nAccount Number: ${destination.identifier.value}`;
+          for (const code of destination.identifier.routing ?? []) {
+            instructions += `\n${code.type}: ${code.value}`;
+          }
+        } else {
+          instructions += `\nIBAN: ${destination.identifier.value}`;
+          if (destination.identifier.swiftBic) instructions += `\nSWIFT/BIC: ${destination.identifier.swiftBic}`;
+        }
+        if (acceptCash) instructions += `\n(Cash also accepted)`;
+      } else {
+        instructions += `\nMethod: Contact Transfer\nRecipient: ${destination.recipientName}\n${destination.identifier.type === 'email' ? 'Email' : 'Phone'}: ${destination.identifier.value}`;
+        if (acceptCash) instructions += `\n(Cash also accepted)`;
+      }
+      if (pd.message) instructions += `\nNote: ${pd.message}`;
+      await Clipboard.setStringAsync(instructions);
+      Alert.alert('Copied', 'Payment instructions copied to clipboard.');
+      return;
+    }
+
     let instructions = `Amount: ${formatPriceWithCommas(pd.amount, (vendor.currency as Currency) || 'NGN')}\nMethod: ${pd.paymentMethod}`;
     if (pd.bankName) instructions += `\nBank: ${pd.bankName}`;
     if (pd.accountName) instructions += `\nAccount Name: ${pd.accountName}`;
@@ -553,15 +749,9 @@ export default function VendorOrderChatScreen() {
 
   const handleQuickReplyPress = () => {
     setShowActionsMenu(false);
-    if (quickReplies.length === 0) {
-      setTimeout(() => {
-        router.push('/vendor/settings/quick-replies' as any);
-      }, 300);
-    } else {
-      setTimeout(() => {
-        setShowQuickRepliesModal(true);
-      }, 300);
-    }
+    setTimeout(() => {
+      setShowQuickRepliesModal(true);
+    }, 300);
   };
 
   const handleInvoicePress = () => {
@@ -636,9 +826,60 @@ export default function VendorOrderChatScreen() {
     }
   };
 
-  const handleSelectQuickReply = (shortcut: string) => {
-    setMessageText(`/${shortcut}`);
+  const handleSelectQuickReply = (message: string) => {
+    setMessageText(message);
     setShowQuickRepliesModal(false);
+    // Closing this Modal takes composer focus with it; nothing returns it on
+    // its own. RN's Modal onDismiss (below) only ever fires on iOS -- Android
+    // and web never invoke it at all -- so those two need their own trigger
+    // here rather than waiting on a callback that will never arrive. Neither
+    // platform's Modal registers an InteractionManager handle around its own
+    // animation, so this isn't a true "animation finished" signal either, but
+    // it defers to whatever the current JS/render work actually requires
+    // instead of a guessed fixed duration.
+    if (Platform.OS !== 'ios') {
+      InteractionManager.runAfterInteractions(() => {
+        messageInputRef.current?.focus();
+      });
+    }
+  };
+
+  // iOS-only: fires once the Modal's real native dismiss animation finishes.
+  const handleQuickRepliesModalDismissed = () => {
+    messageInputRef.current?.focus();
+  };
+
+  const activeSlashQuery = useMemo(
+    () => getActiveSlashQuery(messageText, messageSelection.start),
+    [messageText, messageSelection.start]
+  );
+
+  const slashSuggestions = useMemo(
+    () => (activeSlashQuery ? filterQuickRepliesByQuery(quickReplies, activeSlashQuery.query) : []),
+    [activeSlashQuery, quickReplies]
+  );
+
+  const handleSelectSlashSuggestion = (reply: { message: string }) => {
+    if (!activeSlashQuery) return;
+    const { text, cursor } = applyQuickReplySelection(messageText, activeSlashQuery, reply.message);
+    handleMessageTextChange(text);
+    setMessageSelection({ start: cursor, end: cursor });
+    // No modal is involved here -- the composer never lost focus, so a
+    // same-frame nudge (once the new value has actually reached the native
+    // view) is enough, rather than the modal-dismiss handling above.
+    // TextInput.setSelection is a real RN TextInput method (see
+    // TextInput.d.ts) but react-native-web's TextInput does not implement it
+    // (or setNativeProps) at all -- only .focus() works there, as a plain
+    // DOM method. Guarding with typeof keeps native cursor placement exact
+    // while degrading safely (composer still focused, just without a forced
+    // cursor position) on web instead of throwing.
+    requestAnimationFrame(() => {
+      const input = messageInputRef.current;
+      input?.focus();
+      if (input && typeof input.setSelection === 'function') {
+        input.setSelection(cursor, cursor);
+      }
+    });
   };
 
   const handleBlockCustomer = () => {
@@ -1094,6 +1335,7 @@ export default function VendorOrderChatScreen() {
             paymentData={message.paymentRequestData}
             timestamp={message.timestamp}
             role="vendor"
+            currency={message.paymentRequestData.currency as Currency | undefined}
             onViewOrderDetails={() => router.push(`/vendor/orders/${orderId}` as any)}
           />
         </View>
@@ -1487,13 +1729,26 @@ export default function VendorOrderChatScreen() {
                     {
                       text: 'Not Paid',
                       style: 'destructive',
-                      onPress: () => {
-                        const success = vendorMarkNotPaid(orderId as string, realProof?.proofId);
-                        if (success) {
-                          setSystemActionMessages(prev => [...prev, {
-                            id: `action-notpaid-${Date.now()}`,
-                            content: 'You marked payment as not received',
-                          }]);
+                      onPress: async () => {
+                        // vendorMarkNotPaid now awaits the real
+                        // reviewPaymentProof call and throws on failure
+                        // (rolling back its own optimistic update first) —
+                        // previously it fired in the background and this
+                        // banner appeared regardless of whether the backend
+                        // actually recorded the rejection.
+                        try {
+                          const success = await vendorMarkNotPaid(orderId as string, realProof?.proofId);
+                          if (success) {
+                            setSystemActionMessages(prev => [...prev, {
+                              id: `action-notpaid-${Date.now()}`,
+                              content: 'You marked payment as not received',
+                            }]);
+                          }
+                        } catch (error) {
+                          Alert.alert(
+                            'Could not mark as not paid',
+                            error instanceof Error ? error.message : 'Please try again.',
+                          );
                         }
                       },
                     },
@@ -1515,13 +1770,26 @@ export default function VendorOrderChatScreen() {
                     { text: 'Cancel', style: 'cancel' },
                     {
                       text: 'Confirm',
-                      onPress: () => {
-                        const success = vendorConfirmPayment(orderId as string, realProof?.proofId);
-                        if (success) {
-                          setSystemActionMessages(prev => [...prev, {
-                            id: `action-confirmed-${Date.now()}`,
-                            content: `${order?.vendorName || 'You'} confirmed payment.`,
-                          }]);
+                      onPress: async () => {
+                        // vendorConfirmPayment now awaits the real
+                        // reviewPaymentProof call and throws on failure
+                        // (rolling back its own optimistic update first) —
+                        // previously it fired in the background and this
+                        // banner appeared regardless of whether the backend
+                        // actually recorded the confirmation.
+                        try {
+                          const success = await vendorConfirmPayment(orderId as string, realProof?.proofId);
+                          if (success) {
+                            setSystemActionMessages(prev => [...prev, {
+                              id: `action-confirmed-${Date.now()}`,
+                              content: `${order?.vendorName || 'You'} confirmed payment.`,
+                            }]);
+                          }
+                        } catch (error) {
+                          Alert.alert(
+                            'Could not confirm payment',
+                            error instanceof Error ? error.message : 'Please try again.',
+                          );
                         }
                       },
                     },
@@ -1672,49 +1940,69 @@ export default function VendorOrderChatScreen() {
               </Text>
             </View>
           ) : (
-            <View style={styles.inputContainer}>
-              <TouchableOpacity
-                style={styles.plusButton}
-                onPress={handlePlusButtonPress}
-                activeOpacity={0.7}
-              >
-                <View style={styles.plusCircle}>
-                  <Plus size={20} color={Colors.textSecondary} strokeWidth={2.5} />
+            <>
+              {activeSlashQuery && quickReplies.length > 0 && (
+                <View style={styles.slashSuggestionsContainer}>
+                  {slashSuggestions.length === 0 ? (
+                    <Text style={styles.slashSuggestionsEmpty}>No matching quick replies</Text>
+                  ) : (
+                    slashSuggestions.slice(0, 5).map((reply) => (
+                      <TouchableOpacity
+                        key={reply.id}
+                        style={styles.slashSuggestionItem}
+                        onPress={() => handleSelectSlashSuggestion(reply)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.slashSuggestionShortcut}>/{reply.shortcut}</Text>
+                        <Text style={styles.slashSuggestionMessage} numberOfLines={1}>
+                          {reply.message}
+                        </Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
                 </View>
-              </TouchableOpacity>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.input}
-                  placeholder={chatAvailability.isVendorInputDisabled ? 'Chat is no longer available' : 'Send a message…'}
-                  placeholderTextColor='#AEAEB2'
-                  value={messageText}
-                  onChangeText={(text) => {
-                    handleMessageTextChange(text);
-                    if (text === '/' && quickReplies.length > 0) {
-                      setShowQuickRepliesModal(true);
-                    }
-                  }}
-                  multiline
-                  maxLength={500}
-                  editable={!chatAvailability.isVendorInputDisabled}
-                />
+              )}
+              <View style={styles.inputContainer}>
+                <TouchableOpacity
+                  style={styles.plusButton}
+                  onPress={handlePlusButtonPress}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.plusCircle}>
+                    <Plus size={20} color={Colors.textSecondary} strokeWidth={2.5} />
+                  </View>
+                </TouchableOpacity>
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    ref={messageInputRef}
+                    style={styles.input}
+                    placeholder={chatAvailability.isVendorInputDisabled ? 'Chat is no longer available' : 'Send a message…'}
+                    placeholderTextColor='#AEAEB2'
+                    value={messageText}
+                    onChangeText={handleMessageTextChange}
+                    onSelectionChange={(e) => setMessageSelection(e.nativeEvent.selection)}
+                    multiline
+                    maxLength={500}
+                    editable={!chatAvailability.isVendorInputDisabled}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.sendButton,
+                    messageText.trim() !== '' && styles.sendButtonActive,
+                  ]}
+                  onPress={handleSendMessage}
+                  disabled={messageText.trim() === '' || isSendingMessage}
+                  activeOpacity={0.8}
+                >
+                  <ArrowUp
+                    size={18}
+                    color={messageText.trim() !== '' ? '#FFFFFF' : '#AEAEB2'}
+                    strokeWidth={2.5}
+                  />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  messageText.trim() !== '' && styles.sendButtonActive,
-                ]}
-                onPress={handleSendMessage}
-                disabled={messageText.trim() === ''}
-                activeOpacity={0.8}
-              >
-                <ArrowUp
-                  size={18}
-                  color={messageText.trim() !== '' ? '#FFFFFF' : '#AEAEB2'}
-                  strokeWidth={2.5}
-                />
-              </TouchableOpacity>
-            </View>
+            </>
           )}
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -1771,43 +2059,12 @@ export default function VendorOrderChatScreen() {
                 <Text style={styles.actionsMenuGridItemText}>Quick replies</Text>
               </TouchableOpacity>
               
-              <TouchableOpacity
-                style={styles.actionsMenuGridItem}
-                onPress={handleInvoicePress}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.actionsMenuIconCircle, plan === 'basic' && styles.actionsMenuIconCircleDisabled]}>
-                  <FileText size={24} color={plan === 'basic' ? Colors.textSecondary : Colors.primary} strokeWidth={2} />
-                </View>
-                <Text style={styles.actionsMenuGridItemText}>Invoice</Text>
-                {plan === 'basic' && <Text style={styles.actionsMenuUpgradeText}>Upgrade</Text>}
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.actionsMenuGridItem}
-                onPress={handleReceiptPress}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.actionsMenuIconCircle, plan === 'basic' && styles.actionsMenuIconCircleDisabled]}>
-                  <Receipt size={24} color={plan === 'basic' ? Colors.textSecondary : Colors.primary} strokeWidth={2} />
-                </View>
-                <Text style={styles.actionsMenuGridItemText}>Receipt</Text>
-                {plan === 'basic' && <Text style={styles.actionsMenuUpgradeText}>Upgrade</Text>}
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.actionsMenuGridItem}
-                onPress={() => {
-                  setShowActionsMenu(false);
-                  setTimeout(() => handleCreateCustomOrder(), 300);
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.actionsMenuIconCircle}>
-                  <ClipboardList size={24} color={Colors.primary} strokeWidth={2} />
-                </View>
-                <Text style={styles.actionsMenuGridItemText}>Custom Order</Text>
-              </TouchableOpacity>
+              {/* Invoice, Receipt, and Custom Order chat entry points hidden
+                  for MVP per Founder (2026-09-15): Invoice/Receipt flows via
+                  chat aren't finalized yet (standalone invoice functionality
+                  elsewhere in the app is unaffected), and Custom Order isn't
+                  scoped for MVP at all. The handlers, destination screens,
+                  and backend are left in place, just unreachable from here. */}
             </View>
           </View>
         </TouchableOpacity>
@@ -1838,7 +2095,11 @@ export default function VendorOrderChatScreen() {
 
           <ScrollView style={styles.catalogContent} showsVerticalScrollIndicator={false}>
             {categories.map(category => {
-              const categoryItems = catalogItems.filter(item => item.categoryId === category.id && item.isAvailable);
+              // moderationStatus check closes a real gap: nothing stopped a vendor
+              // from sharing a pending/rejected item straight to a customer in
+              // chat, bypassing the review gate that's supposed to keep unreviewed
+              // listings from reaching anyone.
+              const categoryItems = catalogItems.filter(item => item.categoryId === category.id && item.isAvailable && item.moderationStatus === 'approved');
               if (categoryItems.length === 0) return null;
 
               return (
@@ -1907,6 +2168,7 @@ export default function VendorOrderChatScreen() {
         animationType="slide"
         transparent
         onRequestClose={() => setShowQuickRepliesModal(false)}
+        onDismiss={handleQuickRepliesModalDismissed}
       >
         <TouchableOpacity
           style={styles.quickRepliesOverlay}
@@ -1952,7 +2214,7 @@ export default function VendorOrderChatScreen() {
                       <TouchableOpacity
                         key={reply.id}
                         style={styles.quickReplyItem}
-                        onPress={() => handleSelectQuickReply(reply.shortcut)}
+                        onPress={() => handleSelectQuickReply(reply.message)}
                         activeOpacity={0.7}
                       >
                         <Text style={styles.quickReplyShortcut}>/{reply.shortcut}</Text>
@@ -2288,7 +2550,7 @@ export default function VendorOrderChatScreen() {
 
           {isSecureContactBlurred && (
             <View style={styles.secureBlurOverlay} pointerEvents="none">
-              <Text style={styles.secureBlurOverlayText}>the platform</Text>
+              <Text style={styles.secureBlurOverlayText}>Platform</Text>
             </View>
           )}
         </SafeAreaView>
@@ -2378,34 +2640,131 @@ export default function VendorOrderChatScreen() {
 
                 <View style={styles.existingPaymentAmountCard}>
                   <Text style={styles.existingPaymentAmountLabel}>AMOUNT REQUESTED</Text>
-                  <Text style={styles.existingPaymentAmountValue}>
-                    {formatPriceWithCommas(existingPaymentRequest.paymentRequestData.amount, (vendor.currency as Currency) || 'NGN')}
-                  </Text>
-                  <Text style={styles.existingPaymentMethodText}>
-                    {existingPaymentRequest.paymentRequestData.paymentMethod}
-                  </Text>
+                  {isExistingPaymentRequestUnsupportedVersion ? (
+                    <Text style={styles.existingPaymentMethodText}>
+                      This payment request can&apos;t be shown in this version of the app — please update.
+                    </Text>
+                  ) : isExistingPaymentRequestStructured ? (
+                    typeof existingPaymentRequest.paymentRequestData.currency === 'string' &&
+                    existingPaymentRequest.paymentRequestData.currency.trim() ? (
+                      <Text style={styles.existingPaymentAmountValue}>
+                        {formatPriceWithCommas(
+                          existingPaymentRequest.paymentRequestData.amount,
+                          existingPaymentRequest.paymentRequestData.currency as Currency
+                        )}
+                      </Text>
+                    ) : (
+                      <Text style={styles.existingPaymentMethodText}>
+                        This payment request&apos;s data is incomplete.
+                      </Text>
+                    )
+                  ) : (
+                    <>
+                      <Text style={styles.existingPaymentAmountValue}>
+                        {formatPriceWithCommas(existingPaymentRequest.paymentRequestData.amount, (vendor.currency as Currency) || 'NGN')}
+                      </Text>
+                      <Text style={styles.existingPaymentMethodText}>
+                        {existingPaymentRequest.paymentRequestData.paymentMethod}
+                      </Text>
+                    </>
+                  )}
                 </View>
 
-                {existingPaymentRequest.paymentRequestData.bankName && (
+                {isExistingPaymentRequestUnsupportedVersion ? (
                   <View style={styles.existingPaymentDetailCard}>
                     <Text style={styles.existingPaymentDetailTitle}>Payment Details</Text>
-                    <View style={styles.existingPaymentDetailRow}>
-                      <Text style={styles.existingPaymentDetailLabel}>Bank</Text>
-                      <Text style={styles.existingPaymentDetailValue}>{existingPaymentRequest.paymentRequestData.bankName}</Text>
-                    </View>
-                    {existingPaymentRequest.paymentRequestData.accountName && (
-                      <View style={styles.existingPaymentDetailRow}>
-                        <Text style={styles.existingPaymentDetailLabel}>Account Name</Text>
-                        <Text style={styles.existingPaymentDetailValue}>{existingPaymentRequest.paymentRequestData.accountName}</Text>
-                      </View>
-                    )}
-                    {existingPaymentRequest.paymentRequestData.accountNumber && (
-                      <View style={styles.existingPaymentDetailRow}>
-                        <Text style={styles.existingPaymentDetailLabel}>Account Number</Text>
-                        <Text style={styles.existingPaymentDetailValue}>{existingPaymentRequest.paymentRequestData.accountNumber}</Text>
-                      </View>
-                    )}
+                    <Text style={styles.existingPaymentDetailValue}>
+                      This payment request can&apos;t be shown in this version of the app — please update.
+                    </Text>
                   </View>
+                ) : isExistingPaymentRequestStructured ? (
+                  <View style={styles.existingPaymentDetailCard}>
+                    <Text style={styles.existingPaymentDetailTitle}>Payment Details</Text>
+                    {existingRequestFetchState === 'loading' && (
+                      <Text style={styles.existingPaymentDetailValue}>Loading payment details…</Text>
+                    )}
+                    {existingRequestFetchState === 'error' && (
+                      <Text style={styles.existingPaymentDetailValue}>Couldn&apos;t load payment details.</Text>
+                    )}
+                    {existingRequestFetchState === 'success' && existingRequestSnapshot && (() => {
+                      const destination = existingRequestSnapshot.paymentDestinationSnapshot.paymentDestination;
+                      const acceptCash = existingRequestSnapshot.paymentDestinationSnapshot.acceptCash;
+                      if (destination === null) {
+                        return (
+                          <View style={styles.existingPaymentDetailRow}>
+                            <Text style={styles.existingPaymentDetailLabel}>Method</Text>
+                            <Text style={styles.existingPaymentDetailValue}>Cash</Text>
+                          </View>
+                        );
+                      }
+                      return (
+                        <>
+                          <View style={styles.existingPaymentDetailRow}>
+                            <Text style={styles.existingPaymentDetailLabel}>Method</Text>
+                            <Text style={styles.existingPaymentDetailValue}>
+                              {destination.type === 'bank_transfer' ? 'Bank Transfer' : 'Contact Transfer'}
+                            </Text>
+                          </View>
+                          <View style={styles.existingPaymentDetailRow}>
+                            <Text style={styles.existingPaymentDetailLabel}>Recipient</Text>
+                            <Text style={styles.existingPaymentDetailValue}>{destination.recipientName}</Text>
+                          </View>
+                          {destination.type === 'bank_transfer' ? (
+                            <>
+                              <View style={styles.existingPaymentDetailRow}>
+                                <Text style={styles.existingPaymentDetailLabel}>Institution</Text>
+                                <Text style={styles.existingPaymentDetailValue}>{destination.institutionName}</Text>
+                              </View>
+                              {destination.identifier.type === 'account_number' ? (
+                                <View style={styles.existingPaymentDetailRow}>
+                                  <Text style={styles.existingPaymentDetailLabel}>Account Number</Text>
+                                  <Text style={styles.existingPaymentDetailValue}>{destination.identifier.value}</Text>
+                                </View>
+                              ) : (
+                                <View style={styles.existingPaymentDetailRow}>
+                                  <Text style={styles.existingPaymentDetailLabel}>IBAN</Text>
+                                  <Text style={styles.existingPaymentDetailValue}>{destination.identifier.value}</Text>
+                                </View>
+                              )}
+                            </>
+                          ) : (
+                            <View style={styles.existingPaymentDetailRow}>
+                              <Text style={styles.existingPaymentDetailLabel}>{destination.identifier.type === 'email' ? 'Email' : 'Phone'}</Text>
+                              <Text style={styles.existingPaymentDetailValue}>{destination.identifier.value}</Text>
+                            </View>
+                          )}
+                          {acceptCash && (
+                            <View style={styles.existingPaymentDetailRow}>
+                              <Text style={styles.existingPaymentDetailLabel}>Cash</Text>
+                              <Text style={styles.existingPaymentDetailValue}>Also accepted</Text>
+                            </View>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </View>
+                ) : (
+                  existingPaymentRequest.paymentRequestData.bankName && (
+                    <View style={styles.existingPaymentDetailCard}>
+                      <Text style={styles.existingPaymentDetailTitle}>Payment Details</Text>
+                      <View style={styles.existingPaymentDetailRow}>
+                        <Text style={styles.existingPaymentDetailLabel}>Bank</Text>
+                        <Text style={styles.existingPaymentDetailValue}>{existingPaymentRequest.paymentRequestData.bankName}</Text>
+                      </View>
+                      {existingPaymentRequest.paymentRequestData.accountName && (
+                        <View style={styles.existingPaymentDetailRow}>
+                          <Text style={styles.existingPaymentDetailLabel}>Account Name</Text>
+                          <Text style={styles.existingPaymentDetailValue}>{existingPaymentRequest.paymentRequestData.accountName}</Text>
+                        </View>
+                      )}
+                      {existingPaymentRequest.paymentRequestData.accountNumber && (
+                        <View style={styles.existingPaymentDetailRow}>
+                          <Text style={styles.existingPaymentDetailLabel}>Account Number</Text>
+                          <Text style={styles.existingPaymentDetailValue}>{existingPaymentRequest.paymentRequestData.accountNumber}</Text>
+                        </View>
+                      )}
+                    </View>
+                  )
                 )}
 
                 {existingPaymentRequest.paymentRequestData.message && (
@@ -2754,7 +3113,9 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   messageBubble: {
-    maxWidth: '75%',
+    // Cap moved to bubbleWithTail below - resolving a percentage against
+    // this shrink-wrapped parent collapsed short messages to a fixed width.
+    flexShrink: 1,
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 20,
@@ -2770,6 +3131,7 @@ const styles = StyleSheet.create({
   bubbleWithTail: {
     flexDirection: 'row' as const,
     alignItems: 'flex-end' as const,
+    maxWidth: '75%',
   },
   bubbleTailOutgoing: {
     width: 0,
@@ -3181,6 +3543,33 @@ const styles = StyleSheet.create({
   },
   inputSafeArea: {
     backgroundColor: '#FFFFFF',
+  },
+  slashSuggestionsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingVertical: 4,
+    maxHeight: 220,
+  },
+  slashSuggestionsEmpty: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  slashSuggestionItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  slashSuggestionShortcut: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.primary,
+    marginBottom: 1,
+  },
+  slashSuggestionMessage: {
+    fontSize: 13,
+    color: Colors.textSecondary,
   },
   inputContainer: {
     flexDirection: 'row' as const,

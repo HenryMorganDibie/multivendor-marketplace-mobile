@@ -45,7 +45,7 @@ export function selectOrderDisplayFlags(
     isRejected: isOrderRejected(orderStatus),
     orderChatAvailable: !['requested', 'rejected', 'cancelled', 'expired'].includes(orderStatus),
     showAcceptDecline: canAcceptOrder(orderStatus) && !autoAcceptEnabled,
-    showMarkInProgress: canMarkInProgress(orderStatus, isExternal),
+    showMarkInProgress: canMarkInProgress(orderStatus),
     showCancel: canCancelOrder(orderStatus) && !isExternal,
   };
 }

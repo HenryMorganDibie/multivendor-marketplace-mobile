@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useSegments, useGlobalSearchParams } from 'expo-router';
 import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword, signOut, type User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { auth as firebaseAuth, db as firestore, callable } from '@/lib/firebase';
 import { DEV_LOCAL_AUTH_ENABLED } from '@/constants/devAuth';
 import { VendorPlan } from './VendorPlanContext';
@@ -48,6 +48,9 @@ interface User {
   referralAssignedState?: string;
   referralAssignedArea?: string;
   referralStatus?: 'active' | 'inactive';
+  /** Firestore's users/{uid}.photoURL — top-level, not nested under
+   * `profile`, matching firestore.rules' userUpdateAllowed() allowlist. */
+  photoUrl?: string;
 }
 
 interface AuthState {
@@ -252,6 +255,7 @@ async function buildSessionFromBackend(uid: string, identifier: string): Promise
       onboardingCompleted: onboarding.completed === true,
       authProvider: 'email' as AuthProvider,
       vendorId: (data.vendorId as string) ?? undefined,
+      photoUrl: (data.photoURL as string) ?? undefined,
     } as User,
   };
 }
@@ -266,6 +270,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const router = useRouter();
   const segments = useSegments();
+  // Tracks which uid a vendor-claims repair has already been attempted for
+  // in this session, so the check in the onIdTokenChanged listener below
+  // runs at most once per signed-in vendor rather than on every token
+  // refresh. See that listener for the full explanation.
+  const vendorClaimRepairAttemptedUidRef = useRef<string | null>(null);
 
   const redirectAfterLogin = useCallback((user: User) => {
     if (user.role === 'customer') {
@@ -357,6 +366,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       if (!fbUser) {
         // Signed out elsewhere, token revoked, or account deleted. Any cached
         // session is now meaningless.
+        vendorClaimRepairAttemptedUidRef.current = null;
         const cached = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
         if (cached && !DEMO_ACCOUNT_IDS.has((JSON.parse(cached) as User).id)) {
           await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
@@ -386,6 +396,65 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           return;
         }
 
+        /**
+         * Vendor claim repair — the single authoritative place this runs.
+         *
+         * Firestore is authoritative here (see the file-level comment above
+         * buildSessionFromBackend): if it says this account is a vendor but
+         * the token's own claims don't agree, the account is stuck in the
+         * exact state completeRegistration's registration-retry fast-path
+         * fix closes for a *future* retry but cannot reach on its own,
+         * because nothing in the normal login/session flow ever calls
+         * completeRegistration again after signup. repairVendorClaims is
+         * meant to be the dedicated, idempotent repair for that already-stuck
+         * case.
+         *
+         * NOT YET BACKED BY A REAL FUNCTION. `repairVendorClaims` does not
+         * exist anywhere in multivendor-marketplace-platform/functions/src — confirmed by a
+         * full-repo grep. The call below will therefore always throw
+         * not-found and fall through the catch, same as before this block
+         * existed; it is a documented, priced backend gap, not a silent
+         * failure. See the Unbuilt Screens Backend Mapping doc, item 2.14.
+         *
+         * Attempted at most once per signed-in uid (the ref below), not on
+         * every token refresh: once the backend function exists, a genuine
+         * failure to repair must not retry on every hourly token refresh for
+         * the rest of the session, and a successful repair's own forced
+         * getIdToken(true) would already re-fire this same listener with
+         * corrected claims, which would see the claims now match and skip
+         * this block entirely — so this cannot loop.
+         */
+        const claimVendorId = token.claims.vendorId as string | undefined;
+        const firestoreVendorId = data.vendorId as string | undefined;
+        const vendorClaimsNeedRepair =
+          data.role === 'vendor'
+          && (token.claims.role !== 'vendor' || claimVendorId !== firestoreVendorId)
+          && vendorClaimRepairAttemptedUidRef.current !== fbUser.uid;
+
+        if (vendorClaimsNeedRepair) {
+          vendorClaimRepairAttemptedUidRef.current = fbUser.uid;
+          try {
+            const repair = callable<Record<string, never>, { repaired: boolean; vendorId?: string }>('repairVendorClaims');
+            const res = await repair({});
+            if (res.data.repaired) {
+              console.warn('[AUTH] Vendor claims were missing/stale and have been repaired; refreshing token.');
+              await fbUser.getIdToken(true);
+              // The forced refresh above re-fires this listener with the
+              // corrected claims — let that pass build the session instead
+              // of continuing here with the stale token already in hand.
+              return;
+            }
+          } catch (error) {
+            // Not fatal: fall through and build the session from whatever
+            // claims/Firestore state actually exist, same as before this
+            // repair attempt existed. Logged so this is visible rather than
+            // silently retried forever. As of this writing this will always
+            // land here, since repairVendorClaims has no backend function
+            // behind it yet (see the doc comment above).
+            console.error('[AUTH] repairVendorClaims failed:', error);
+          }
+        }
+
         const onboarding = (data.onboarding ?? {}) as { completed?: boolean };
         const profile = (data.profile ?? {}) as { firstName?: string; lastInitial?: string; lastName?: string };
         const refreshed = {
@@ -401,6 +470,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           onboardingCompleted: onboarding.completed === true,
           authProvider: 'email' as AuthProvider,
           vendorId: (data.vendorId as string) ?? undefined,
+          photoUrl: (data.photoURL as string) ?? undefined,
         } as User;
 
         await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(refreshed));
@@ -593,6 +663,17 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         'customer/notifications',
         'customer/vendors/',
         'customer/invite',
+        'customer/search',
+        'customer/all-vendors',
+        'customer/browse-food',
+        'customer/browse-electronics',
+        'customer/browse-services',
+        'customer/open-now',
+        'customer/recently-viewed',
+        'customer/vendors-for-you',
+        'customer/vendors-near-you',
+        'customer/sections/',
+        'customer/category/',
         'item/',
         'cart',
         'review-order',
@@ -1088,7 +1169,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             success: false,
             field: 'email',
             error:
-              'We could not finish creating your account. Please contact the platform Support before trying this email again.',
+              'We could not finish creating your account. Please contact Platform Support before trying this email again.',
           } as never;
         }
         // The mapping also reports which field is at fault, so the screen can
@@ -1108,8 +1189,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
           if (data.plan === 'basic') {
             const AsyncStorageModule = await import('@react-native-async-storage/async-storage');
-            const VENDOR_PLAN_STORAGE_KEY = '@platform_vendor_plan';
-            await AsyncStorageModule.default.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify({
+            const { vendorPlanStorageKey } = await import('@/services/repositories/subscriptionRepository');
+            await AsyncStorageModule.default.setItem(vendorPlanStorageKey(createdUser!.uid), JSON.stringify({
               plan: 'basic',
               businessCountry: 'Nigeria',
               brandingEnabled: false,
@@ -1126,8 +1207,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           console.log('[AUTH] Using user-selected username:', generatedUsername);
           
           const AsyncStorageModule = await import('@react-native-async-storage/async-storage');
-          const VENDOR_PLAN_STORAGE_KEY = '@platform_vendor_plan';
-          await AsyncStorageModule.default.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify({
+          const { vendorPlanStorageKey } = await import('@/services/repositories/subscriptionRepository');
+          await AsyncStorageModule.default.setItem(vendorPlanStorageKey(createdUser!.uid), JSON.stringify({
             plan: data.plan || 'standard',
             businessCountry: 'Nigeria',
             brandingEnabled: false,
@@ -1362,6 +1443,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     | 'areaId'
     | 'areaName'
     | 'onboardingCompleted'
+    | 'photoUrl'
   >>;
 
   const updateUserProfile = useCallback(async (updates: ProfileUpdate) => {
@@ -1397,6 +1479,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       if (updates.lastInitial !== undefined) firestoreUpdates['profile.lastInitial'] = updates.lastInitial;
       if (updates.lastName !== undefined) firestoreUpdates['profile.lastName'] = updates.lastName;
       if (updates.onboardingCompleted !== undefined) firestoreUpdates['onboarding.completed'] = updates.onboardingCompleted;
+      // Empty string is the "remove photo" sentinel — deleteField rather
+      // than writing '', so a cleared photo reads as genuinely absent
+      // everywhere that checks `user.photoUrl`, not as a falsy string.
+      if (updates.photoUrl !== undefined) firestoreUpdates['photoURL'] = updates.photoUrl === '' ? deleteField() : updates.photoUrl;
 
       if (Object.keys(firestoreUpdates).length > 0) {
         try {
@@ -1466,7 +1552,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
       const identifier = (prefill?.email && prefill.email.trim())
         ? prefill.email.trim().toLowerCase()
-        : `${provider}-customer@theplatform.social`;
+        : `${provider}-customer@platform.social`;
 
       const accounts = await getAccountsDb();
       let account = accounts.find(acc => acc.identifier.toLowerCase() === identifier.toLowerCase());

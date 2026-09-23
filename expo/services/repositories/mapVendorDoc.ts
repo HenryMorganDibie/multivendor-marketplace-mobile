@@ -18,7 +18,7 @@ import type { Vendor } from '@/mocks/vendorData';
 
 type Timestampish = { toDate: () => Date } | { seconds: number } | string | null | undefined;
 
-function toIso(value: Timestampish): string | undefined {
+export function toIso(value: Timestampish): string | undefined {
   if (!value) return undefined;
   if (typeof value === 'string') return value;
   if (typeof (value as { toDate?: unknown }).toDate === 'function') {
@@ -98,6 +98,19 @@ export function mapVendorDoc(id: string, data: Record<string, unknown>): Vendor 
     id,
     slug: (data.slug as string) ?? (data.username as string) ?? id,
     username: (data.username as string) ?? '',
+    // usernameReservation.ts's changeUsername already writes this via
+    // arrayUnion; nothing here read it back, so the cooldown/yearly-limit
+    // display (VendorPlanContext.getUsernameChangeEligibility) tracked
+    // changes in a local, per-device AsyncStorage copy instead - it reset to
+    // empty on reinstall or a new device, showing "eligible" even when the
+    // server's own real history would still enforce the cooldown.
+    usernameChangeHistory: Array.isArray(data.usernameChangeHistory)
+      ? (data.usernameChangeHistory as { changedAt: Timestampish; oldUsername: string; newUsername: string }[]).map((c) => ({
+          date: toIso(c.changedAt) ?? new Date(0).toISOString(),
+          oldUsername: c.oldUsername,
+          newUsername: c.newUsername,
+        }))
+      : undefined,
     name: (data.businessName as string) || (data.name as string) || '',
     category: (data.category as string) ?? '',
     categoryId: (data.categoryId as string) ?? undefined,
@@ -143,6 +156,11 @@ export function mapVendorDoc(id: string, data: Record<string, unknown>): Vendor 
     delivery: fulfillmentTypes.includes('delivery'),
     shipping: fulfillmentTypes.includes('shipping'),
 
+    // The sole canonical Business Hours representation (written by
+    // updateVendorSettings.ts). Informational only -- nothing in this app
+    // may derive a customer-facing Open Now/Closed state from it.
+    weeklyHours: (data.weeklyHours as Vendor['weeklyHours']) ?? undefined,
+
     isOpenNow: isOpenNow(data.openingHours as Record<string, { open?: string; close?: string; closed?: boolean }> | undefined),
 
     taxEnabled: data.taxEnabled === true,
@@ -156,22 +174,13 @@ export function mapVendorDoc(id: string, data: Record<string, unknown>): Vendor 
     minimumOrderAmount: (data.minimumOrderAmount as number) ?? undefined,
     policy: (data.policy as string) ?? undefined,
 
-    // Same bug as minimumOrderAmount/policy: updateVendorSettings writes this
-    // directly onto the document now, so it needs to be read back out here
-    // or a vendor's saved stacking mode never reaches a real customer's cart
-    // (useCartViewModel.ts's vendorStackingMode reads this same field).
-    promoStackingMode: (data.promoStackingMode as Vendor['promoStackingMode']) ?? undefined,
-
-    // Same bug as minimumOrderAmount/policy above: updateVendorPaymentInstructions
-    // writes these directly onto this document, so they need to be read back
-    // out here or a saved value vanishes on the next live snapshot.
-    paymentInstructions: (data.paymentInstructions as string) ?? undefined,
-    paymentInstructionsEnabled: data.paymentInstructionsEnabled === true,
-    ownershipConfirmed: data.ownershipConfirmed === true,
-    ownershipConfirmedAt: toIso(data.ownershipConfirmedAt as Timestampish),
-    ownershipConfirmedBy: (data.ownershipConfirmedBy as string) ?? undefined,
-    paymentInstructionsUpdatedAt: toIso(data.paymentInstructionsUpdatedAt as Timestampish),
-    paymentInstructionsUpdatedBy: (data.paymentInstructionsUpdatedBy as string) ?? undefined,
+    // paymentInstructions/ownershipConfirmed etc. are deliberately NOT read
+    // from this document anymore — this doc is publicly readable by any
+    // discoverable/published vendor's storefront (see firestore.rules), and
+    // Firestore rules cannot filter individual fields on a doc read. Those
+    // fields now live in the private vendors/{vendorId}/settings/payment
+    // subdoc (owner+admin read only) and are merged onto `vendor` by a
+    // second listener in VendorContext, not by this mapper.
 
     createdAt: toIso(data.createdAt as Timestampish),
   };

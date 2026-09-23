@@ -1,7 +1,7 @@
 import type { UserRole } from '@/types/domain';
 
 /**
- * supportService — single boundary for the platform Support conversation.
+ * supportService — single boundary for the Platform Support conversation.
  *
  * SCAFFOLD ONLY. Reads the same AsyncStorage records that
  * `CustomerSupportChatContext` / `VendorSupportChatContext` own. Those contexts

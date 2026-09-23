@@ -61,15 +61,16 @@ export function useBackendChats(): { ready: boolean } {
       messagesByChat.clear();
       threadDocs.clear();
 
-      if (!fbUser) { setReady(false); return; }
+      // Every identity change (sign-out, sign-in, switching accounts) gets a
+      // clean, un-hydrated slate on the shared store — otherwise a new
+      // sign-in could briefly read the previous identity's hydrated/error
+      // flags before its own first snapshot (or failure) lands, and
+      // mockChats' ~20 pre-seeded fixture conversations (module load runs
+      // before this listener resolves) could show for a moment on a real
+      // account before real data arrives.
+      chatService.resetBackendHydration();
 
-      // mockChats starts pre-seeded with ~20 fixture conversations (module
-      // load runs before this listener resolves), and a real signed-in user
-      // could see that fixture inbox for a moment before the first snapshot
-      // below lands — the same "empty beats fixture" reasoning as the error
-      // handler further down, just applied before the wait too, not only
-      // after a failure.
-      chatService.hydrateFromBackend([]);
+      if (!fbUser) { setReady(false); return; }
 
       unsubscribeThreads = onSnapshot(
         query(
@@ -114,10 +115,14 @@ export function useBackendChats(): { ready: boolean } {
           setReady(true);
         },
         (err) => {
-          // An empty inbox beats fixture conversations against people the
-          // vendor has never spoken to.
+          // A transient failure must not wipe an already-hydrated store —
+          // that would flash a false "no conversations" state over real
+          // data already loaded. Leaves the store exactly as it was and
+          // lets Firestore's own retry bring a fresh snapshot;
+          // markBackendHydrationError only actually flips anything on a
+          // cold-start failure (see its own comment in chatService.ts).
           console.error('[Chat] Thread subscription failed:', err);
-          chatService.hydrateFromBackend([]);
+          chatService.markBackendHydrationError();
           setReady(true);
         },
       );

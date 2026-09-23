@@ -7,7 +7,7 @@ import { callable } from '@/lib/firebase';
 /**
  * Phase 2 — the vendor's view of an item's moderation state.
  *
- * Modelled on the WhatsApp Business catalog pattern the client specified: a compact
+ * Modelled on the WhatsApp Business catalog pattern Founder specified: a compact
  * strip directly beneath the product image, not a large coloured status card.
  * The product image and details stay the focus; moderation is a thin band of
  * context above them. An item awaiting review is a normal part of listing, so
@@ -18,7 +18,7 @@ import { callable } from '@/lib/firebase';
  * that customers cannot read.
  *
  * Deliberately does not show a field-by-field comparison of live vs. proposed
- * values (per the client, 2026-08-24): this is a vendor tool, not an admin/
+ * values (per Founder, 2026-08-24): this is a vendor tool, not an admin/
  * debugging interface — a vendor already knows what they submitted, and the
  * two-line status message is enough to answer "what's happening with my
  * item?" The detailed current-vs-proposed comparison stays an admin-side

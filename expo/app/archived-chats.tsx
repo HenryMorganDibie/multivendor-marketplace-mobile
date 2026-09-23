@@ -4,12 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import { useSafeBack } from '@/utils/useSafeBack';
 import { ChevronLeft, Archive } from 'lucide-react-native';
-import { mockChats, Chat } from '@/mocks/chatData';
+import ListStateView from '@/components/ListStateView';
+import { ChatListSkeleton } from '@/components/SkeletonLoader';
 import type { Order } from '@/mocks/ordersData';
 import { useOrders } from '@/contexts/OrdersContext';
-import { mockVendors } from '@/mocks/vendorData';
 import { OrderConversationListItem, CircularAvatar } from '@/components/OrderConversationListItem';
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
+import { useInbox } from '@/contexts/InboxContext';
+import { InboxSnapshot } from '@/mocks/inboxData';
 import { formatVendorHandle } from '@/utils/vendorHandle';
 import { Colors } from '@/constants/colors';
 
@@ -28,38 +30,17 @@ const formatTimestamp = (timestamp: string): string => {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-const getLastMessagePreview = (chat: Chat): string => {
-  if (chat.messages.length === 0) return 'No messages yet';
-  const lastMessage = chat.messages[chat.messages.length - 1];
-  
-  if (lastMessage.type === 'system') {
-    return lastMessage.content;
-  }
-  if (lastMessage.type === 'payment-request') {
-    return 'Payment request sent';
-  }
-  if (lastMessage.type === 'contact-card') {
-    return 'Contact details shared';
-  }
-  
-  const prefix = lastMessage.sender === 'customer' ? 'You: ' : '';
-  return `${prefix}${lastMessage.content}`;
-};
-
-const getFulfillmentAndStatus = (chat: Chat, orders: Order[]): string => {
-  if (chat.chatType === 'pre_order_inquiry') {
+const getFulfillmentAndStatus = (item: InboxSnapshot, orders: Order[]): string => {
+  if (item.conversationType === 'inquiry') {
     return 'Pre-order inquiry';
   }
 
-  if (!chat.customerId || !chat.vendorId) return 'Order';
-  const order = orders
-    .filter(o => o.vendorId === chat.vendorId && o.customerId === chat.customerId)
-    .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())[0];
+  const order = item.orderId ? orders.find(o => o.id === item.orderId) : undefined;
   if (!order) return 'Order';
-  
+
   const fulfillment = order.fulfillmentType || 'Pickup';
   let status = '';
-  
+
   switch (order.status) {
     case 'requested':
       status = 'Awaiting response';
@@ -85,7 +66,7 @@ const getFulfillmentAndStatus = (chat: Chat, orders: Order[]): string => {
     default:
       status = 'Order';
   }
-  
+
   return `${fulfillment} · ${status}`;
 };
 
@@ -94,75 +75,61 @@ export default function ArchivedChatsScreen() {
   const safeBack = useSafeBack();
   const { archivedChats, unarchiveChat, getBlockedUserByChatId } = useBlockedUsers();
   const { orders } = useOrders();
+  const { allCustomerInbox, isInboxHydrated, hasInboxHydrationError } = useInbox();
 
   const archivedChatsList = useMemo(() => {
-    return mockChats
-      .filter(chat => archivedChats.some(ac => ac.chatId === chat.id))
-      .sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime());
-  }, [archivedChats]);
+    return allCustomerInbox
+      .filter(item => archivedChats.some(ac => ac.chatId === item.conversationId))
+      .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+  }, [allCustomerInbox, archivedChats]);
 
-  const handleChatPress = (chat: Chat) => {
-    const blockedUser = getBlockedUserByChatId(chat.id);
+  const handleChatPress = (item: InboxSnapshot) => {
+    const blockedUser = getBlockedUserByChatId(item.conversationId);
     if (blockedUser) {
       return;
     }
 
-    if (chat.chatType === 'pre_order_inquiry') {
-      router.push(`/chat/pre-order/${chat.vendorId}` as any);
+    if (item.conversationType === 'order' && item.orderId) {
+      router.push({
+        pathname: `/chat/order/${item.orderId}` as any,
+        params: { vendorName: item.title },
+      });
       return;
     }
 
-    // Navigate using the chat's own orderId rather than re-deriving "the
-    // latest order for this vendor+customer": a customer can have more than
-    // one order with the same vendor, so that re-derivation could open the
-    // wrong order, and if this particular order had since fallen out of the
-    // live orders list it found nothing at all — a silent dead tap.
-    const matchedOrder = orders
-      .filter(o => o.vendorId === chat.vendorId && o.customerId === chat.customerId)
-      .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())[0];
-    const targetOrderId = chat.orderId || matchedOrder?.id;
-    if (!targetOrderId) return;
-
     router.push({
-      pathname: `/chat/order/[orderId]` as any,
-      params: {
-        orderId: targetOrderId,
-        vendorName: chat.vendorName,
-        publicOrderId: matchedOrder?.publicOrderId,
-      },
+      pathname: `/chat/pre-order/${item.vendorId}` as any,
+      params: { vendorName: item.title },
     });
   };
 
-  const handleUnarchive = (chatId: string) => {
-    unarchiveChat(chatId);
+  const handleUnarchive = (conversationId: string) => {
+    unarchiveChat(conversationId);
   };
 
-  const renderChatItem = ({ item }: { item: Chat }) => {
-    const lastMessagePreview = getLastMessagePreview(item);
+  const renderChatItem = ({ item }: { item: InboxSnapshot }) => {
     const fulfillmentAndStatus = getFulfillmentAndStatus(item, orders);
-    const timestamp = formatTimestamp(item.lastActivityAt);
-    const blockedUser = getBlockedUserByChatId(item.id);
+    const timestamp = formatTimestamp(item.lastMessageAt);
+    const blockedUser = getBlockedUserByChatId(item.conversationId);
     const isBlocked = !!blockedUser;
 
     return (
       <OrderConversationListItem
-        avatarContent={<CircularAvatar name={item.vendorName} />}
-        primaryText={item.vendorName}
-        secondaryText={(() => {
-          const vendor = mockVendors.find(v => v.id === item.vendorId);
-          return formatVendorHandle({
-            username: vendor?.username,
-            slug: vendor?.slug,
-            name: item.vendorName,
-            id: item.vendorId,
-          });
-        })()}
+        avatarContent={<CircularAvatar name={item.title} />}
+        primaryText={item.title}
+        secondaryText={formatVendorHandle({
+          vendorSlug: item.vendorSlug,
+          vendorPublicId: item.vendorPublicId,
+          name: item.title,
+          id: item.vendorId,
+        })}
         tertiaryText={isBlocked ? 'Blocked' : fulfillmentAndStatus}
-        previewText={lastMessagePreview}
+        previewText={item.lastMessageText || 'No messages yet'}
+        previewType={item.lastMessageType}
         timestamp={timestamp}
         showUnreadDot={false}
         onPress={() => handleChatPress(item)}
-        onUnarchive={!isBlocked ? () => handleUnarchive(item.id) : undefined}
+        onUnarchive={!isBlocked ? () => handleUnarchive(item.conversationId) : undefined}
         isBlocked={isBlocked}
       />
     );
@@ -180,27 +147,24 @@ export default function ArchivedChatsScreen() {
           <View style={styles.headerSpacer} />
         </View>
 
-        {archivedChatsList.length === 0 ? (
-          <View style={styles.emptyStateContainer}>
-            <View style={styles.emptyStateCard}>
-              <View style={styles.emptyIconContainer}>
-                <Archive size={48} color={Colors.textSecondary} strokeWidth={1.5} />
-              </View>
-              <Text style={styles.emptyTitle}>No archived chats</Text>
-              <Text style={styles.emptyDescription}>
-                Archived conversations will appear here
-              </Text>
-            </View>
-          </View>
-        ) : (
+        <ListStateView
+          isLoading={!isInboxHydrated && !hasInboxHydrationError}
+          isError={hasInboxHydrationError}
+          isEmpty={archivedChatsList.length === 0}
+          loadingSkeleton={<ChatListSkeleton count={5} />}
+          emptyIcon={<Archive size={48} color={Colors.textSecondary} strokeWidth={1.5} />}
+          emptyTitle="No archived chats"
+          emptyDescription="Archived conversations will appear here"
+          style={styles.stateContainer}
+        >
           <FlatList
             data={archivedChatsList}
             renderItem={renderChatItem}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.conversationId}
             contentContainerStyle={styles.chatList}
             showsVerticalScrollIndicator={false}
           />
-        )}
+        </ListStateView>
       </SafeAreaView>
     </>
   );
@@ -232,35 +196,10 @@ const styles = StyleSheet.create({
   headerSpacer: {
     width: 40,
   },
+  stateContainer: {
+    flex: 1,
+  },
   chatList: {
     paddingTop: 24,
-  },
-  emptyStateContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 24,
-  },
-  emptyStateCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    paddingVertical: 48,
-    paddingHorizontal: 24,
-    alignItems: 'center' as const,
-  },
-  emptyIconContainer: {
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    marginBottom: 8,
-    textAlign: 'center' as const,
-  },
-  emptyDescription: {
-    fontSize: 15,
-    color: Colors.textMuted,
-    textAlign: 'center' as const,
-    lineHeight: 22,
   },
 });

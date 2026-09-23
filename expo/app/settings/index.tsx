@@ -174,7 +174,7 @@ export default function SettingsScreen() {
           <SettingsRow
             icon={<Headphones size={16} color="#10A862" strokeWidth={2} />}
             iconBg="rgba(16,168,98,0.08)"
-            label="Contact the platform Support"
+            label="Contact Platform Support"
             subtitle="Chat with support"
             onPress={() => router.push('/settings/support-chat' as any)}
           />
@@ -193,7 +193,7 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <SettingsRow
             icon={<Share2 size={16} color={Colors.primary} strokeWidth={2} />}
-            label="Invite to the platform"
+            label="Invite to Platform"
             subtitle="Share with friends"
             onPress={() => router.push('/customer/invite' as any)}
             showDivider={false}

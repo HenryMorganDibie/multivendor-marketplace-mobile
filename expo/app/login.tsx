@@ -203,10 +203,10 @@ export default function LoginScreen() {
                 style={styles.brandLogo}
                 resizeMode="contain"
                 accessibilityRole="image"
-                accessibilityLabel="the platform"
+                accessibilityLabel="Platform"
               />
               <Text style={styles.title}>Welcome back</Text>
-              <Text style={styles.subtitle}>Log in to your the platform account</Text>
+              <Text style={styles.subtitle}>Log in to your Platform account</Text>
             </View>
 
             {/**
@@ -403,7 +403,7 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.bottomSection}>
-              <Text style={styles.bottomText}>New to the platform? </Text>
+              <Text style={styles.bottomText}>New to Platform? </Text>
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={() => {

@@ -42,12 +42,12 @@ import { Alert } from '@/utils/alert';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Learn more opens the platform website rather than an in-app screen, so the
+// Learn more opens the Platform website rather than an in-app screen, so the
 // moderation policy is explained in one place that can be updated without
 // shipping an app release. Env-overridable so staging can point elsewhere.
 const CATALOG_MODERATION_HELP_URL =
   process.env.EXPO_PUBLIC_CATALOG_MODERATION_HELP_URL ??
-  'https://theplatform.com/help/item-review';
+  'https://example.com/help/item-review';
 
 export default function ItemDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -75,7 +75,7 @@ export default function ItemDetailsScreen() {
    * blank gallery until an admin reviews it — the live item.photos is still
    * whatever was approved before (nothing, in the common case of a first
    * photo being added), and the actual new photo only exists in the pending
-   * revision. Per the client: this reads as broken, not as "under review" — the
+   * revision. Per Founder: this reads as broken, not as "under review" — the
    * vendor should see what they just submitted. Customers are unaffected,
    * since the storefront reads the live approved item directly, never this
    * screen's moderation state.

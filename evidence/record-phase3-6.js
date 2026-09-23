@@ -12,7 +12,7 @@
  * external link means anything. Each section leaves the state the next needs.
  *
  * Setup:
- *   cd platform-mobile/expo
+ *   cd this repo/expo
  *   cp .env.dev .env          # real platform-dev, not the emulator
  *   npx expo start --web
  *
@@ -29,14 +29,14 @@ const { chromium } = require(path.join(
   __dirname, "..", "..", "ajo-web", "node_modules", "playwright"
 ));
 
-const BASE_URL = process.env.THE PLATFORM_WEB_URL || "http://localhost:8081";
-const EMAIL = process.env.THE PLATFORM_VENDOR_EMAIL;
-const PASSWORD = process.env.THE PLATFORM_VENDOR_PASSWORD;
+const BASE_URL = process.env.PLATFORM_WEB_URL || "http://localhost:8081";
+const EMAIL = process.env.PLATFORM_VENDOR_EMAIL;
+const PASSWORD = process.env.PLATFORM_VENDOR_PASSWORD;
 const OUT = path.join(__dirname, "phase3-6");
 
 if (!EMAIL || !PASSWORD) {
   console.error(
-    "Set THE PLATFORM_VENDOR_EMAIL and THE PLATFORM_VENDOR_PASSWORD to a real platform-dev vendor.\n" +
+    "Set PLATFORM_VENDOR_EMAIL and PLATFORM_VENDOR_PASSWORD to a real platform-dev vendor.\n" +
     "They are read from the environment so no account details end up in the repo."
   );
   process.exit(1);

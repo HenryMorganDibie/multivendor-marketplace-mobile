@@ -6,7 +6,7 @@ import { CUSTOMER_AI_MONTHLY_LIMIT } from '@/utils/platformAiLimits';
 import { useAuth } from './AuthContext';
 
 /**
- * Customer-side the platform AI reply usage tracking — counts AI replies per
+ * Customer-side Platform AI reply usage tracking — counts AI replies per
  * customer per vendor per calendar month. The backend will own this as a
  * `customerAiUsage/{customerId}/{vendorId}` document with a monthly counter
  * (Henry's Firestore doc). This context is the local stand-in and is shaped

@@ -1,9 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '@/data/api';
 import type { CreateOrderPayload } from '@/types/domain';
+import type { OrderStatus } from '@/mocks/ordersData';
 import { useOrders as useOrdersContext } from '@/contexts/OrdersContext';
 import { useInbox } from '@/contexts/InboxContext';
 import { useChats } from '@/contexts/ChatContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { fetchLatestStatusReason } from '@/lib/orders/fetchLatestStatusReason';
 
 export function useVendor(username: string) {
   return useQuery({
@@ -101,14 +104,18 @@ export function useSubmitOrder() {
 }
 
 export function useAcceptOrder() {
-  const { updateOrderStatus, getOrder } = useOrdersContext();
+  const { applyConfirmedStatus, isDemoOrderAccount, getOrder } = useOrdersContext();
+  const { user } = useAuth();
   const { getOrCreateConversation, convertInboxToOrder } = useInbox();
   const { convertToOrderChat } = useChats();
   return useMutation({
-    mutationFn: (orderId: string) => api.acceptOrder(orderId),
+    mutationFn: (orderId: string) =>
+      isDemoOrderAccount(user?.id)
+        ? Promise.resolve({ orderId, newStatus: 'accepted' as const })
+        : api.acceptOrder(orderId),
     onSuccess: (data, orderId) => {
       console.log('[hooks] acceptOrder success:', data.orderId);
-      updateOrderStatus(data.orderId, data.newStatus);
+      applyConfirmedStatus(data.orderId, data.newStatus);
 
       const order = getOrder(orderId);
       if (order) {
@@ -164,13 +171,16 @@ export function useAcceptOrder() {
 }
 
 export function useRejectOrder() {
-  const { updateOrderStatus } = useOrdersContext();
+  const { applyConfirmedStatus, isDemoOrderAccount } = useOrdersContext();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: ({ orderId, reason }: { orderId: string; reason?: string }) =>
-      api.rejectOrder(orderId, reason),
+      isDemoOrderAccount(user?.id)
+        ? Promise.resolve({ orderId, newStatus: 'rejected' as const, reason })
+        : api.rejectOrder(orderId, reason),
     onSuccess: (data) => {
       console.log('[hooks] rejectOrder success:', data.orderId);
-      updateOrderStatus(data.orderId, data.newStatus, data.reason);
+      applyConfirmedStatus(data.orderId, data.newStatus, data.reason);
     },
     onError: (error) => {
       console.error('[hooks] rejectOrder failed:', error);
@@ -193,12 +203,16 @@ export function useMarkOrderPaid() {
 }
 
 export function useMarkInProgress() {
-  const { updateOrderStatus } = useOrdersContext();
+  const { applyConfirmedStatus, isDemoOrderAccount } = useOrdersContext();
+  const { user } = useAuth();
   return useMutation({
-    mutationFn: (orderId: string) => api.markInProgress(orderId),
+    mutationFn: (orderId: string) =>
+      isDemoOrderAccount(user?.id)
+        ? Promise.resolve({ orderId, newStatus: 'in_progress' as const })
+        : api.markInProgress(orderId),
     onSuccess: (data) => {
       console.log('[hooks] markInProgress success:', data.orderId);
-      updateOrderStatus(data.orderId, data.newStatus);
+      applyConfirmedStatus(data.orderId, data.newStatus);
     },
     onError: (error) => {
       console.error('[hooks] markInProgress failed:', error);
@@ -207,12 +221,16 @@ export function useMarkInProgress() {
 }
 
 export function useCompleteOrder() {
-  const { updateOrderStatus } = useOrdersContext();
+  const { applyConfirmedStatus, isDemoOrderAccount } = useOrdersContext();
+  const { user } = useAuth();
   return useMutation({
-    mutationFn: (orderId: string) => api.completeOrder(orderId),
+    mutationFn: (orderId: string) =>
+      isDemoOrderAccount(user?.id)
+        ? Promise.resolve({ orderId, newStatus: 'completed' as const })
+        : api.completeOrder(orderId),
     onSuccess: (data) => {
       console.log('[hooks] completeOrder success:', data.orderId);
-      updateOrderStatus(data.orderId, data.newStatus);
+      applyConfirmedStatus(data.orderId, data.newStatus);
     },
     onError: (error) => {
       console.error('[hooks] completeOrder failed:', error);
@@ -221,16 +239,55 @@ export function useCompleteOrder() {
 }
 
 export function useCancelOrder() {
-  const { updateOrderStatus } = useOrdersContext();
+  const { applyConfirmedStatus, isDemoOrderAccount } = useOrdersContext();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: ({ orderId, reason, reasonCode, reasonText }: { orderId: string; reason?: string; reasonCode?: string; reasonText?: string }) =>
-      api.cancelOrder(orderId, reason, reasonCode, reasonText),
+      isDemoOrderAccount(user?.id)
+        ? Promise.resolve({ orderId, newStatus: 'cancelled' as const, reason, reasonCode, reasonText })
+        : api.cancelOrder(orderId, reason, reasonCode, reasonText),
     onSuccess: (data) => {
       console.log('[hooks] cancelOrder success:', data.orderId);
-      updateOrderStatus(data.orderId, data.newStatus, data.reason, data.reasonCode, data.reasonText);
+      applyConfirmedStatus(data.orderId, data.newStatus, data.reason, data.reasonCode, data.reasonText);
     },
     onError: (error) => {
       console.error('[hooks] cancelOrder failed:', error);
     },
+  });
+}
+
+/**
+ * The durable rejection/cancellation reason for one order, sourced from the
+ * backend's order-events subcollection rather than any locally-decorated
+ * field -- mapOrderDoc never maps rejectionReason/cancellationReason* (no
+ * such field exists on the order document), so a value set only in local
+ * state is wiped by the very next Firestore snapshot for this or any
+ * sibling order under the same query. This re-derives it independently of
+ * OrdersContext's listener, from data that is already durably persisted and
+ * already readable under current Firestore rules.
+ *
+ * Scoped by uid in the query key because the app's single, process-lifetime
+ * QueryClient is never cleared on logout -- without this, a cached result
+ * could otherwise be served across an account switch in the same session.
+ *
+ * staleTime/gcTime: Infinity because the source event is for a terminal
+ * order status; nothing can ever change it again (see
+ * fetchLatestStatusReason's determinism note), so there is nothing to gain
+ * from ever refetching within the same app process.
+ */
+export function useOrderStatusReason(orderId: string | undefined, status: OrderStatus | undefined) {
+  const { user } = useAuth();
+  const { isDemoOrderAccount } = useOrdersContext();
+  const isTerminalReasonStatus = status === 'rejected' || status === 'cancelled';
+  const uid = user?.id;
+
+  return useQuery({
+    queryKey: ['orderStatusReason', uid, orderId],
+    queryFn: () => fetchLatestStatusReason(orderId as string, status as 'rejected' | 'cancelled'),
+    // Demo orders have no backend document to read events from -- skip the
+    // query outright rather than let it run and return nothing.
+    enabled: !!uid && !isDemoOrderAccount(uid) && !!orderId && isTerminalReasonStatus,
+    staleTime: Infinity,
+    gcTime: Infinity,
   });
 }

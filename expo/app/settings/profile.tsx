@@ -9,14 +9,19 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, Camera, Lock, Info, Mail, Phone } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '@/contexts/AuthContext';
 import LaektivaModal from '@/components/LaektivaModal';
 import PhotoActionSheet from '@/components/PhotoActionSheet';
 import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
+import { uploadProfilePhoto } from '@/lib/settings/uploadProfilePhoto';
+import { Alert } from '@/utils/alert';
 
 const FIRST_NAME_REGEX = /^[A-Za-z]{2,20}$/;
 const LAST_INITIAL_REGEX = /^[A-Za-z]{1}$/;
@@ -43,6 +48,7 @@ export default function ProfileScreen() {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [showPhotoSheet, setShowPhotoSheet] = useState<boolean>(false);
   const [showRemovePhotoModal, setShowRemovePhotoModal] = useState<boolean>(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
   const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
   const [firstNameError, setFirstNameError] = useState<string>('');
   const [lastInitialError, setLastInitialError] = useState<string>('');
@@ -151,10 +157,59 @@ export default function ProfileScreen() {
     setShowRemovePhotoModal(true);
   }, []);
 
-  const handleConfirmRemovePhoto = useCallback(() => {
-    console.log('Photo removed');
+  const handleConfirmRemovePhoto = useCallback(async () => {
     setShowRemovePhotoModal(false);
-  }, []);
+    try {
+      await updateUserProfile({ photoUrl: '' });
+    } catch (error) {
+      console.error('[Profile] Failed to remove photo:', error);
+      Alert.alert('Something went wrong', 'Could not remove your photo. Please try again.');
+    }
+  }, [updateUserProfile]);
+
+  /**
+   * Take Photo / Choose Photo previously just closed the sheet and logged
+   * to the console — no camera, no library, no upload, no Firestore write.
+   * Mirrors uploadStorefrontImage's already-working pattern: pick, upload
+   * to the real Storage path (users/{uid}, deployed since Milestone 1 with
+   * nothing writing to it), then persist the download URL.
+   */
+  const handlePickPhoto = useCallback(async (source: 'camera' | 'library') => {
+    setShowPhotoSheet(false);
+    try {
+      const permission = source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Photo access needed',
+          `Allow ${source === 'camera' ? 'camera' : 'photo library'} access in Settings to update your photo.`,
+        );
+        return;
+      }
+
+      const pickerOptions: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      };
+      const result = source === 'camera'
+        ? await ImagePicker.launchCameraAsync(pickerOptions)
+        : await ImagePicker.launchImageLibraryAsync(pickerOptions);
+      if (result.canceled || !result.assets?.length) return;
+
+      setIsUploadingPhoto(true);
+      const url = await uploadProfilePhoto(result.assets[0].uri);
+      await updateUserProfile({ photoUrl: url });
+    } catch (error) {
+      console.error('[Profile] Photo upload failed:', error);
+      const message = error instanceof Error ? error.message : 'Please try again.';
+      Alert.alert('Upload failed', message);
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  }, [updateUserProfile]);
 
   return (
     <KeyboardAvoidingView
@@ -185,9 +240,17 @@ export default function ProfileScreen() {
           testID="profile-avatar"
         >
           <View style={styles.avatarRing}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initials || 'U'}</Text>
-            </View>
+            {isUploadingPhoto ? (
+              <View style={styles.avatar}>
+                <ActivityIndicator color={Colors.white} />
+              </View>
+            ) : user?.photoUrl ? (
+              <Image source={{ uri: user.photoUrl }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{initials || 'U'}</Text>
+              </View>
+            )}
             <View style={styles.cameraBadge}>
               <Camera size={12} color={Colors.white} strokeWidth={2.5} />
             </View>
@@ -370,8 +433,8 @@ export default function ProfileScreen() {
       {/* Photo Action Sheet */}
       <PhotoActionSheet
         visible={showPhotoSheet}
-        onTakePhoto={() => { setShowPhotoSheet(false); console.log('Take photo'); }}
-        onChoosePhoto={() => { setShowPhotoSheet(false); console.log('Choose photo'); }}
+        onTakePhoto={() => { void handlePickPhoto('camera'); }}
+        onChoosePhoto={() => { void handlePickPhoto('library'); }}
         onRemovePhoto={handleRemovePhoto}
         onCancel={() => setShowPhotoSheet(false)}
       />

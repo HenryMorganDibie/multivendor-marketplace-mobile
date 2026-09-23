@@ -33,7 +33,7 @@ export const CHAT_BANNERS = {
   vendorSuspended: 'This vendor is temporarily unavailable.',
   vendorUnavailable: 'This vendor is currently unavailable.',
   vendorUnderReview:
-    'This order is temporarily under review.\nThe vendor is currently unavailable. the platform support has been notified.',
+    'This order is temporarily under review.\nThe vendor is currently unavailable. Platform support has been notified.',
   limitedClarifications: 'This vendor accepts messages for order clarifications only.',
   businessHoursHint: 'Vendor may respond during business hours.',
   conversationExpired:

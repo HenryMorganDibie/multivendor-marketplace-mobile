@@ -25,6 +25,54 @@ const BACKEND_TO_APP_STATUS: Record<string, ModerationStatus> = {
   flagged: 'rejected',
 };
 
+/**
+ * Add-on groups use a genuinely different field vocabulary on each side —
+ * heading/isRequired/selectionType/price here vs. name/required/multiSelect/
+ * priceModifier on the backend — and CatalogContext used to forward the app
+ * shape to the backend verbatim. The backend's own validation rejects that
+ * immediately ("Every add-on group needs a name") since it never receives
+ * `name`, so no item with an add-on group could ever be saved. These two
+ * functions are the translation boundary that was missing.
+ *
+ * Per-option `isAvailable` has no backend field — nothing in the app
+ * actually exposes a way to set an option unavailable after creation (it's
+ * only ever defaulted to true), so round-tripping it as always-true loses
+ * no real vendor-set state.
+ */
+function mapAddOnGroupsToBackend(groups: AddOnGroup[]): Record<string, unknown>[] {
+  return groups.map((group) => ({
+    groupId: group.id,
+    name: group.heading,
+    subheading: group.subheading || undefined,
+    required: group.isRequired,
+    multiSelect: group.selectionType === 'checkbox',
+    options: group.options.map((option) => ({
+      optionId: option.id,
+      name: option.name,
+      priceModifier: option.price ?? 0,
+    })),
+  }));
+}
+
+function mapAddOnGroupsFromBackend(raw: unknown): AddOnGroup[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((g: Record<string, unknown>) => ({
+    id: (g.groupId as string) ?? '',
+    heading: (g.name as string) ?? '',
+    subheading: (g.subheading as string | undefined) ?? undefined,
+    selectionType: g.multiSelect ? 'checkbox' : 'radio',
+    isRequired: Boolean(g.required),
+    options: Array.isArray(g.options)
+      ? (g.options as Record<string, unknown>[]).map((o) => ({
+          id: (o.optionId as string) ?? '',
+          name: (o.name as string) ?? '',
+          price: (o.priceModifier as number | undefined) ?? undefined,
+          isAvailable: true,
+        }))
+      : [],
+  }));
+}
+
 export function fromBackendItem(docId: string, d: Record<string, unknown>): CatalogItem {
   return {
     id: (d.itemId as string) ?? docId,
@@ -39,7 +87,7 @@ export function fromBackendItem(docId: string, d: Record<string, unknown>): Cata
     isOutOfStock: Boolean(d.isOutOfStock),
     isFeatured: Boolean(d.isFeatured),
     categoryId: (d.categoryId as string | null) ?? UNCATEGORIZED_ID,
-    addOnGroups: Array.isArray(d.addOnGroups) ? (d.addOnGroups as CatalogItem['addOnGroups']) : [],
+    addOnGroups: mapAddOnGroupsFromBackend(d.addOnGroups),
     moderationStatus: BACKEND_TO_APP_STATUS[(d.moderationStatus as string) ?? 'pending'] ?? 'pending_review',
     trackInventory: Boolean(d.trackInventory),
     inventoryQuantity: (d.inventoryQuantity as number | undefined) ?? undefined,
@@ -67,7 +115,7 @@ function toBackendPayload(item: Omit<CatalogItem, 'id'>): Record<string, unknown
     trackInventory: item.trackInventory,
     inventoryQuantity: item.inventoryQuantity ?? 0,
     lowStockThreshold: item.lowStockThreshold ?? null,
-    addOnGroups: item.addOnGroups,
+    addOnGroups: mapAddOnGroupsToBackend(item.addOnGroups),
   };
 }
 
@@ -143,11 +191,12 @@ interface CatalogContextValue {
   categories: Category[];
   items: CatalogItem[];
   addCategory: (name: string) => Promise<void>;
-  updateCategory: (id: string, name: string) => void;
+  updateCategory: (id: string, name: string) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
   reorderCategories: (newOrder: Category[]) => void;
   addItem: (item: Omit<CatalogItem, 'id' | 'moderationStatus'>) => void;
   updateItem: (id: string, item: Omit<CatalogItem, 'id' | 'moderationStatus'>) => Promise<{ pendingRevision?: boolean }>;
+  toggleItemHidden: (id: string, isHidden: boolean) => Promise<void>;
   deleteItem: (id: string) => void;
   getItemsByCategory: (categoryId: string) => CatalogItem[];
   getCategoryById: (id: string) => Category | undefined;
@@ -429,10 +478,24 @@ export function CatalogProvider({ children }: { children: React.ReactNode }) {
     }
   }, [categories.length]);
 
-  const updateCategory = useCallback((id: string, name: string) => {
-    setCategories((prev) =>
-      prev.map((cat) => (cat.id === id && !cat.isSystem ? { ...cat, name } : cat))
-    );
+  /**
+   * Renames the category on the backend, same pattern as addCategory/
+   * deleteCategory above. This used to be a pure local setState with no
+   * backend call at all — the rename appeared to take immediately, then
+   * silently reverted on the next categories snapshot (which fires on
+   * essentially any catalog write), since nothing was ever persisted.
+   *
+   * No optimistic local rename: the categories listener above picks up the
+   * real document the moment Firestore commits it.
+   */
+  const updateCategory = useCallback(async (id: string, name: string) => {
+    try {
+      const update = callable<{ categoryId: string; name: string }, { success: true }>('updateCatalogCategory');
+      await update({ categoryId: id, name });
+    } catch (err) {
+      console.error('[Catalog] updateCatalogCategory failed:', err);
+      throw err;
+    }
   }, []);
 
   /**
@@ -497,6 +560,26 @@ export function CatalogProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  /**
+   * A pure trading-control flip (Hide/Show) must never re-trigger moderation
+   * review — updateCatalogItem treats a material field's mere *presence* in
+   * the request as a change, regardless of whether its value actually moved,
+   * so calling updateItem with a full spread of the existing item (which
+   * always includes name/description/basePrice/etc.) generated a bogus
+   * pending-revision on every single toggle. Sending only isHidden avoids
+   * that entirely — isHidden is already an operational (non-material) field
+   * on the backend.
+   */
+  const toggleItemHidden = useCallback(async (id: string, isHidden: boolean) => {
+    try {
+      const update = callable<Record<string, unknown>, { success: true; pendingRevision?: boolean }>('updateCatalogItem');
+      await update({ itemId: id, isHidden });
+    } catch (err) {
+      console.error('[Catalog] toggleItemHidden failed:', err);
+      throw err;
+    }
+  }, []);
+
   const deleteItem = useCallback(async (id: string) => {
     try {
       const remove = callable<{ itemId: string }, { success: true }>('deleteCatalogItem');
@@ -539,11 +622,12 @@ export function CatalogProvider({ children }: { children: React.ReactNode }) {
     reorderCategories,
     addItem,
     updateItem,
+    toggleItemHidden,
     deleteItem,
     getItemsByCategory,
     getCategoryById,
     getItemById,
-  }), [categories, items, addCategory, updateCategory, deleteCategory, reorderCategories, addItem, updateItem, deleteItem, getItemsByCategory, getCategoryById, getItemById]);
+  }), [categories, items, addCategory, updateCategory, deleteCategory, reorderCategories, addItem, updateItem, toggleItemHidden, deleteItem, getItemsByCategory, getCategoryById, getItemById]);
 
   return (
     <CatalogContext.Provider value={value}>

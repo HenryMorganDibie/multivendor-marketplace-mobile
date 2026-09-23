@@ -123,7 +123,7 @@ const buildMainOptions = (vendorName: string): MainOption[] => [
   {
     id: 'payment_confirmation',
     label: 'Payment confirmation issue',
-    intro: `Payments are confirmed directly by vendors — the platform doesn't process or hold payments. What's the issue?`,
+    intro: `Payments are confirmed directly by vendors — Platform doesn't process or hold payments. What's the issue?`,
     subs: [
       {
         id: 'no_confirmation',
@@ -140,7 +140,7 @@ const buildMainOptions = (vendorName: string): MainOption[] => [
       {
         id: 'vendor_no_payment',
         label: 'Vendor says payment not received',
-        response: `Check your payment proof in Order Details. Share the receipt or screenshot directly with ${vendorName} via chat. the platform doesn't verify or hold payments.`,
+        response: `Check your payment proof in Order Details. Share the receipt or screenshot directly with ${vendorName} via chat. Platform doesn't verify or hold payments.`,
         actions: [MSG_VENDOR, VIEW_ORDER, BACK_MAIN],
       },
       {
@@ -240,24 +240,24 @@ const buildMainOptions = (vendorName: string): MainOption[] => [
   {
     id: 'safety_concern',
     label: 'Safety concern',
-    intro: `Your safety matters. These concerns may be reviewed by theplatform. What are you experiencing?`,
+    intro: `Your safety matters. These concerns may be reviewed by Platform. What are you experiencing?`,
     subs: [
       {
         id: 'suspicious_payment',
         label: 'Suspicious payment request',
-        response: `Never pay outside an agreed method or send money to unverified accounts. Report this vendor immediately — the platform may review safety-related reports.`,
+        response: `Never pay outside an agreed method or send money to unverified accounts. Report this vendor immediately — Platform may review safety-related reports.`,
         actions: [REPORT_VENDOR, BACK_MAIN],
       },
       {
         id: 'fake_vendor',
         label: 'Fake vendor concern',
-        response: `If you suspect this vendor isn't legitimate, report them now. the platform may investigate fake business reports.`,
+        response: `If you suspect this vendor isn't legitimate, report them now. Platform may investigate fake business reports.`,
         actions: [REPORT_VENDOR, BACK_MAIN],
       },
       {
         id: 'harassment',
         label: 'Harassment or abusive behavior',
-        response: `This is taken seriously. Report the vendor from their profile — the platform may review reports of harassment or abusive conduct.`,
+        response: `This is taken seriously. Report the vendor from their profile — Platform may review reports of harassment or abusive conduct.`,
         actions: [REPORT_VENDOR, BACK_MAIN],
       },
       {
@@ -269,13 +269,13 @@ const buildMainOptions = (vendorName: string): MainOption[] => [
       {
         id: 'scam',
         label: 'I think this is a scam',
-        response: `Thanks for flagging this. Do not make any further payments. Report this vendor — the platform may review scam and fraud reports immediately.`,
+        response: `Thanks for flagging this. Do not make any further payments. Report this vendor — Platform may review scam and fraud reports immediately.`,
         actions: [REPORT_VENDOR, BACK_MAIN],
       },
       {
-        id: 'report_Platform',
-        label: 'Report vendor to the platform',
-        response: `Tap "Report Vendor" below. the platform reviews safety-related reports including fraud, scams, and abuse. Normal order disputes are not escalated to human support.`,
+        id: 'report_platform',
+        label: 'Report vendor to Platform',
+        response: `Tap "Report Vendor" below. Platform reviews safety-related reports including fraud, scams, and abuse. Normal order disputes are not escalated to human support.`,
         actions: [REPORT_VENDOR, BACK_MAIN],
       },
     ],
@@ -288,7 +288,7 @@ const buildMainOptions = (vendorName: string): MainOption[] => [
       {
         id: 'technical',
         label: 'Technical issue',
-        response: `If you're having a technical problem with the app, try restarting it. If the issue persists, contact the platform support with a description of what happened.`,
+        response: `If you're having a technical problem with the app, try restarting it. If the issue persists, contact Platform support with a description of what happened.`,
         actions: [BACK_MAIN],
       },
       {
@@ -300,7 +300,7 @@ const buildMainOptions = (vendorName: string): MainOption[] => [
       {
         id: 'app_issue',
         label: 'App issue',
-        response: `For app-level issues, restarting usually helps. If the problem continues, try updating the app or reaching out to the platform support.`,
+        response: `For app-level issues, restarting usually helps. If the problem continues, try updating the app or reaching out to Platform support.`,
         actions: [BACK_MAIN],
       },
       {

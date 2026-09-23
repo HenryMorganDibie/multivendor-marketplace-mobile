@@ -1,13 +1,13 @@
 import { Platform, StyleSheet, TextStyle } from 'react-native';
 
 /**
- * the platform Design Tokens — 2026 Premium Marketplace System
+ * Platform Design Tokens — 2026 Premium Marketplace System
  *
  * Inspired by UberEats, DoorDash, Shopify, Apple HIG.
  * All legacy keys are preserved for backwards compatibility.
  */
 
-export const platformColors = {
+export const PlatformColors = {
   // Brand
   primary: '#FF7A28',
   primarySoft: 'rgba(255,122,40,0.10)',
@@ -139,73 +139,73 @@ export const Typography: Record<string, TextStyle> = {
   displayHero: {
     fontSize: 34,
     fontWeight: '800',
-    color: platformColors.textPrimary,
+    color: PlatformColors.textPrimary,
     letterSpacing: -0.8,
     lineHeight: 40,
   },
   displayTitle: {
     fontSize: 30,
     fontWeight: '800',
-    color: platformColors.textPrimary,
+    color: PlatformColors.textPrimary,
     letterSpacing: -0.6,
     lineHeight: 36,
   },
   pageTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: platformColors.textPrimary,
+    color: PlatformColors.textPrimary,
     letterSpacing: -0.4,
     lineHeight: 30,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: platformColors.textPrimary,
+    color: PlatformColors.textPrimary,
     letterSpacing: -0.2,
     lineHeight: 24,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: platformColors.textPrimary,
+    color: PlatformColors.textPrimary,
     letterSpacing: -0.1,
     lineHeight: 22,
   },
   body: {
     fontSize: 15,
     fontWeight: '400',
-    color: platformColors.textPrimary,
+    color: PlatformColors.textPrimary,
     lineHeight: 22,
   },
   bodyStrong: {
     fontSize: 15,
     fontWeight: '600',
-    color: platformColors.textPrimary,
+    color: PlatformColors.textPrimary,
     lineHeight: 22,
     letterSpacing: -0.1,
   },
   smallText: {
     fontSize: 13,
     fontWeight: '400',
-    color: platformColors.textSecondary,
+    color: PlatformColors.textSecondary,
     lineHeight: 18,
   },
   smallStrong: {
     fontSize: 13,
     fontWeight: '600',
-    color: platformColors.textPrimary,
+    color: PlatformColors.textPrimary,
     lineHeight: 18,
   },
   caption: {
     fontSize: 12,
     fontWeight: '500',
-    color: platformColors.textTertiary,
+    color: PlatformColors.textTertiary,
     lineHeight: 16,
   },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: platformColors.textSecondary,
+    color: PlatformColors.textSecondary,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
@@ -253,7 +253,7 @@ export const Hairline = StyleSheet.hairlineWidth;
 
 export const ButtonStyles = StyleSheet.create({
   primary: {
-    backgroundColor: platformColors.primary,
+    backgroundColor: PlatformColors.primary,
     height: 52,
     borderRadius: Radii.button,
     alignItems: 'center',
@@ -261,20 +261,20 @@ export const ButtonStyles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   primaryDisabled: {
-    backgroundColor: platformColors.primaryDisabled,
+    backgroundColor: PlatformColors.primaryDisabled,
   },
   primaryText: {
     fontSize: 16,
     fontWeight: '700',
-    color: platformColors.white,
+    color: PlatformColors.white,
     letterSpacing: -0.1,
   },
   secondary: {
-    backgroundColor: platformColors.white,
+    backgroundColor: PlatformColors.white,
     height: 52,
     borderRadius: Radii.button,
     borderWidth: 1,
-    borderColor: platformColors.borderStrong,
+    borderColor: PlatformColors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
@@ -282,11 +282,11 @@ export const ButtonStyles = StyleSheet.create({
   secondaryText: {
     fontSize: 16,
     fontWeight: '600',
-    color: platformColors.charcoal,
+    color: PlatformColors.charcoal,
     letterSpacing: -0.1,
   },
   surface: {
-    backgroundColor: platformColors.surface,
+    backgroundColor: PlatformColors.surface,
     height: 46,
     borderRadius: Radii.button,
     alignItems: 'center',
@@ -296,7 +296,7 @@ export const ButtonStyles = StyleSheet.create({
   surfaceText: {
     fontSize: 15,
     fontWeight: '600',
-    color: platformColors.charcoal,
+    color: PlatformColors.charcoal,
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -309,27 +309,27 @@ export const ButtonStyles = StyleSheet.create({
   ghostText: {
     fontSize: 15,
     fontWeight: '600',
-    color: platformColors.primary,
+    color: PlatformColors.primary,
   },
 });
 
 export const CardStyles = StyleSheet.create({
   base: {
-    backgroundColor: platformColors.white,
+    backgroundColor: PlatformColors.white,
     borderWidth: 1,
-    borderColor: platformColors.border,
+    borderColor: PlatformColors.border,
     borderRadius: Radii.card,
     padding: 18,
   },
   surface: {
-    backgroundColor: platformColors.white,
+    backgroundColor: PlatformColors.white,
     borderWidth: 1,
-    borderColor: platformColors.border,
+    borderColor: PlatformColors.border,
     borderRadius: Radii.card,
     padding: 18,
   },
   elevated: {
-    backgroundColor: platformColors.white,
+    backgroundColor: PlatformColors.white,
     borderRadius: Radii.cardLarge,
     padding: 18,
     ...(Shadows.sm as object),
@@ -338,21 +338,21 @@ export const CardStyles = StyleSheet.create({
 
 export const InputStyles = StyleSheet.create({
   base: {
-    backgroundColor: platformColors.surface,
+    backgroundColor: PlatformColors.surface,
     borderWidth: 1,
     borderColor: 'transparent',
     borderRadius: Radii.input,
     paddingVertical: 15,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: platformColors.textPrimary,
+    color: PlatformColors.textPrimary,
   },
   focused: {
-    borderColor: platformColors.primary,
-    backgroundColor: platformColors.white,
+    borderColor: PlatformColors.primary,
+    backgroundColor: PlatformColors.white,
   },
   error: {
-    borderColor: platformColors.error,
+    borderColor: PlatformColors.error,
   },
 });
 
@@ -364,7 +364,7 @@ export const PillStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: Radii.pill,
-    backgroundColor: platformColors.surface,
+    backgroundColor: PlatformColors.surface,
     borderWidth: 1,
     borderColor: 'transparent',
     flexDirection: 'row',
@@ -372,16 +372,16 @@ export const PillStyles = StyleSheet.create({
     gap: 6,
   },
   active: {
-    backgroundColor: platformColors.charcoal,
-    borderColor: platformColors.charcoal,
+    backgroundColor: PlatformColors.charcoal,
+    borderColor: PlatformColors.charcoal,
   },
   baseText: {
     fontSize: 14,
     fontWeight: '600',
-    color: platformColors.textPrimary,
+    color: PlatformColors.textPrimary,
     letterSpacing: -0.1,
   },
   activeText: {
-    color: platformColors.white,
+    color: PlatformColors.white,
   },
 });

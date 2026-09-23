@@ -80,7 +80,7 @@ const FILTER_STATUS_OPTIONS: { key: FilterStatus; label: string }[] = [
 
 const FILTER_CUSTOMER_OPTIONS: { key: FilterCustomerType; label: string }[] = [
   { key: 'all', label: 'All customers' },
-  { key: 'the platform', label: 'Internal' },
+  { key: 'platform', label: 'Internal' },
   { key: 'external', label: 'External' },
 ];
 
@@ -343,7 +343,7 @@ function SwipeableInvoiceCard({
 
   const ledger = ledgerFor(invoice.id);
   const status = getCardStatusConfig(invoice, ledger);
-  // Privacy: internal the platform customers always render as "First L."; external
+  // Privacy: internal Platform customers always render as "First L."; external
   // customers use the vendor-typed display name verbatim. Never the full surname.
   const customerLabel = formatInvoiceCustomerName(invoice.customerName, invoice.customerSource);
   const sourceLabel: string = invoice.customerSource === 'external' ? 'External' : 'Internal';
@@ -515,7 +515,7 @@ export default function InvoicesScreen() {
       }
     }
     if (filters.customerType !== 'all') {
-      list = list.filter((i) => (i.customerSource ?? 'the platform') === filters.customerType);
+      list = list.filter((i) => (i.customerSource ?? 'platform') === filters.customerType);
     }
     if (filters.dateRange !== 'all' && filters.dateRange !== 'custom') {
       list = list.filter((i) => isWithinRange(i.createdAt, filters.dateRange));

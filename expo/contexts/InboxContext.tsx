@@ -42,6 +42,11 @@ function seedFor(accountId: string | undefined, demoId: string, seed: InboxSnaps
   return DEMO_INBOX_ACCOUNTS[accountId] === demoId ? seed : [];
 }
 
+/** Whether accountId is one of the built-in demo/local-test logins. */
+export function isDemoInboxAccount(accountId: string | undefined): boolean {
+  return !!accountId && accountId in DEMO_INBOX_ACCOUNTS;
+}
+
 /**
  * Derive a list-friendly preview text from the most recent visible message
  * in a chat. Mirrors the logic used by the chat list rows so previews stay
@@ -52,7 +57,7 @@ function previewFromMessage(m: ChatMessage | undefined): string {
   if (m.type === 'system') return m.content;
   if (m.type === 'payment-request') return '💳 Payment request';
   if (m.type === 'contact-card') return '📇 Contact details shared';
-  if (m.type === 'catalog_item') return `📦 ${m.catalogItemData?.name ?? 'Catalog item'}`;
+  if (m.type === 'catalog_item') return m.catalogItemData?.name ?? 'Catalog item';
   return m.content;
 }
 
@@ -75,6 +80,12 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
     seedFor(accountId, MOCK_VENDOR_ID, mockVendorInbox));
   const [customerPage, setCustomerPage] = useState(1);
   const [vendorPage, setVendorPage] = useState(1);
+  // Demo accounts are seeded synchronously above, so they're always
+  // "hydrated." A real account starts un-hydrated until chatService reports
+  // its first backend snapshot (or a cold-start failure) for this identity.
+  const [isInboxHydrated, setIsInboxHydrated] = useState<boolean>(() =>
+    isDemoInboxAccount(accountId) ? true : chatService.isBackendHydrated());
+  const [hasInboxHydrationError, setHasInboxHydrationError] = useState<boolean>(false);
 
   // The subscribeAll effect below registers once (empty deps) so it never
   // resubscribes, but `user` resolves asynchronously after mount (auth state
@@ -89,6 +100,41 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
   useEffect(() => {
     userRef.current = user;
   }, [user]);
+
+  /**
+   * Readiness/error tracking for a real account, sourced from chatService's
+   * module-level hydration flags rather than a Context — ChatProvider (the
+   * descendant that actually runs the Firestore listener via
+   * useBackendChats) can't be consumed by InboxProvider, its ancestor.
+   * Re-registers on every identity change so this never reads a stale
+   * accountId in its closure; the returned cleanup unsubscribes the old
+   * listener before a new one is created, so switching accounts can never
+   * leave two of these subscribed at once.
+   */
+  useEffect(() => {
+    if (isDemoInboxAccount(accountId)) {
+      setIsInboxHydrated(true);
+      setHasInboxHydrationError(false);
+      return;
+    }
+
+    // Redundant with useBackendChats.ts's own resetBackendHydration call on
+    // the same auth transition, deliberately — resetBackendHydration is
+    // idempotent, and calling it here too guarantees this effect never
+    // reads a stale snapshot left over from the previous identity,
+    // regardless of which of the two auth-change effects happens to fire
+    // first.
+    chatService.resetBackendHydration();
+
+    const recompute = () => {
+      setIsInboxHydrated(chatService.isBackendHydrated());
+      setHasInboxHydrationError(chatService.isBackendHydrationError());
+    };
+
+    recompute();
+    const unsub = chatService.subscribeAll(recompute);
+    return unsub;
+  }, [accountId]);
 
   // Auth resolves after first render, and the signed-in account can change
   // without the provider unmounting (log out, register, log back in), so the
@@ -136,7 +182,87 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
           ? chat.vendorId
           : m.sender;
 
+      // Only a well-formed commerce conversation can be reconciled by
+      // (vendorId, customerId) pair — a malformed chat missing either id
+      // must never be pair-matched against anything, including another
+      // malformed chat, so it falls through to the plain chatId-only path
+      // below unchanged.
+      const canReconcileByPair =
+        (chat.chatType === 'pre_order_inquiry' || chat.chatType === 'order_chat') &&
+        !!chat.vendorId && !!chat.customerId;
+
+      // Captured once here, alongside `chat` itself, rather than read live
+      // from inside the updater below. A functional state updater's result
+      // must depend only on its arguments — reading chatService's mutable
+      // backendChatIds Set from inside the updater would make the result
+      // depend on whatever the Set holds whenever React actually calls the
+      // updater, which isn't guaranteed to be this exact moment (React can
+      // defer or batch it, or invoke it twice in development Strict Mode).
+      // Freezing the snapshot here removes that dependency.
+      const authoritativeIds = chatService.getBackendChatIdsSnapshot();
+
       const apply = (isVendorSide: boolean) => (prev: InboxSnapshot[]): InboxSnapshot[] => {
+        if (canReconcileByPair) {
+          const isSamePair = (item: InboxSnapshot) =>
+            item.vendorId === chat.vendorId && item.customerId === chat.customerId;
+          // Every existing row for this pair, not just the first — an
+          // inbox that already picked up a duplicate before this
+          // reconciliation existed needs to fully converge in one pass,
+          // not merely stop new duplicates from here on.
+          const samePairRows = prev.filter(isSamePair);
+          const existingAuthoritative = samePairRows.find((r) => authoritativeIds.has(r.chatId ?? ''));
+          const incomingIsAuthoritative = authoritativeIds.has(chat.id);
+
+          if (existingAuthoritative && !incomingIsAuthoritative && existingAuthoritative.chatId !== chat.id) {
+            // A non-authoritative notification (a local scaffold updating
+            // itself) can never override a pair's already-authoritative
+            // row — but any stray extra rows for the same pair still
+            // collapse down to that one winner.
+            if (samePairRows.length === 1) return prev;
+            return [...prev.filter((item) => !isSamePair(item)), existingAuthoritative];
+          }
+
+          if (samePairRows.length === 0 && isVendorSide !== (userRef.current?.role === 'vendor')) {
+            return prev;
+          }
+
+          const carryFrom = samePairRows.find((r) => r.chatId === chat.id) ?? existingAuthoritative ?? samePairRows[0];
+          if (
+            samePairRows.length === 1 &&
+            carryFrom?.chatId === chat.id &&
+            carryFrom.chatType === chat.chatType &&
+            carryFrom.lastMessageText === previewText &&
+            carryFrom.lastMessageAt === ts &&
+            carryFrom.lastSenderId === senderId
+          ) {
+            return prev;
+          }
+
+          // The incoming chat becomes the one surviving row for this pair,
+          // carrying over unreadCount from whichever row already tracked
+          // it rather than resetting it just because the winning chatId
+          // changed underneath it.
+          const winner: InboxSnapshot = {
+            conversationId: chat.id,
+            chatId: chat.id,
+            chatType: chat.chatType,
+            conversationType: conversationTypeFor(chat.chatType),
+            vendorId: chat.vendorId,
+            customerId: chat.customerId ?? '',
+            orderId: chat.orderId,
+            title: isVendorSide ? (chat.customerName ?? 'Customer') : chat.vendorName,
+            lastMessageText: previewText,
+            lastMessageType: m.type,
+            lastMessageAt: ts,
+            lastSenderId: senderId,
+            unreadCount: carryFrom?.unreadCount ?? 0,
+          };
+          return [...prev.filter((item) => !isSamePair(item)), winner];
+        }
+
+        // Fallback: the original chatId-only behavior, for malformed
+        // commerce chats missing vendorId/customerId and for any
+        // non-commerce chatType reaching this point.
         let found = false;
         let changed = false;
         const next = prev.map((item) => {
@@ -144,6 +270,7 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
           found = true;
           if (
             item.lastMessageText === previewText &&
+            item.lastMessageType === m.type &&
             item.lastMessageAt === ts &&
             item.lastSenderId === senderId
           ) {
@@ -153,6 +280,7 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
           return {
             ...item,
             lastMessageText: previewText,
+            lastMessageType: m.type,
             lastMessageAt: ts,
             lastSenderId: senderId,
           };
@@ -182,6 +310,7 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
           orderId: chat.orderId,
           title: isVendorSide ? (chat.customerName ?? 'Customer') : chat.vendorName,
           lastMessageText: previewText,
+          lastMessageType: m.type,
           lastMessageAt: ts,
           lastSenderId: senderId,
           unreadCount: 0,
@@ -443,6 +572,15 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
   return useMemo(() => ({
     customerInbox: pagedCustomerInbox,
     vendorInbox: pagedVendorInbox,
+    // Full, unpaged, already-sorted snapshots -- the same arrays the paged
+    // views above slice from. For a surface (Archived Chats) that needs to
+    // find a conversation regardless of where it falls in the live tabs'
+    // recency page, without touching customerPage/vendorPage or the live
+    // tabs' own pagination at all.
+    allCustomerInbox: sortedCustomerInbox,
+    allVendorInbox: sortedVendorInbox,
+    isInboxHydrated,
+    hasInboxHydrationError,
     hasMoreCustomer,
     hasMoreVendor,
     loadMoreCustomer,
@@ -458,5 +596,5 @@ export const [InboxProvider, useInbox] = createContextHook(() => {
     updateInboxAfterMessage,
     convertInboxToOrder,
     removeFromInbox,
-  }), [pagedCustomerInbox, pagedVendorInbox, hasMoreCustomer, hasMoreVendor, loadMoreCustomer, loadMoreVendor, markConversationRead, getCustomerUnreadCount, customerUnreadCount, getVendorUnreadCount, vendorUnreadCount, getFilteredCustomerInbox, getFilteredVendorInbox, getOrCreateConversation, updateInboxAfterMessage, convertInboxToOrder, removeFromInbox]);
+  }), [pagedCustomerInbox, pagedVendorInbox, sortedCustomerInbox, sortedVendorInbox, isInboxHydrated, hasInboxHydrationError, hasMoreCustomer, hasMoreVendor, loadMoreCustomer, loadMoreVendor, markConversationRead, getCustomerUnreadCount, customerUnreadCount, getVendorUnreadCount, vendorUnreadCount, getFilteredCustomerInbox, getFilteredVendorInbox, getOrCreateConversation, updateInboxAfterMessage, convertInboxToOrder, removeFromInbox]);
 });

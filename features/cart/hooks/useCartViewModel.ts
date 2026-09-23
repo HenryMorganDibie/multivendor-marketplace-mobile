@@ -330,7 +330,7 @@ export function useCartViewModel() {
       Alert.alert(
         'Ordering Unavailable',
         isComingSoon
-          ? `the platform is coming soon to ${countryName}. Ordering is not yet available.`
+          ? `Platform is coming soon to ${countryName}. Ordering is not yet available.`
           : `Ordering is not yet available in ${countryName}. Vendors are currently waitlisted.`,
         [{ text: 'OK' }]
       );

@@ -501,7 +501,7 @@ export default function AddItemScreen() {
                 <Text style={styles.toggleLabel}>Track quantity for this item?</Text>
                 <Text style={styles.toggleSubtext}>
                   Use inventory tracking only for items with a fixed quantity. Turn this on if
-                  the platform should reduce the available quantity as orders are accepted.
+                  Platform should reduce the available quantity as orders are accepted.
                 </Text>
               </View>
               <Switch

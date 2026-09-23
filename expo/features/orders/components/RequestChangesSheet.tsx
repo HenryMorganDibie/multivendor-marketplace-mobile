@@ -40,7 +40,7 @@ interface RequestChangesSheetProps {
     issueType: ChangeRequestIssueType;
     changes: ChangeRequestChange[];
     vendorMessage?: string;
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 export default function RequestChangesSheet({
@@ -218,16 +218,23 @@ export default function RequestChangesSheet({
       });
   }, [editableItems]);
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     if (!hasChanges) return;
     setIsSending(true);
-    console.log('[RequestChanges] Sending structured edit request');
     const changes = buildChanges();
-    onSendRequest({
-      issueType: 'structured_edit',
-      changes,
-      vendorMessage: vendorNote.trim() || undefined,
-    });
+    try {
+      await onSendRequest({
+        issueType: 'structured_edit',
+        changes,
+        vendorMessage: vendorNote.trim() || undefined,
+      });
+      // On success the parent dismisses this sheet, which triggers
+      // resetState() the next time it opens. On failure the parent shows
+      // its own error alert and leaves the sheet open, so isSending must
+      // come back down here or the button stays stuck disabled.
+    } finally {
+      setIsSending(false);
+    }
   }, [hasChanges, buildChanges, vendorNote, onSendRequest]);
 
   const SwipeableItemCard = useCallback(({ ei }: { ei: EditableItem }) => {

@@ -23,12 +23,10 @@ import {
   Zap,
   Flame,
   Star,
-  Clock,
   Search,
   X,
 } from 'lucide-react-native';
 import { MenuItem, Category, Vendor } from '@/mocks/vendorData';
-import { getNextOpenTime } from '@/utils/businessHours';
 import { formatPrice } from '@/utils/formatPrice';
 import type { VendorPromotion } from '@/mocks/promotionsData';
 import { getVendorActivePromotions } from '@/contexts/PromoContext';
@@ -43,7 +41,6 @@ interface StorefrontCatalogProps {
   hasCompletedOrderWithVendor: boolean;
   selectedCategory: string;
   searchQuery: string;
-  isStoreOpen: boolean;
   isVendorBlocked: boolean;
   canChat: boolean;
   /** Plan + vendor-status gated. False for Basic vendors. */
@@ -65,6 +62,7 @@ interface StorefrontCatalogProps {
   onIncrementItem: (item: MenuItem, e: any) => void;
   onDecrementItem: (itemId: string, e: any) => void;
   onVendorNamePress: () => void;
+  onRatingPress: () => void;
   onViewPolicy: () => void;
   onAskAI: () => void;
   onMessageVendor: () => void;
@@ -92,7 +90,6 @@ export default function StorefrontCatalog({
   hasCompletedOrderWithVendor,
   selectedCategory,
   searchQuery,
-  isStoreOpen,
   isVendorBlocked,
   canChat,
   canUsePlatformAi,
@@ -108,6 +105,7 @@ export default function StorefrontCatalog({
   onIncrementItem,
   onDecrementItem,
   onVendorNamePress,
+  onRatingPress,
   onViewPolicy,
   onAskAI,
   onMessageVendor,
@@ -534,7 +532,10 @@ export default function StorefrontCatalog({
           <Text style={styles.vendorName}>{vendor.name}</Text>
         </TouchableOpacity>
         <View style={styles.metadataRow}>
-          <Text style={styles.metadataText}>{vendor.category} · ⭐ {vendor.rating} ({vendor.reviewCount})</Text>
+          <Text style={styles.metadataText}>{vendor.category} · </Text>
+          <TouchableOpacity onPress={onRatingPress} activeOpacity={0.7}>
+            <Text style={styles.metadataText}>⭐ {vendor.rating} ({vendor.reviewCount})</Text>
+          </TouchableOpacity>
         </View>
         <Text style={styles.metadataText}>{vendor.area}</Text>
 
@@ -566,7 +567,7 @@ export default function StorefrontCatalog({
             )}
             {vendor.delivery && (
               <View style={styles.fulfillmentBadge}>
-                <Text style={styles.fulfillmentBadgeText}>Delivery</Text>
+                <Text style={styles.fulfillmentBadgeText}>Local Delivery</Text>
               </View>
             )}
             {vendor.shipping && vendor.shippingScope === 'domestic' && (
@@ -582,18 +583,6 @@ export default function StorefrontCatalog({
           </View>
         </View>
 
-        {!isStoreOpen && (() => {
-          const nextOpen = getNextOpenTime(vendor.weeklyHours);
-          return (
-            <View style={styles.closedIndicator}>
-              <Clock size={12} color={Colors.textSecondary} />
-              <Text style={styles.closedIndicatorText}>
-                {vendor.storeStatus === 'away' ? 'Away' : nextOpen ? `Opens at ${nextOpen}` : 'Currently closed'}
-              </Text>
-            </View>
-          );
-        })()}
-
         {vendor.policy && vendor.policy.trim().length > 0 && (
           <TouchableOpacity onPress={onViewPolicy} style={styles.policyButton}>
             <Text style={styles.policyText}>{vendor.name}'s Business Policy</Text>
@@ -606,7 +595,7 @@ export default function StorefrontCatalog({
               {canUsePlatformAi && (
                 <TouchableOpacity onPress={onAskAI} style={styles.primaryCTA}>
                   <Sparkles size={20} color="#FFFFFF" />
-                  <Text style={styles.primaryCTAText}>Ask the platform AI</Text>
+                  <Text style={styles.primaryCTAText}>Ask Platform AI</Text>
                 </TouchableOpacity>
               )}
               {canChat && chatMode === 'enabled' && (
@@ -628,18 +617,6 @@ export default function StorefrontCatalog({
           <Text style={styles.blockedBannerText}>You cannot initiate communication with this vendor.</Text>
         </View>
       )}
-
-      {!isStoreOpen && (() => {
-        const nextOpen = getNextOpenTime(vendor.weeklyHours);
-        return (
-          <View style={styles.storeClosedBanner}>
-            <Clock size={14} color="#6B7280" />
-            <Text style={styles.storeClosedBannerText}>
-              {nextOpen ? `Opens at ${nextOpen} · You can still order` : 'Currently closed · You can still order'}
-            </Text>
-          </View>
-        );
-      })()}
 
       <View style={styles.footerDisclaimer}>
         <Text style={styles.footerDisclaimerText}>
@@ -835,17 +812,6 @@ const styles = StyleSheet.create({
     fontWeight: '500' as const,
     color: Colors.text,
   },
-  closedIndicator: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 5,
-    marginTop: 8,
-  },
-  closedIndicatorText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: '400' as const,
-  },
   policyButton: {
     paddingVertical: 6,
   },
@@ -918,23 +884,6 @@ const styles = StyleSheet.create({
   blockedBannerText: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
-  storeClosedBanner: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: '#F9FAFB',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  storeClosedBannerText: {
-    fontSize: 13,
-    color: '#6B7280',
     fontWeight: '500' as const,
   },
   footerDisclaimer: {

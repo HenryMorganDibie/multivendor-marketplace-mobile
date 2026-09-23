@@ -12,7 +12,7 @@ import { mockVendor } from '@/mocks/vendorData';
 /**
  * DRAFT          — created, not yet delivered
  * SHARED_EXTERNALLY — sent via native share sheet (WhatsApp, email, etc.)
- * SENT_IN_CHAT   — attached to a real the platform customer chat thread
+ * SENT_IN_CHAT   — attached to a real Platform customer chat thread
  * VIEWED         — customer has opened the invoice link
  * PAID           — vendor manually marked as paid
  * CANCELLED      — voided
@@ -29,10 +29,10 @@ export type InvoiceStatus =
   | 'void';
 
 /** How the customer was selected when creating the invoice */
-export type InvoiceCustomerSource = 'the platform' | 'external';
+export type InvoiceCustomerSource = 'platform' | 'external';
 
 /**
- * Which kind of the platform conversation an internal-customer invoice was
+ * Which kind of Platform conversation an internal-customer invoice was
  * created from. Henry should persist this so the backend can link the
  * invoice to the right conversation and prevent revenue double-counting.
  */
@@ -61,6 +61,25 @@ export const INVOICE_PAYMENT_METHOD_LABELS: Record<InvoicePaymentMethod, string>
   mobile_money: 'Mobile money',
   other: 'Other',
 };
+
+/**
+ * recordPayment (paymentLedger.ts) only accepts "cash" | "transfer" | "card"
+ * | "other" - this screen's 5 options were added later and never checked
+ * against that, so bank_transfer/card_direct/mobile_money each threw
+ * invalid-argument and recordPayment silently failed for 3 of the 5 choices
+ * a vendor could pick. Mapped down to the closest accepted value rather than
+ * widening the backend's set, since "payment method" also names the
+ * separate, unrelated held vendor-payment-method feature.
+ */
+function toBackendPaymentMethod(method: InvoicePaymentMethod | undefined): 'cash' | 'transfer' | 'card' | 'other' {
+  switch (method) {
+    case 'bank_transfer': return 'transfer';
+    case 'mobile_money': return 'transfer';
+    case 'card_direct': return 'card';
+    case 'cash': return 'cash';
+    default: return 'other';
+  }
+}
 
 /**
  * Payment-due terms the vendor can pick on the Create Invoice screen.
@@ -140,7 +159,7 @@ export function getInvoiceStatusDisplayLabel(status: InvoiceStatus): string {
 
 /** Public, unguessable invoice share URL. Never exposes the readable invoice number. */
 export function getInvoiceShareUrl(shareCode: string): string {
-  return `https://theplatform.app/i/${shareCode}`;
+  return `https://platform.app/i/${shareCode}`;
 }
 
 /** Financial edits allowed? Paid and void invoices are locked. */
@@ -178,14 +197,14 @@ export interface Invoice {
   customerName: string;
   customerPhone?: string;
   customerEmail?: string;
-  /** Bound the platform chat thread — required for SENT_IN_CHAT delivery */
+  /** Bound Platform chat thread — required for SENT_IN_CHAT delivery */
   chatId?: string;
-  /** Bound the platform customer id — required for SENT_IN_CHAT delivery */
+  /** Bound Platform customer id — required for SENT_IN_CHAT delivery */
   customerId?: string;
   /** How the customer was selected when creating the invoice */
   customerSource?: InvoiceCustomerSource;
   /**
-   * For internal the platform customers: which kind of conversation the invoice
+   * For internal Platform customers: which kind of conversation the invoice
    * was created from. `order_chat` when selected from an order chat,
    * `inquiry_chat` when selected from a pre-order inquiry. Henry should
    * persist this on the invoice document to prevent revenue double-counting.
@@ -195,7 +214,7 @@ export interface Invoice {
   conversationId?: string;
   /** Optional address for external customers (delivery / invoice records). */
   customerAddress?: string;
-  /** Unguessable code backing the public URL theplatform.app/i/{shareCode} */
+  /** Unguessable code backing the public URL platform.app/i/{shareCode} */
   shareCode?: string;
   items: InvoiceLineItem[];
   subtotal: number;
@@ -216,7 +235,7 @@ export interface Invoice {
    *  Henry should persist these as part of the invoice document. */
   firstSharedAt?: string;
   lastSharedAt?: string;
-  /** How the invoice was shared: 'chat' (internal the platform customer) or
+  /** How the invoice was shared: 'chat' (internal Platform customer) or
    *  'external_link' (secure public URL). Henry should persist this. */
   shareChannel?: 'chat' | 'external_link';
   sharedAt?: string;
@@ -337,14 +356,14 @@ const SEED_INVOICES: Invoice[] = [
   {
     id: 'seed_invoice_unpaid_001',
     invoiceNumber: 'SPICYREST-INV-12345',
-    // Privacy: internal the platform customers are stored as "First L." so the
+    // Privacy: internal Platform customers are stored as "First L." so the
     // vendor never sees the full surname on any surface. Henry should persist
     // the canonical first/last split on the backend and format via
     // formatInternalCustomerName at the data boundary.
     customerName: 'Jane S.',
     customerId: 'customer-001',
     chatId: 'chat-v1-customer-001',
-    customerSource: 'the platform',
+    customerSource: 'platform',
     shareCode: 'kx7m2n9p4q8r3t6v',
     items: [
       { id: 'si-1', name: 'Jollof Rice (Special Platter)', quantity: 2, unitPrice: 3500, total: 7000 },
@@ -377,7 +396,7 @@ const SEED_INVOICES: Invoice[] = [
     customerName: 'Jane S.',
     customerId: 'customer-001',
     chatId: 'chat-v1-customer-001',
-    customerSource: 'the platform',
+    customerSource: 'platform',
     shareCode: 'mn3v8k1q7w2x9j4p',
     items: [
       { id: 'si-4', name: 'Small Chops Platter (Catering)', quantity: 1, unitPrice: 8000, total: 8000 },
@@ -420,7 +439,7 @@ const SEED_INVOICES: Invoice[] = [
     customerName: 'Jane S.',
     customerId: 'customer-001',
     chatId: 'chat-v1-customer-001',
-    customerSource: 'the platform',
+    customerSource: 'platform',
     shareCode: 'pq2r6s8t0u4w5x7y',
     items: [
       { id: 'si-5', name: 'Veggie Burger', quantity: 2, unitPrice: 2500, total: 5000 },
@@ -648,13 +667,16 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
           unitPrice: item.unitPrice,
         })),
         notes: invoiceData.notes ?? null,
-        // The Create Invoice screen's "the platform customer" mode already collects
+        // The Create Invoice screen's "Platform customer" mode already collects
         // these from the vendor's real chats. Sending them keeps the binding;
         // omitting them, as this first did, threw away the customer the vendor
         // had explicitly chosen and made the invoice indistinguishable from one
         // typed by hand.
         customerId: invoiceData.customerId ?? null,
         conversationId: invoiceData.conversationId ?? invoiceData.chatId ?? null,
+        // create-invoice.tsx already collects this; createInvoice never
+        // accepted it, so it was silently dropped for every new invoice.
+        dueDate: invoiceData.dueDate ?? null,
       });
 
       // Returned for the caller that navigates straight to the new invoice. The
@@ -814,7 +836,7 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
   const getInvoiceById = (id: string): Invoice | undefined =>
     (invoicesQuery.data || []).find((inv) => inv.id === id);
 
-  /** Resolve an invoice from its public share code (theplatform.app/i/{shareCode}). */
+  /** Resolve an invoice from its public share code (platform.app/i/{shareCode}). */
   const getInvoiceByShareCode = (shareCode: string): Invoice | undefined =>
     (backendInvoices ?? invoicesQuery.data ?? []).find((inv) => inv.shareCode === shareCode);
 
@@ -858,7 +880,7 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
   };
 
   /**
-   * Mark an invoice as sent inside a the platform chat thread.
+   * Mark an invoice as sent inside a Platform chat thread.
    * Requires a valid chatId — will throw if missing. Stamps `issueDate` the
    * first time an invoice is issued so the customer-facing document shows the
    * real send date (not the draft's creation date). Draft → issued transitions
@@ -952,7 +974,7 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
         const res = await send({
           invoiceId: id,
           amountMinorUnits: Math.round(Math.max(0, payment.amount)),
-          method: payment.method ?? 'other',
+          method: toBackendPaymentMethod(payment.method),
           reference: payment.note ?? null,
           idempotencyKey: `${id}_${payment.amount}_${payment.date}`,
         });

@@ -26,13 +26,13 @@ import { chatService } from '@/services/chatService';
 import { CustomerInvoiceChatCard } from '@/features/chat/components/CustomerInvoiceChatCard';
 import { useChatSubscription, mergeChatMessages } from '@/hooks/useChatMessages';
 import { OrderStatus, Order } from '@/mocks/ordersData';
-import { type Vendor } from '@/mocks/vendorData';
-import { vendorRepository } from '@/services/repositories/vendorRepository';
+import { useVendorIdentity } from '@/lib/vendor/useVendorIdentity';
 import { useOrders } from '@/contexts/OrdersContext';
 
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
 import { useCustomOrders } from '@/contexts/CustomOrderContext';
-import { useInbox } from '@/contexts/InboxContext';
+import { useInbox, isDemoInboxAccount } from '@/contexts/InboxContext';
+import { MOCK_CUSTOMER_ID } from '@/mocks/inboxData';
 import { useChatRead } from '@/contexts/ChatReadContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useChats } from '@/contexts/ChatContext';
@@ -173,21 +173,22 @@ export default function OrderChatScreen() {
   // contains a handful of demo vendors: any real vendor not in that array
   // fell through to `undefined`, so `vendorStatus === 'SUSPENDED'` was never
   // true and a real suspended vendor's chat never froze.
-  const [paymentVendor, setPaymentVendor] = useState<Vendor | undefined>(undefined);
-  useEffect(() => {
-    if (!order?.vendorId) return;
-    let cancelled = false;
-    void vendorRepository.getById(order.vendorId).then((v) => {
-      if (!cancelled) setPaymentVendor(v);
-    });
-    return () => { cancelled = true; };
-  }, [order?.vendorId]);
+  //
+  // Fail-closed via useVendorIdentity's availability/permissions, same as
+  // chat/[vendorId].tsx and chat/pre-order/[vendorId].tsx: Firestore rules
+  // deny an ordinary customer's read of a suspended/deactivated vendor's
+  // document outright (see firestore.rules vendors/{vendorId}), so a plain
+  // `paymentVendor?.vendorStatus === 'SUSPENDED'` check went straight back to
+  // "no freeze" the instant the vendor actually went inactive -- the one
+  // moment this safety freeze exists for. `permissions.canChat` also covers
+  // DEACTIVATED, which the old check never compared against at all.
+  const { vendor: paymentVendor, availability: paymentVendorAvailability, permissions: paymentVendorPermissions } = useVendorIdentity(order?.vendorId);
 
   const isVendorSuspendedOnActiveOrder =
-    paymentVendor?.vendorStatus === 'SUSPENDED' &&
+    !(paymentVendorAvailability === 'resolved' && (paymentVendorPermissions?.canChat ?? false)) &&
     order != null &&
     ['requested', 'accepted', 'confirmed', 'in_progress'].includes(order.status);
-  console.log('[ORDER CHAT] Vendor status:', paymentVendor?.vendorStatus, '| Safety freeze active:', isVendorSuspendedOnActiveOrder);
+  console.log('[ORDER CHAT] Vendor availability:', paymentVendorAvailability, '| status:', paymentVendor?.vendorStatus, '| Safety freeze active:', isVendorSuspendedOnActiveOrder);
 
   const fulfillmentTypeFromParams = (params.fulfillmentType as string) || 'Pickup';
   const orderTotalFromParams = params.orderTotal ? Number(params.orderTotal) : 0;
@@ -262,6 +263,13 @@ export default function OrderChatScreen() {
   }, [chatId, chatVersion, markChatAsRead]);
   const [messageText, setMessageText] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  // isSendingMessage (React state) is not a reliable mutex on its own: two
+  // event-handler invocations from a fast double-tap can both read the
+  // stale pre-update value before either one triggers a re-render, so both
+  // still pass the check and both fire a real, separate sendMessage call.
+  // sendLockRef is checked and set synchronously, before any await, closing
+  // that gap; isSendingMessage stays purely for disabling the button.
+  const sendLockRef = useRef(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showChatActionsMenu, setShowChatActionsMenu] = useState(false);
   const [showContactCardPicker, setShowContactCardPicker] = useState(false);
@@ -312,7 +320,8 @@ export default function OrderChatScreen() {
   };
 
   const handleSendMessage = async () => {
-    if (messageText.trim() === '' || isSendingMessage) return;
+    if (messageText.trim() === '' || sendLockRef.current) return;
+    sendLockRef.current = true;
 
     const messageContent = messageText.trim();
 
@@ -320,11 +329,13 @@ export default function OrderChatScreen() {
     if (!validation.isValid) {
       setValidationError(validation.errorMessage || 'Invalid message');
       setTimeout(() => setValidationError(null), 4000);
+      sendLockRef.current = false;
       return;
     }
 
     if (!chatId) {
       Alert.alert('Could not send', 'This conversation could not be found. Please go back and try again.');
+      sendLockRef.current = false;
       return;
     }
 
@@ -344,7 +355,9 @@ export default function OrderChatScreen() {
         updateInboxAfterMessage({
           conversationId: conv.conversationId,
           lastMessageText: messageContent,
-          lastSenderId: user?.id ?? '',
+          // A demo login's raw account id ('1') is not what any seeded demo
+          // inbox row is keyed on -- MOCK_CUSTOMER_ID is, same as ChatContext.
+          lastSenderId: isDemoInboxAccount(user?.id) ? MOCK_CUSTOMER_ID : (user?.id ?? ''),
           senderRole: 'customer',
         });
         console.log('[ORDER CHAT] Inbox snapshot updated:', conv.conversationId);
@@ -355,6 +368,7 @@ export default function OrderChatScreen() {
       Alert.alert('Message not sent', message);
     } finally {
       setIsSendingMessage(false);
+      sendLockRef.current = false;
     }
   };
 
@@ -619,6 +633,7 @@ export default function OrderChatScreen() {
             paymentData={message.paymentRequestData}
             timestamp={message.timestamp}
             role="customer"
+            currency={message.paymentRequestData.currency as Currency | undefined}
             onViewOrderDetails={() => handleViewOrderDetails()}
           />
         </View>
@@ -1635,7 +1650,9 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   messageBubble: {
-    maxWidth: '75%',
+    // Cap moved to bubbleWithTail below - resolving a percentage against
+    // this shrink-wrapped parent collapsed short messages to a fixed width.
+    flexShrink: 1,
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 20,
@@ -1651,6 +1668,7 @@ const styles = StyleSheet.create({
   bubbleWithTail: {
     flexDirection: 'row' as const,
     alignItems: 'flex-end' as const,
+    maxWidth: '75%',
   },
   bubbleTailOutgoing: {
     width: 0,

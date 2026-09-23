@@ -20,7 +20,7 @@ export interface OrderItem {
 
 export type PaymentStatus = 'payment_pending' | 'partially_received' | 'payment_received';
 
-export type OrderSource = 'the platform' | 'external';
+export type OrderSource = 'platform' | 'external';
 
 export type CompletionSource = 'vendor' | 'system';
 
@@ -211,7 +211,7 @@ export const mockOrders: Order[] = [
     paymentStatus: 'payment_pending',
     orderNote: 'Please make it extra spicy.',
     vendorPolicy: 'Cancellation Policy: Orders can be cancelled up to 30 minutes after placement. After 30 minutes, no refunds will be issued.\n\nPickup Terms: Please arrive within 15 minutes of your scheduled pickup time. Orders not collected within 1 hour may be discarded.\n\nDelivery Terms: Delivery is available within 5km radius. Estimated delivery time is 30-45 minutes. Delivery fee varies by distance.',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     orderSnapshot: {
       items: [
         { name: 'Puff Puff', quantity: 2, price_at_order: 2000, addOns: [{ id: 'addon1', name: 'Extra spice', price: 500 }] },
@@ -289,7 +289,7 @@ export const mockOrders: Order[] = [
       message: 'Please include your order ID in the payment description.',
     },
     vendorPolicy: 'Cancellation Policy: Orders can be cancelled up to 30 minutes after placement. After 30 minutes, no refunds will be issued.\n\nPickup Terms: Please arrive within 15 minutes of your scheduled pickup time. Orders not collected within 1 hour may be discarded.\n\nDelivery Terms: Delivery is available within 5km radius. Estimated delivery time is 30-45 minutes. Delivery fee varies by distance.',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     orderSnapshot: {
       items: [
         { name: 'Pepperoni Pizza (Large)', quantity: 1, price_at_order: 3500 },
@@ -389,7 +389,7 @@ export const mockOrders: Order[] = [
       accountNumber: '1234567890',
     },
     vendorPolicy: 'Cancellation Policy: Orders can be cancelled up to 30 minutes after placement. After 30 minutes, no refunds will be issued.\n\nPickup Terms: Please arrive within 15 minutes of your scheduled pickup time. Orders not collected within 1 hour may be discarded.\n\nDelivery Terms: Delivery is available within 5km radius. Estimated delivery time is 30-45 minutes. Delivery fee varies by distance.',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     eventHistory: [
       {
         eventType: 'order_placed',
@@ -446,7 +446,7 @@ export const mockOrders: Order[] = [
     paymentState: 'ORDER_COMPLETED',
     orderNote: 'Extra napkins please.',
     vendorPolicy: 'Cancellation Policy: Orders can be cancelled up to 30 minutes after placement. After 30 minutes, no refunds will be issued.\n\nPickup Terms: Please arrive within 15 minutes of your scheduled pickup time. Orders not collected within 1 hour may be discarded.\n\nDelivery Terms: Delivery is available within 5km radius. Estimated delivery time is 30-45 minutes. Delivery fee varies by distance.',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     hasRating: false,
     completedBy: 'vendor',
     completedAt: '2024-01-12T14:00:00',
@@ -539,7 +539,7 @@ export const mockOrders: Order[] = [
     total: 4300,
     amountPaid: 0,
     paymentStatus: 'payment_pending',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     eventHistory: [
       {
         eventType: 'order_placed',
@@ -581,7 +581,7 @@ export const mockOrders: Order[] = [
     total: 4300,
     amountPaid: 0,
     paymentStatus: 'payment_pending',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     eventHistory: [
       {
         eventType: 'order_placed',
@@ -619,7 +619,7 @@ export const mockOrders: Order[] = [
     amountPaid: 3225,
     paymentStatus: 'payment_received',
     paymentState: 'ORDER_COMPLETED',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     hasRating: false,
     completedBy: 'vendor',
     completedAt: '2024-01-05T12:30:00',
@@ -675,7 +675,7 @@ export const mockOrders: Order[] = [
     amountPaid: 3225,
     paymentStatus: 'payment_received',
     paymentState: 'ORDER_COMPLETED',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     hasRating: false,
     completedBy: 'vendor',
     completedAt: '2024-01-10T12:45:00',
@@ -729,7 +729,7 @@ export const mockOrders: Order[] = [
     discount: 0,
     total: 1612.5,
     vendorPolicy: 'Cancellation Policy: Orders can be cancelled up to 30 minutes after placement. After 30 minutes, no refunds will be issued.\n\nPickup Terms: Please arrive within 15 minutes of your scheduled pickup time. Orders not collected within 1 hour may be discarded.\n\nDelivery Terms: Delivery is available within 5km radius. Estimated delivery time is 30-45 minutes. Delivery fee varies by distance.',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     cancellationReason: 'Cancelled by vendor — item unavailable at time of order.',
     eventHistory: [
       {
@@ -780,7 +780,7 @@ export const mockOrders: Order[] = [
     paymentStatus: 'payment_received',
     paymentState: 'ORDER_COMPLETED',
     vendorPolicy: 'Cancellation Policy: Orders can be cancelled up to 30 minutes after placement. After 30 minutes, no refunds will be issued.\n\nPickup Terms: Please arrive within 15 minutes of your scheduled pickup time. Orders not collected within 1 hour may be discarded.\n\nDelivery Terms: Delivery is available within 5km radius. Estimated delivery time is 30-45 minutes. Delivery fee varies by distance.',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     hasRating: true,
     completedBy: 'vendor',
     completedAt: '2024-01-05T13:00:00',
@@ -811,7 +811,7 @@ export const mockOrders: Order[] = [
     tax: 300,
     discount: 0,
     total: 4300,
-    orderSource: 'the platform',
+    orderSource: 'platform',
     rejectionReason: 'Kitchen fully booked for that time slot.',
     eventHistory: [
       {
@@ -856,7 +856,7 @@ export const mockOrders: Order[] = [
     amountPaid: 6450,
     paymentStatus: 'payment_received',
     paymentState: 'VENDOR_PAYMENT_CONFIRMED',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     orderSnapshot: {
       items: [
         { name: 'Puff Puff', quantity: 3, price_at_order: 2000 },
@@ -942,7 +942,7 @@ export const mockOrders: Order[] = [
     scheduledTime: '11:30 AM',
     fulfillmentType: 'Pickup',
     fulfillmentMethod: 'pickup',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     items: [
       { id: '6', name: 'Puff Puff', price: 2000, quantity: 2 },
       { id: '7', name: 'Samosa', price: 250, quantity: 2 },
@@ -966,7 +966,7 @@ export const mockOrders: Order[] = [
     scheduledTime: '3:00 PM',
     fulfillmentType: 'Delivery',
     fulfillmentMethod: 'delivery',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     items: [
       { id: '12', name: 'Pepperoni Pizza (Large)', price: 3500, quantity: 1 },
       { id: '13', name: 'Caesar Salad', price: 1200, quantity: 2 },
@@ -992,7 +992,7 @@ export const mockOrders: Order[] = [
     scheduledTime: '10:00 AM',
     fulfillmentType: 'Pickup',
     fulfillmentMethod: 'pickup',
-    orderSource: 'the platform',
+    orderSource: 'platform',
     items: [
       { id: '9', name: 'Classic Burger', price: 2000, quantity: 2 },
       { id: '17', name: 'Iced Tea', price: 400, quantity: 1 },

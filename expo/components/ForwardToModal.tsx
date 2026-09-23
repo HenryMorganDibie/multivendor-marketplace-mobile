@@ -222,7 +222,7 @@ export default function ForwardToModal({ visible, payload, onClose }: ForwardToM
       };
       return {
         type: 'catalog_item' as const,
-        content: `📦 ${p.name}`,
+        content: p.name,
         sender: 'vendor' as const,
         catalogItemData,
       };

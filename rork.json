@@ -2,12 +2,12 @@
   "$schema": "https://rork.com/schema/rork.json",
   "apps": [
     {
-      "name": "the platform",
+      "name": "Platform",
       "path": "expo",
       "framework": "react-native"
     },
     {
-      "name": "the platform Vendor",
+      "name": "Platform Vendor",
       "path": "expo",
       "framework": "react-native"
     }

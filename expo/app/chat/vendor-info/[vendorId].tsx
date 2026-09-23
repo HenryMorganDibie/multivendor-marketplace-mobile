@@ -130,7 +130,7 @@ export default function VendorChatInfoScreen() {
     if (!vendor) return;
     try {
       await Share.share({
-        message: `Check out ${vendor.name} on the platform${vendor.username ? ` — @${vendor.username}` : ''}`,
+        message: `Check out ${vendor.name} on Platform${vendor.username ? ` — @${vendor.username}` : ''}`,
       });
     } catch (err) {
       console.log('[VendorChatInfo] share failed:', err);

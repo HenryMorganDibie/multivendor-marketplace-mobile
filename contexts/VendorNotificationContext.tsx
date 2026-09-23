@@ -161,7 +161,7 @@ export const [VendorNotificationProvider, useVendorNotifications] = createContex
       title: 'Order expired',
       message: `Order ${fullOrderId} has expired.`,
       fullOrderId,
-      actorName: 'the platform',
+      actorName: 'Platform',
     });
   }, [addNotification]);
 
@@ -181,8 +181,8 @@ export const [VendorNotificationProvider, useVendorNotifications] = createContex
       type: 'new_support_message',
       domain: 'support',
       title: 'New message',
-      message: 'the platform Support has sent you a message.',
-      actorName: 'the platform Support',
+      message: 'Platform Support has sent you a message.',
+      actorName: 'Platform Support',
     });
   }, [addNotification]);
 
@@ -191,8 +191,8 @@ export const [VendorNotificationProvider, useVendorNotifications] = createContex
       type: 'verification_requested',
       domain: 'support',
       title: 'Verification requested',
-      message: 'the platform has requested additional verification.',
-      actorName: 'the platform',
+      message: 'Platform has requested additional verification.',
+      actorName: 'Platform',
     });
   }, [addNotification]);
 
@@ -201,8 +201,8 @@ export const [VendorNotificationProvider, useVendorNotifications] = createContex
       type: 'verification_approved',
       domain: 'support',
       title: 'Verification approved',
-      message: 'the platform has approved your verification.',
-      actorName: 'the platform',
+      message: 'Platform has approved your verification.',
+      actorName: 'Platform',
     });
   }, [addNotification]);
 
@@ -211,8 +211,8 @@ export const [VendorNotificationProvider, useVendorNotifications] = createContex
       type: 'verification_rejected',
       domain: 'support',
       title: 'Verification rejected',
-      message: `the platform has rejected your verification: ${reason}`,
-      actorName: 'the platform',
+      message: `Platform has rejected your verification: ${reason}`,
+      actorName: 'Platform',
     });
   }, [addNotification]);
 
@@ -221,8 +221,8 @@ export const [VendorNotificationProvider, useVendorNotifications] = createContex
       type: 'account_warning',
       domain: 'support',
       title: 'Account warning',
-      message: `the platform has issued a warning: ${warningMessage}`,
-      actorName: 'the platform',
+      message: `Platform has issued a warning: ${warningMessage}`,
+      actorName: 'Platform',
     });
   }, [addNotification]);
 
@@ -231,8 +231,8 @@ export const [VendorNotificationProvider, useVendorNotifications] = createContex
       type: 'account_restriction',
       domain: 'support',
       title: 'Account restriction',
-      message: `the platform has applied restrictions: ${restrictionMessage}`,
-      actorName: 'the platform',
+      message: `Platform has applied restrictions: ${restrictionMessage}`,
+      actorName: 'Platform',
     });
   }, [addNotification]);
 

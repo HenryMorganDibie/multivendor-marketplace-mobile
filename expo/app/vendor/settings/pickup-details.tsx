@@ -23,7 +23,7 @@ export default function PickupDetailsScreen() {
   useEffect(() => {
     if (isLoaded) {
       setStreetAddress(pickupDetails.streetAddress);
-      setUnit(pickupDetails.unit);
+      setUnit(pickupDetails.unitSuite);
       setPickupInstructions(pickupDetails.instructions);
       setContactPhone(pickupDetails.contactPhone);
       setVerificationCode(pickupDetails.verificationCode);
@@ -47,12 +47,12 @@ export default function PickupDetailsScreen() {
 
     const isValid = validateAddressInBusinessArea(
       streetAddress,
-      pickupDetails.businessArea.city
+      pickupDetails.area.areaName
     );
 
     if (!isValid) {
       setAddressError(
-        `Pickup address must be within your approved business area (${pickupDetails.businessArea.city}, ${pickupDetails.businessArea.state}).`
+        `Pickup address must be within your approved business area (${pickupDetails.area.areaName}, ${pickupDetails.area.stateName}).`
       );
       return;
     }
@@ -60,11 +60,10 @@ export default function PickupDetailsScreen() {
     try {
       await savePickupDetails({
         streetAddress,
-        unit,
+        unitSuite: unit,
         instructions: pickupInstructions,
         contactPhone: contactPhone,
         verificationCode: verificationCode,
-        businessArea: pickupDetails.businessArea,
       });
       Alert.alert('Success', 'Pickup details saved', [{ text: 'OK' }]);
     } catch {
@@ -117,7 +116,7 @@ export default function PickupDetailsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>City</Text>
             <View style={styles.lockedField}>
-              <Text style={styles.lockedFieldText}>{pickupDetails.businessArea.city}</Text>
+              <Text style={styles.lockedFieldText}>{pickupDetails.area.areaName}</Text>
               <Lock size={16} color={Colors.textSecondary} />
             </View>
           </View>
@@ -125,7 +124,7 @@ export default function PickupDetailsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Province / State</Text>
             <View style={styles.lockedField}>
-              <Text style={styles.lockedFieldText}>{pickupDetails.businessArea.state}</Text>
+              <Text style={styles.lockedFieldText}>{pickupDetails.area.stateName}</Text>
               <Lock size={16} color={Colors.textSecondary} />
             </View>
           </View>
@@ -133,12 +132,12 @@ export default function PickupDetailsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Country</Text>
             <View style={styles.lockedField}>
-              <Text style={styles.lockedFieldText}>{pickupDetails.businessArea.country}</Text>
+              <Text style={styles.lockedFieldText}>{pickupDetails.area.countryName}</Text>
               <Lock size={16} color={Colors.textSecondary} />
             </View>
             <Text style={styles.helperText}>
               Your business area was verified during onboarding.{"\n"}
-              To operate in a different area, you&apos;ll need approval from the platform Support.
+              To operate in a different area, you&apos;ll need approval from Platform Support.
             </Text>
             <TouchableOpacity onPress={handleRequestAreaChange} activeOpacity={0.7}>
               <Text style={styles.linkText}>Request business area change</Text>

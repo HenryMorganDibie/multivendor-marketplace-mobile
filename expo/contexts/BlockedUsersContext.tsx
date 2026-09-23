@@ -55,25 +55,48 @@ interface BlockedUsersContextType {
 
 const BlockedUsersContext = createContext<BlockedUsersContextType | undefined>(undefined);
 
-const BLOCKED_USERS_KEY = '@platform_blocked_users';
-const ARCHIVED_CHATS_KEY = '@platform_archived_chats';
+const BLOCKED_USERS_KEY_PREFIX = '@platform_blocked_users';
+const ARCHIVED_CHATS_KEY_PREFIX = '@platform_archived_chats';
+const blockedUsersKey = (uid: string) => `${BLOCKED_USERS_KEY_PREFIX}:${uid}`;
+const archivedChatsKey = (uid: string) => `${ARCHIVED_CHATS_KEY_PREFIX}:${uid}`;
 
 export function BlockedUsersProvider({ children }: { children: React.ReactNode }) {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [archivedChats, setArchivedChats] = useState<ArchivedChat[]>([]);
   const isLoadedRef = useRef(false);
+  // Both AsyncStorage keys used to be device-global, so Vendor/Customer B
+  // signing in after A signed out on the same device briefly inherited A's
+  // blocked list and archived-chat list. Now scoped per uid; switching
+  // identities clears the in-memory lists immediately rather than leaving
+  // A's data on screen until the backend listener below happens to resolve.
+  const currentUidRef = useRef<string | null>(null);
 
   useEffect(() => {
-    loadData();
+    const unsubscribeAuth = auth.onIdTokenChanged((fbUser) => {
+      const uid = fbUser?.uid ?? null;
+      if (uid === currentUidRef.current) return;
+      currentUidRef.current = uid;
+      isLoadedRef.current = false;
+      setBlockedUsers([]);
+      setArchivedChats([]);
+      if (uid) {
+        void loadData(uid);
+      } else {
+        isLoadedRef.current = true;
+      }
+    });
+    return unsubscribeAuth;
   }, []);
 
   useEffect(() => {
     if (!isLoadedRef.current) return;
+    const uid = currentUidRef.current;
+    if (!uid) return;
     const save = async () => {
       try {
         await Promise.all([
-          AsyncStorage.setItem(BLOCKED_USERS_KEY, JSON.stringify(blockedUsers)),
-          AsyncStorage.setItem(ARCHIVED_CHATS_KEY, JSON.stringify(archivedChats)),
+          AsyncStorage.setItem(blockedUsersKey(uid), JSON.stringify(blockedUsers)),
+          AsyncStorage.setItem(archivedChatsKey(uid), JSON.stringify(archivedChats)),
         ]);
       } catch (error) {
         console.error('Error saving blocked users data:', error);
@@ -82,12 +105,14 @@ export function BlockedUsersProvider({ children }: { children: React.ReactNode }
     save();
   }, [blockedUsers, archivedChats]);
 
-  const loadData = async () => {
+  const loadData = async (uid: string) => {
     try {
       const [blockedData, archivedData] = await Promise.all([
-        AsyncStorage.getItem(BLOCKED_USERS_KEY),
-        AsyncStorage.getItem(ARCHIVED_CHATS_KEY),
+        AsyncStorage.getItem(blockedUsersKey(uid)),
+        AsyncStorage.getItem(archivedChatsKey(uid)),
       ]);
+
+      if (currentUidRef.current !== uid) return; // identity moved on again before this resolved
 
       if (blockedData) {
         setBlockedUsers(JSON.parse(blockedData));
@@ -193,34 +218,55 @@ export function BlockedUsersProvider({ children }: { children: React.ReactNode }
   // - only the AsyncStorage-only read path (above) was ever wired up, so a
   // block placed on another device, or restored after a reinstall, never
   // showed here even though the block itself was real and enforced server-side.
+  //
+  // This used to read auth.currentUser?.uid once inside a mount-only effect:
+  // if Firebase Auth hadn't finished restoring the session on that first
+  // render (the common case on cold launch), uid was undefined, the effect
+  // returned, and no dependency ever changed to re-run it — the listener
+  // never attached for the rest of the session. onIdTokenChanged re-fires
+  // once auth actually resolves (and again on any identity change), so the
+  // listener now reliably attaches instead of depending on a timing race.
+  // Note this is a UX/reconciliation gap, not a security bypass: the
+  // blockUser/unblockUser callables and the server-side block check on
+  // message/order creation were already real and enforced independently of
+  // whether this local list ever loaded.
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
-    const q = query(collection(db, 'blocks'), where('blockerUid', '==', uid), where('isActive', '==', true));
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const records: BlockedUserBackendRecord[] = snap.docs.map((d) => {
-        const data = d.data() as {
-          blockedUid: string; blockedRole: 'customer' | 'vendor';
-          vendorId?: string | null; customerId?: string | null;
-          blockedSnapshot: { displayName: string; businessName: string | null };
-          blockedAt: { toDate?: () => Date } | null;
-        };
-        // Deterministic commerce thread id, same convention
-        // createCommerceConversation.ts uses to name the thread doc.
-        const chatId = data.customerId && data.vendorId ? `commerce_${data.customerId}_${data.vendorId}` : '';
-        return {
-          id: d.id,
-          blockedUserId: data.blockedUid,
-          blockedUserName: data.blockedSnapshot.businessName ?? data.blockedSnapshot.displayName,
-          blockedUserRole: data.blockedRole,
-          chatId,
-          blockedAt: data.blockedAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
-          isBlocker: true,
-        };
-      });
-      loadBlockedUsersFromBackend(records);
-    }, (error) => console.error('[BlockedUsers] blocks listener failed:', error));
-    return unsubscribe;
+    let unsubscribeSnapshot: (() => void) | null = null;
+
+    const unsubscribeAuth = auth.onIdTokenChanged((fbUser) => {
+      unsubscribeSnapshot?.();
+      unsubscribeSnapshot = null;
+
+      const uid = fbUser?.uid;
+      if (!uid) return;
+
+      const q = query(collection(db, 'blocks'), where('blockerUid', '==', uid), where('isActive', '==', true));
+      unsubscribeSnapshot = onSnapshot(q, (snap) => {
+        const records: BlockedUserBackendRecord[] = snap.docs.map((d) => {
+          const data = d.data() as {
+            blockedUid: string; blockedRole: 'customer' | 'vendor';
+            vendorId?: string | null; customerId?: string | null;
+            blockedSnapshot: { displayName: string; businessName: string | null };
+            blockedAt: { toDate?: () => Date } | null;
+          };
+          // Deterministic commerce thread id, same convention
+          // createCommerceConversation.ts uses to name the thread doc.
+          const chatId = data.customerId && data.vendorId ? `commerce_${data.customerId}_${data.vendorId}` : '';
+          return {
+            id: d.id,
+            blockedUserId: data.blockedUid,
+            blockedUserName: data.blockedSnapshot.businessName ?? data.blockedSnapshot.displayName,
+            blockedUserRole: data.blockedRole,
+            chatId,
+            blockedAt: data.blockedAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+            isBlocker: true,
+          };
+        });
+        loadBlockedUsersFromBackend(records);
+      }, (error) => console.error('[BlockedUsers] blocks listener failed:', error));
+    });
+
+    return () => { unsubscribeSnapshot?.(); unsubscribeAuth(); };
   }, [loadBlockedUsersFromBackend]);
 
   return (

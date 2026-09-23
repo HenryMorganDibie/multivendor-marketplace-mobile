@@ -109,7 +109,7 @@ export default function ReportVendorScreen() {
           <Text style={styles.infoText}>
             {reportType === 'customer'
               ? 'Help us maintain a safe community by reporting customers with inappropriate behavior or fraudulent activity.'
-              : `Your report about ${reportName} will be reviewed by the platform safety team. All reports are confidential.`}
+              : `Your report about ${reportName} will be reviewed by the Platform safety team. All reports are confidential.`}
           </Text>
         </View>
 

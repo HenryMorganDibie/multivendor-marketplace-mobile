@@ -177,7 +177,7 @@ export default function CustomerHelpCenter() {
                         </View>
                         <View style={styles.categoryTextWrap}>
                           <Text style={styles.categoryTitle}>{category.title}</Text>
-                          <Text style={styles.categoryDescription} numberOfLines={1}>
+                          <Text style={styles.categoryDescription} numberOfLines={2}>
                             {category.description}
                           </Text>
                         </View>

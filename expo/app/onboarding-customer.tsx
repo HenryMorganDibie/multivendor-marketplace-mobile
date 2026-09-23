@@ -26,7 +26,7 @@ const slides: Slide[] = [
   {
     icon: 'shield',
     title: 'Shop from verified vendors only',
-    body: 'Every vendor on the platform is reviewed and verified before they can sell.',
+    body: 'Every vendor on Platform is reviewed and verified before they can sell.',
   },
   {
     icon: 'credit',

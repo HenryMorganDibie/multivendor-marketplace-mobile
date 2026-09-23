@@ -8,11 +8,12 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Plus, CreditCard, Lock } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Plus, CreditCard, Lock } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useContactCards } from '@/contexts/ContactCardsContext';
 import { ContactCardList } from '@/components/ContactCardList';
+import CustomerHeader from '@/components/CustomerHeader';
 
 export default function ContactCardsScreen() {
   const router = useRouter();
@@ -38,16 +39,11 @@ export default function ContactCardsScreen() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={handleBackPress}
-            style={styles.headerBack}
-            activeOpacity={0.7}
-          >
-            <ChevronLeft size={22} color={Colors.text} strokeWidth={2} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Contact Card Presets</Text>
+      <CustomerHeader
+        title="Contact Card Presets"
+        onBack={handleBackPress}
+        backgroundColor={Colors.backgroundCanvas}
+        rightAction={
           <TouchableOpacity
             onPress={handleAddCard}
             style={styles.headerAddBtn}
@@ -55,8 +51,8 @@ export default function ContactCardsScreen() {
           >
             <Plus size={20} color={Colors.primary} strokeWidth={2.5} />
           </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+        }
+      />
 
       {isEmpty ? (
         <View style={[styles.emptyContainer, { paddingBottom: insets.bottom + 80 }]}>
@@ -99,30 +95,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.backgroundCanvas,
   },
-  safeArea: {
-    backgroundColor: Colors.backgroundCanvas,
-  },
-  header: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: Colors.backgroundCanvas,
-  },
-  headerBack: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.surface,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600' as const,
-    color: Colors.text,
-  },
   headerAddBtn: {
     width: 36,
     height: 36,
@@ -130,9 +102,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryTint,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-  },
-  headerSpacer: {
-    width: 36,
   },
   // Empty State
   emptyContainer: {

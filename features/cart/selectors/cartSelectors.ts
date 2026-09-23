@@ -15,7 +15,7 @@ export interface PromoValidationResult {
 const VALID_PROMO_CODES: Record<string, { discount: number; type: 'percentage' | 'flat'; expiryDate?: string }> = {
   WELCOME10: { discount: 10, type: 'percentage' },
   SAVE500: { discount: 500, type: 'flat' },
-  THE PLATFORM20: { discount: 20, type: 'percentage' },
+  PLATFORM20: { discount: 20, type: 'percentage' },
   EXPIRED: { discount: 15, type: 'percentage', expiryDate: '2024-01-01' },
 };
 

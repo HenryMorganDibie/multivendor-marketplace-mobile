@@ -18,6 +18,7 @@ import * as Haptics from 'expo-haptics';
 import { useVendorFulfillment, FulfillmentMethodType } from '@/contexts/VendorFulfillmentContext';
 import { useVendor } from '@/contexts/VendorContext';
 import { Colors } from '@/constants/colors';
+import { Alert } from '@/utils/alert';
 import EditScreenHeader from '@/components/EditScreenHeader';
 
 type FulfillmentOption = {
@@ -128,7 +129,14 @@ export default function FulfillmentMethodScreen() {
       console.log('[FULFILLMENT] Methods saved successfully:', payload);
       router.back();
     } catch (error) {
+      // setFulfillmentMethods already reconciles fulfillmentMethods back to
+      // the last authoritative value on failure -- this only needs to tell
+      // the vendor the save didn't happen, rather than leaving them on a
+      // screen that silently reverted with no explanation.
       console.error('[FULFILLMENT] Failed to save methods:', error);
+      const message = error instanceof Error ? error.message : 'Could not save your fulfillment methods. Please try again.';
+      Alert.alert('Could not save', message);
+      setLocalMethods(fulfillmentMethods);
       setIsSaving(false);
     }
   };

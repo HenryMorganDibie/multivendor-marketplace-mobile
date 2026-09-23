@@ -16,16 +16,19 @@ import { Image } from 'expo-image';
 import { ChevronLeft, Send, Package, Truck, ChevronRight, Info } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { type Vendor } from '@/mocks/vendorData';
-import { vendorRepository } from '@/services/repositories/vendorRepository';
 import { useChats } from '@/contexts/ChatContext';
 import { ChatMessage } from '@/mocks/chatData';
-import { chatService } from '@/services/chatService';
-import { useInbox } from '@/contexts/InboxContext';
+import { useInbox, isDemoInboxAccount } from '@/contexts/InboxContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useChatRead } from '@/contexts/ChatReadContext';
+import { chatService } from '@/services/chatService';
+import { useVendorIdentity } from '@/lib/vendor/useVendorIdentity';
+import { MOCK_CUSTOMER_ID } from '@/mocks/inboxData';
 
 import { useVendorChatMode } from '@/contexts/VendorChatModeContext';
 import { validateChatMessage } from '@/utils/chatValidation';
 import VendorStatusGate, { normalizeVendorStatus, useVendorStatusPermissions } from '@/components/VendorStatusGate';
+import { useSafeBack } from '@/utils/useSafeBack';
 import { formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
 import {
   CHAT_INPUT_PLACEHOLDERS,
@@ -55,7 +58,7 @@ const getStableColor = (name: string): string => {
 function PreOrderChatContent({ vendorId, vendor }: { vendorId: string; vendor: Vendor | undefined }) {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
-  const { getPreOrderChat, addMessageToChat } = useChats();
+  const { getPreOrderChat, addMessageToChat, ensureCommerceThread } = useChats();
   const { user } = useAuth();
   const { chatMode } = useVendorChatMode();
   const { customerInbox, updateInboxAfterMessage } = useInbox();
@@ -79,8 +82,31 @@ function PreOrderChatContent({ vendorId, vendor }: { vendorId: string; vendor: V
       setMessages(preOrderChat.messages);
     }
   }, [preOrderChat]);
+
+  const { markChatAsRead } = useChatRead();
+  const preOrderChatId = preOrderChat?.id ?? '';
+
+  /**
+   * Clear unread for the customer when this chat opens, and write the real
+   * read receipt. This screen had no read-tracking at all — neither the
+   * local unread badge nor the real chatThreads/{chatId}/readReceipts write
+   * that the order-chat screens already perform.
+   */
+  useEffect(() => {
+    if (!preOrderChatId) return;
+    markChatAsRead(preOrderChatId, 'customer');
+    void chatService.markRead(preOrderChatId);
+  }, [preOrderChatId, markChatAsRead]);
+
   const [messageText, setMessageText] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  // isSendingMessage (React state) is not a reliable mutex on its own: two
+  // event-handler invocations from a fast double-tap can both read the
+  // stale pre-update value before either one triggers a re-render, so both
+  // still pass the check. sendLockRef is checked and set synchronously,
+  // before any await, closing that gap; isSendingMessage stays purely for
+  // disabling the button visually.
+  const sendLockRef = useRef(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const hasVendorEngaged = messages.some(msg => msg.sender === 'vendor');
@@ -125,11 +151,14 @@ function PreOrderChatContent({ vendorId, vendor }: { vendorId: string; vendor: V
     }
   };
 
-  const handleSendMessage = () => {
-    // isSendingMessage guard: messageText only clears once React re-renders,
-    // so a rapid double-tap could fire this handler twice on the same
-    // content before that happens, sending the same message twice.
-    if (messageText.trim() === '' || !preOrderChat || isSendingMessage) return;
+  const handleSendMessage = async () => {
+    // isSendingMessage guard now also covers thread creation below: a
+    // brand-new deep link with no prior conversation must not fire two
+    // createCommerceConversation calls or send the same message twice —
+    // sendChatMessage has no client-side idempotency key, so a second real
+    // call mints a genuinely separate, duplicate message document.
+    if (messageText.trim() === '' || sendLockRef.current) return;
+    sendLockRef.current = true;
 
     const messageContent = messageText.trim();
 
@@ -137,44 +166,61 @@ function PreOrderChatContent({ vendorId, vendor }: { vendorId: string; vendor: V
     if (!validation.isValid) {
       setValidationError(validation.errorMessage || 'Invalid message');
       setTimeout(() => setValidationError(null), 4000);
+      sendLockRef.current = false;
       return;
     }
 
     setIsSendingMessage(true);
+    try {
+      // A brand-new deep link with no prior conversation for this vendor:
+      // preOrderChat is undefined because getPreOrderChat is a pure lookup
+      // with no creation fallback, so this used to just silently no-op —
+      // nothing sent, nothing shown, no error. Reuses the same authoritative
+      // creation path the storefront's Message Vendor button already uses.
+      let chat = preOrderChat;
+      if (!chat) {
+        const result = await ensureCommerceThread(vendorId, vendorName);
+        if (!result.success) {
+          setValidationError(result.error);
+          setTimeout(() => setValidationError(null), 4000);
+          return;
+        }
+        chat = result.chat;
+      }
 
-    addMessageToChat(preOrderChat.id, {
-      type: 'text',
-      content: messageContent,
-      sender: 'customer',
-    });
-
-    if (preOrderChat.id) {
-      chatService
-        .sendMessage({
-          chatId: preOrderChat.id,
-          type: 'text',
-          content: messageContent,
-          sender: 'customer',
-        })
-        .then((m) => console.log('[PRE-ORDER CHAT] Message persisted via chatService:', m.id))
-        .catch((err) => console.log('[PRE-ORDER CHAT] sendMessage failed:', err))
-        .finally(() => setIsSendingMessage(false));
-    } else {
-      setIsSendingMessage(false);
-    }
-
-    setMessageText('');
-    console.log('[PRE-ORDER CHAT] Customer message sent:', messageContent);
-
-    const conv = customerInbox.find(item => item.vendorId === vendorId && item.conversationType === 'inquiry');
-    if (conv) {
-      updateInboxAfterMessage({
-        conversationId: conv.conversationId,
-        lastMessageText: messageContent,
-        lastSenderId: user?.id ?? '',
-        senderRole: 'customer',
+      // addMessageToChat already calls chatService.sendMessage itself (and
+      // handles the away-message auto-reply) - a second, separate
+      // chatService.sendMessage call here used to run alongside it, sending
+      // every message twice with no way to tell the two apart afterward.
+      await addMessageToChat(chat.id, {
+        type: 'text',
+        content: messageContent,
+        sender: 'customer',
       });
-      console.log('[PRE-ORDER CHAT] Inbox snapshot updated:', conv.conversationId);
+
+      setMessageText('');
+      console.log('[PRE-ORDER CHAT] Customer message sent:', messageContent);
+
+      const conv = customerInbox.find(item => item.vendorId === vendorId && item.conversationType === 'inquiry');
+      if (conv) {
+        updateInboxAfterMessage({
+          conversationId: conv.conversationId,
+          lastMessageText: messageContent,
+          // A demo login's raw account id ('1') is not what any seeded demo
+          // inbox row is keyed on -- MOCK_CUSTOMER_ID is, same as ChatContext.
+          lastSenderId: isDemoInboxAccount(user?.id) ? MOCK_CUSTOMER_ID : (user?.id ?? ''),
+          senderRole: 'customer',
+        });
+        console.log('[PRE-ORDER CHAT] Inbox snapshot updated:', conv.conversationId);
+      }
+    } catch (err) {
+      console.log('[PRE-ORDER CHAT] sendMessage failed:', err);
+      const message = err instanceof Error ? err.message : 'Could not send your message.';
+      setValidationError(message);
+      setTimeout(() => setValidationError(null), 4000);
+    } finally {
+      setIsSendingMessage(false);
+      sendLockRef.current = false;
     }
   };
 
@@ -567,6 +613,69 @@ function PreOrderChatContent({ vendorId, vendor }: { vendorId: string; vendor: V
   );
 }
 
+/**
+ * Shown while the vendor lookup is still in flight -- never renders the
+ * composer or falls through to VendorStatusGate (which defaults an unread
+ * status to 'ACTIVE') before the read has actually finished one way or the
+ * other.
+ */
+function VendorIdentityLoading() {
+  return (
+    <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <View style={unavailableStyles.centered} />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+/**
+ * Shown when the vendor could not be confirmed at all -- a genuinely
+ * nonexistent vendorId, a permission-denied read (very likely, but not
+ * provably, a suspended/deactivated vendor -- Firestore rules deny an
+ * ordinary customer's read of a non-active vendor's document outright, see
+ * firestore.rules vendors/{vendorId}), or a transient network failure.
+ * Deliberately never claims a confirmed suspension the client cannot
+ * actually confirm; VendorStatusGate's own SUSPENDED/DEACTIVATED copy stays
+ * reserved for the case where the vendor's real status WAS read successfully
+ * (a demo vendorId, or a vendor owner/admin viewing their own thread).
+ */
+function VendorIdentityUnavailable({ reason }: { reason: 'not-found' | 'permission-denied' | 'transient' | null }) {
+  const safeBack = useSafeBack();
+  const message =
+    reason === 'transient'
+      ? CHAT_BANNERS.vendorStatusUnknown
+      : CHAT_BANNERS.vendorUnavailable;
+
+  return (
+    <View style={styles.container}>
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
+        <View style={unavailableStyles.header}>
+          <TouchableOpacity onPress={() => safeBack()} style={unavailableStyles.headerButton} activeOpacity={0.7}>
+            <ChevronLeft size={24} color={Colors.text} />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+      <View style={unavailableStyles.content}>
+        <Text style={unavailableStyles.message}>{message}</Text>
+        <TouchableOpacity style={unavailableStyles.button} onPress={() => safeBack()} activeOpacity={0.8}>
+          <Text style={unavailableStyles.buttonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const unavailableStyles = StyleSheet.create({
+  centered: { flex: 1 },
+  header: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 16, paddingVertical: 8 },
+  headerButton: { padding: 8 },
+  content: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, paddingHorizontal: 40 },
+  message: { fontSize: 15, color: Colors.textSecondary, textAlign: 'center' as const, marginBottom: 24 },
+  button: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: Colors.border },
+  buttonText: { fontSize: 14, fontWeight: '600' as const, color: Colors.text },
+});
+
 export default function PreOrderChatScreen() {
   const { vendorId } = useLocalSearchParams<{ vendorId: string }>();
 
@@ -575,21 +684,26 @@ export default function PreOrderChatScreen() {
   // Previously read from mockVendors, which only contains a handful of demo
   // vendors: any real vendor not in that array fell through to `undefined`,
   // normalized to 'UNVERIFIED' rather than reflecting the vendor's real status.
-  const [vendor, setVendor] = useState<Vendor | undefined>(undefined);
-  useEffect(() => {
-    if (!vendorId) return;
-    let cancelled = false;
-    void vendorRepository.getById(vendorId).then((v) => {
-      if (!cancelled) setVendor(v);
-    });
-    return () => { cancelled = true; };
-  }, [vendorId]);
+  const { vendor, availability, unavailableReason } = useVendorIdentity(vendorId as string | undefined);
 
   const normalizedStatus = useMemo(() => {
     return normalizeVendorStatus(vendor?.vendorStatus);
   }, [vendor]);
 
-  console.log('[PRE-ORDER CHAT] Gate status for vendorId:', vendorId, '->', normalizedStatus);
+  console.log('[PRE-ORDER CHAT] Gate status for vendorId:', vendorId, '-> availability:', availability, 'status:', normalizedStatus, 'unavailableReason:', unavailableReason);
+
+  // Fail-closed ahead of VendorStatusGate: normalizeVendorStatus(undefined)
+  // defaults to 'ACTIVE', so reaching VendorStatusGate before the vendor
+  // doc's read has actually succeeded would render the full composer for a
+  // vendor whose status was never confirmed -- including the exact case
+  // (permission-denied on a suspended/deactivated vendor's now-unreadable
+  // document) this correction exists to close.
+  if (availability === 'loading') {
+    return <VendorIdentityLoading />;
+  }
+  if (availability === 'unavailable') {
+    return <VendorIdentityUnavailable reason={unavailableReason} />;
+  }
 
   return (
     <VendorStatusGate vendorStatus={normalizedStatus}>
@@ -770,7 +884,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start' as const,
   },
   messageBubble: {
-    maxWidth: '75%',
+    // Cap moved to bubbleWithTail below - resolving a percentage against
+    // this shrink-wrapped parent collapsed short messages to a fixed width.
+    flexShrink: 1,
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 20,
@@ -786,6 +902,7 @@ const styles = StyleSheet.create({
   bubbleWithTail: {
     flexDirection: 'row' as const,
     alignItems: 'flex-end' as const,
+    maxWidth: '75%',
   },
   bubbleTailOutgoing: {
     width: 0,

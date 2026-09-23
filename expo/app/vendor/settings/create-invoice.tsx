@@ -45,7 +45,7 @@ export default function CreateInvoiceScreen() {
 
   const [customerSource, setCustomerSource] = useState<InvoiceCustomerSource | null>(null);
   const [customerTypeCollapsed, setCustomerTypeCollapsed] = useState<boolean>(false);
-  const effectiveCustomerSource: InvoiceCustomerSource = customerSource ?? 'the platform';
+  const effectiveCustomerSource: InvoiceCustomerSource = customerSource ?? 'platform';
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   // Internal customers never allow a name override — the privacy-safe
   // "First L." form is always used. External customers enter their own name.
@@ -98,7 +98,7 @@ export default function CreateInvoiceScreen() {
 
   useEffect(() => {
     if (!editingInvoice || prefilled) return;
-    setCustomerSource(editingInvoice.customerSource ?? (editingInvoice.chatId ? 'the platform' : 'external'));
+    setCustomerSource(editingInvoice.customerSource ?? (editingInvoice.chatId ? 'platform' : 'external'));
     setSelectedChatId(editingInvoice.chatId ?? null);
     setCustomerName(editingInvoice.customerName);
     setCustomerPhone(editingInvoice.customerPhone ?? '');
@@ -164,7 +164,7 @@ export default function CreateInvoiceScreen() {
     [vendorInbox, selectedChatId]
   );
 
-  // Privacy: internal the platform customers always render as "First L." — the
+  // Privacy: internal Platform customers always render as "First L." — the
   // vendor never sees a full surname on any invoice creation surface.
   const selectedDisplayName = useMemo(
     () => formatInternalCustomerFromFull(selectedSnapshot?.title ?? selectedChat?.customerName),
@@ -325,8 +325,8 @@ export default function CreateInvoiceScreen() {
 
   /** Resolved customer display name based on the selected source. */
   const resolveCustomerName = (chat?: Chat): string => {
-    if (effectiveCustomerSource === 'the platform') {
-      // Privacy: internal the platform customers are always rendered as "First L."
+    if (effectiveCustomerSource === 'platform') {
+      // Privacy: internal Platform customers are always rendered as "First L."
       // The vendor cannot override this with a full surname.
       const rawName = chat?.customerName ?? selectedChat?.customerName ?? selectedSnapshot?.title ?? '';
       return formatInternalCustomerFromFull(rawName);
@@ -338,9 +338,9 @@ export default function CreateInvoiceScreen() {
     const errors: Record<string, string> = {};
     const setErr = (key: string, msg: string) => { errors[key] = msg; };
 
-    if (effectiveCustomerSource === 'the platform') {
+    if (effectiveCustomerSource === 'platform') {
       if (requireConversation && !selectedChat) {
-        setErr('customer', 'Select a the platform customer.');
+        setErr('customer', 'Select a Platform customer.');
       }
     } else if (!customerName.trim()) {
       setErr('customerName', 'Customer name is required.');
@@ -418,16 +418,16 @@ export default function CreateInvoiceScreen() {
     customerEmail: effectiveCustomerSource === 'external' ? (customerEmail.trim() || undefined) : undefined,
     customerAddress: effectiveCustomerSource === 'external' ? (customerAddress.trim() || undefined) : undefined,
     customerSource: effectiveCustomerSource,
-    chatId: effectiveCustomerSource === 'the platform' ? (chat?.id ?? selectedChat?.id) : undefined,
-    customerId: effectiveCustomerSource === 'the platform' ? (chat?.customerId ?? selectedChat?.customerId) : undefined,
-    // Delivery routing only: conversationId tells the backend which the platform
+    chatId: effectiveCustomerSource === 'platform' ? (chat?.id ?? selectedChat?.id) : undefined,
+    customerId: effectiveCustomerSource === 'platform' ? (chat?.customerId ?? selectedChat?.customerId) : undefined,
+    // Delivery routing only: conversationId tells the backend which Platform
     // chat thread to deliver the invoice card into. It does NOT link the
     // invoice to any order. sourceType / orderId stay unset on the normal
     // create-invoice flow — they'll only be populated by an explicit
     // "Create invoice from this order" workflow (Phase 2), which keeps
     // invoices and orders separate and prevents revenue double-counting.
     sourceType: undefined,
-    conversationId: effectiveCustomerSource === 'the platform' ? (conversationId ?? chat?.id ?? selectedChat?.id ?? undefined) : undefined,
+    conversationId: effectiveCustomerSource === 'platform' ? (conversationId ?? chat?.id ?? selectedChat?.id ?? undefined) : undefined,
     orderId: undefined,
     // Payment-due date (simplified MVP): either a calendar date or none.
     // Henry should persist `dueDate` on the invoice document.
@@ -485,8 +485,8 @@ export default function CreateInvoiceScreen() {
   };
 
   const handleSaveDraft = async () => {
-    if (effectiveCustomerSource === 'the platform' && !selectedChat) {
-      Alert.alert('Select a customer', 'Choose a the platform conversation before saving.');
+    if (effectiveCustomerSource === 'platform' && !selectedChat) {
+      Alert.alert('Select a customer', 'Choose a Platform conversation before saving.');
       return;
     }
     if (!validate(false)) return;
@@ -502,11 +502,18 @@ export default function CreateInvoiceScreen() {
       }
     } catch (error) {
       console.error('Error saving invoice:', error);
-      Alert.alert('Error', 'Failed to save invoice');
+      // A flat "Failed to save invoice" discarded the backend's actual
+      // reason — most commonly resource-exhausted for hitting the plan's
+      // monthly invoice limit (createInvoice, PlanLimits.invoicesPerMonth),
+      // which is a real, actionable message the vendor needs to see, not a
+      // generic failure.
+      const message = (error as { message?: string })?.message
+        ?? 'Failed to save invoice';
+      Alert.alert('Error', message);
     }
   };
 
-  /** Attach the invoice card to a the platform chat thread. */
+  /** Attach the invoice card to a Platform chat thread. */
   const sendInChat = async (chat: Chat) => {
     try {
       let invoiceForMessage: { id: string; invoiceNumber: string; shareCode?: string; total: number };
@@ -538,7 +545,9 @@ export default function CreateInvoiceScreen() {
       ]);
     } catch (error) {
       console.error('Error sending invoice in chat:', error);
-      Alert.alert('Error', 'Failed to send invoice');
+      const message = (error as { message?: string })?.message
+        ?? 'Failed to send invoice';
+      Alert.alert('Error', message);
     }
   };
 
@@ -574,7 +583,7 @@ export default function CreateInvoiceScreen() {
       }
       await markInvoiceSharedExternally(inv.id);
       unsavedChanges.resetChanges();
-      // External customers have no the platform chat — never say "sent in chat".
+      // External customers have no Platform chat — never say "sent in chat".
       Alert.alert(
         'Invoice created',
         'Share the secure link with your customer.',
@@ -582,13 +591,15 @@ export default function CreateInvoiceScreen() {
       );
     } catch (error) {
       console.error('Error sharing invoice:', error);
-      Alert.alert('Error', 'Failed to create invoice');
+      const message = (error as { message?: string })?.message
+        ?? 'Failed to create invoice';
+      Alert.alert('Error', message);
     }
   };
 
   const handleSend = async () => {
     if (!validate(false)) return;
-    if (effectiveCustomerSource === 'the platform') {
+    if (effectiveCustomerSource === 'platform') {
       if (selectedChat) {
         await sendInChat(selectedChat);
       } else {
@@ -607,7 +618,7 @@ export default function CreateInvoiceScreen() {
     setSelectedChatId(chatRef);
     // A chat identifies WHERE the invoice card is delivered. It does NOT link
     // the invoice to any order. Selecting a customer from an order chat is only
-    // a way to locate the right the platform customer and the right conversation for
+    // a way to locate the right Platform customer and the right conversation for
     // delivery — the invoice stays standalone.
     //
     // sourceType / sourceOrderId are intentionally NOT set here. They will only
@@ -674,20 +685,20 @@ export default function CreateInvoiceScreen() {
             <TouchableOpacity
               style={[
                 styles.customerSegment,
-                customerSource === 'the platform' && styles.customerSegmentActive,
+                customerSource === 'platform' && styles.customerSegmentActive,
               ]}
-              onPress={() => { setCustomerSource('the platform'); setCustomerTypeCollapsed(true); }}
+              onPress={() => { setCustomerSource('platform'); setCustomerTypeCollapsed(true); }}
               activeOpacity={0.7}
               accessibilityRole="radio"
-              accessibilityState={{ selected: customerSource === 'the platform', checked: customerSource === 'the platform' }}
-              accessibilityLabel="the platform customer"
+              accessibilityState={{ selected: customerSource === 'platform', checked: customerSource === 'platform' }}
+              accessibilityLabel="Platform customer"
             >
-              <Users size={15} color={customerSource === 'the platform' ? Colors.primary : Colors.textMuted} />
+              <Users size={15} color={customerSource === 'platform' ? Colors.primary : Colors.textMuted} />
               <Text style={[
                 styles.customerSegmentText,
-                customerSource === 'the platform' && styles.customerSegmentTextActive,
+                customerSource === 'platform' && styles.customerSegmentTextActive,
               ]}>
-                the platform customer
+                Platform customer
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -711,7 +722,7 @@ export default function CreateInvoiceScreen() {
             </TouchableOpacity>
           </View>
 
-          {customerSource === 'the platform' ? (
+          {customerSource === 'platform' ? (
             <View style={styles.card}>
               <TouchableOpacity
                 style={styles.conversationRow}
@@ -811,8 +822,8 @@ export default function CreateInvoiceScreen() {
             </View>
           ) : null}
 
-          {/* CUSTOMER INLINE ERROR (the platform customer not selected) */}
-          {validationAttempted && effectiveCustomerSource === 'the platform' && !selectedChat && fieldErrors['customer'] ? (
+          {/* CUSTOMER INLINE ERROR (Platform customer not selected) */}
+          {validationAttempted && effectiveCustomerSource === 'platform' && !selectedChat && fieldErrors['customer'] ? (
             <Text style={styles.inlineError}>{fieldErrors['customer']}</Text>
           ) : null}
           {/* CUSTOMER INLINE ERROR (external) */}
@@ -1335,11 +1346,11 @@ export default function CreateInvoiceScreen() {
                 onPress={handleSend}
                 activeOpacity={0.7}
               >
-                {/* Internal customer → invoice is sent into the platform chat.
+                {/* Internal customer → invoice is sent into the Platform chat.
                     External customer → invoice is created and a secure share
                     link is generated (no chat to send into). */}
                 <Text style={styles.sendButtonText}>
-                  {effectiveCustomerSource === 'the platform' ? 'Send Invoice' : 'Create Invoice'}
+                  {effectiveCustomerSource === 'platform' ? 'Send Invoice' : 'Create Invoice'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1593,7 +1604,7 @@ const styles = StyleSheet.create({
   },
   // Customer type — compact segmented selector (~52px tall).
   // Two equal-width options in one rounded container. Selected option uses
-  // a subtle the platform tint + orange text/icon (not a solid orange block).
+  // a subtle Platform tint + orange text/icon (not a solid orange block).
   customerTypeHeading: {
     fontSize: 11,
     fontWeight: '700' as const,

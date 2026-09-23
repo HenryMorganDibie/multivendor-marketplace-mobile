@@ -85,7 +85,7 @@ export const orderService = {
       paymentStatus: 'payment_pending',
       orderNote: params.orderNote,
       vendorPolicy: params.vendorPolicy,
-      orderSource: 'the platform',
+      orderSource: 'platform',
     };
 
     orders = [...orders, newOrder];

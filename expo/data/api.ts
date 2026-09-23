@@ -8,6 +8,7 @@ import { generatePlatformOrderId } from '@/utils/orderIdGenerator';
 import { canAccessViaDirectLink } from '@/utils/vendorDiscovery';
 import { vendorService } from '@/services/vendorService';
 import { catalogService } from '@/services/catalogService';
+import { callable } from '@/lib/firebase';
 
 export async function getVendorByUsername(username: string): Promise<Vendor | null> {
   const normalized = username.trim().toLowerCase().replace(/^@/, '');
@@ -135,14 +136,28 @@ export async function submitOrder(payload: CreateOrderPayload): Promise<{ orderI
   return { orderId: `order-${Date.now()}` };
 }
 
+/**
+ * Order-R1: these five call and await the real updateOrderStatus callable
+ * directly -- one call per action, resolving only once the backend's
+ * transaction has actually committed (or rejecting with the real error).
+ * No demo-account branching lives here: this module is a plain network
+ * layer, always meaning "call the real backend." The decision to skip it
+ * entirely for a demo account is made by the caller (data/hooks.ts), which
+ * has hook access to the signed-in identity; this module deliberately does
+ * not import React context to make that call.
+ */
+type UpdateOrderStatusResponse = { success: true; orderId: string; newStatus: string };
+
 export async function markInProgress(orderId: string): Promise<{ orderId: string; newStatus: 'in_progress' }> {
-  console.log('[API] markInProgress:', orderId);
-  return { orderId, newStatus: 'in_progress' };
+  const send = callable<{ orderId: string; newStatus: string }, UpdateOrderStatusResponse>('updateOrderStatus');
+  const res = await send({ orderId, newStatus: 'in_progress' });
+  return { orderId: res.data.orderId, newStatus: 'in_progress' };
 }
 
 export async function completeOrder(orderId: string): Promise<{ orderId: string; newStatus: 'completed' }> {
-  console.log('[API] completeOrder:', orderId);
-  return { orderId, newStatus: 'completed' };
+  const send = callable<{ orderId: string; newStatus: string }, UpdateOrderStatusResponse>('updateOrderStatus');
+  const res = await send({ orderId, newStatus: 'completed' });
+  return { orderId: res.data.orderId, newStatus: 'completed' };
 }
 
 export async function cancelOrder(
@@ -151,8 +166,14 @@ export async function cancelOrder(
   reasonCode?: string,
   reasonText?: string,
 ): Promise<{ orderId: string; newStatus: 'cancelled'; reason?: string; reasonCode?: string; reasonText?: string }> {
-  console.log('[API] cancelOrder:', orderId, 'reason:', reason);
-  return { orderId, newStatus: 'cancelled', reason, reasonCode, reasonText };
+  // The real callable only ever accepts {orderId, newStatus, reason} -- there
+  // is no reasonCode/reasonText field on the backend contract. Those two are
+  // passed straight through here unsent, purely so the caller can keep
+  // shaping the same local-only fields it always has; they are not backend
+  // state (see contexts/OrdersContext.tsx's applyStatusLocally).
+  const send = callable<{ orderId: string; newStatus: string; reason?: string }, UpdateOrderStatusResponse>('updateOrderStatus');
+  const res = await send({ orderId, newStatus: 'cancelled', reason });
+  return { orderId: res.data.orderId, newStatus: 'cancelled', reason, reasonCode, reasonText };
 }
 
 export async function markOrderPaid(orderId: string): Promise<{ orderId: string; newStatus: 'confirmed' }> {
@@ -161,11 +182,13 @@ export async function markOrderPaid(orderId: string): Promise<{ orderId: string;
 }
 
 export async function acceptOrder(orderId: string): Promise<{ orderId: string; newStatus: 'accepted' }> {
-  console.log('[API] acceptOrder:', orderId);
-  return { orderId, newStatus: 'accepted' };
+  const send = callable<{ orderId: string; newStatus: string }, UpdateOrderStatusResponse>('updateOrderStatus');
+  const res = await send({ orderId, newStatus: 'accepted' });
+  return { orderId: res.data.orderId, newStatus: 'accepted' };
 }
 
 export async function rejectOrder(orderId: string, reason?: string): Promise<{ orderId: string; newStatus: 'rejected'; reason?: string }> {
-  console.log('[API] rejectOrder:', orderId, 'reason:', reason);
-  return { orderId, newStatus: 'rejected', reason };
+  const send = callable<{ orderId: string; newStatus: string; reason?: string }, UpdateOrderStatusResponse>('updateOrderStatus');
+  const res = await send({ orderId, newStatus: 'rejected', reason });
+  return { orderId: res.data.orderId, newStatus: 'rejected', reason };
 }

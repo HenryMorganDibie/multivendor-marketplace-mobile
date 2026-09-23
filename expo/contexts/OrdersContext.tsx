@@ -57,7 +57,13 @@ async function uploadAndSubmitPaymentProof(
  */
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   requested: ['accepted', 'rejected', 'cancelled', 'expired'],
-  accepted: ['confirmed', 'cancelled'],
+  // 'in_progress' added: the real backend's vendor transition table allows
+  // accepted -> in_progress directly (no vendor-reachable path ever sets a
+  // real order to 'confirmed' -- markOrderPaid, the only caller that would,
+  // is never invoked from the live UI), so this table used to reject the
+  // one transition Mark In Progress actually needs before it ever reached
+  // the network call.
+  accepted: ['confirmed', 'in_progress', 'cancelled'],
   confirmed: ['in_progress', 'cancelled'],
   in_progress: ['awaiting_customer_update', 'completed', 'cancelled'],
   awaiting_customer_update: ['in_progress', 'completed', 'cancelled'],
@@ -199,24 +205,14 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
   }, []);
 
   /**
-   * Moves an order to a new status.
-   *
-   * The backend is the authority here. updateOrderStatus on the server checks
-   * the transition against its own state machine, checks the caller actually
-   * owns the order, writes the status inside a transaction, and applies the side
-   * effects: releasing reserved stock on a cancellation, counting the sale and
-   * generating a receipt on completion. None of that can be done from the app.
-   *
-   * The local update below stays as an optimistic one. The Firestore listener
-   * will overwrite it with the real document a moment later, so this exists only
-   * so the row does not sit still for a round trip. If the call fails, the
-   * listener's next snapshot puts the old status back.
-   *
-   * The signature stays synchronous and boolean-returning because eighteen
-   * screens call it that way. It reports whether the transition was *accepted*
-   * for sending, not whether the server has finished applying it.
+   * The local-only half of a status change: validates the transition against
+   * this device's cached order, then shapes the local Order object exactly
+   * the way it always has (event history entry, per-status special-casing).
+   * No network call lives here -- this is shared by two callers with
+   * different network behavior (see below), so the local shaping logic
+   * exists in exactly one place instead of being duplicated between them.
    */
-  const updateOrderStatus = useCallback((
+  const applyStatusLocally = useCallback((
     orderId: string,
     newStatus: OrderStatus,
     reason?: string,
@@ -275,6 +271,46 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
       })
     );
 
+    return true;
+  }, [orders, isValidTransition]);
+
+  /**
+   * Moves an order to a new status.
+   *
+   * The backend is the authority here. updateOrderStatus on the server checks
+   * the transition against its own state machine, checks the caller actually
+   * owns the order, writes the status inside a transaction, and applies the side
+   * effects: releasing reserved stock on a cancellation, counting the sale and
+   * generating a receipt on completion. None of that can be done from the app.
+   *
+   * The local update below stays as an optimistic one. The Firestore listener
+   * will overwrite it with the real document a moment later, so this exists only
+   * so the row does not sit still for a round trip. If the call fails, the
+   * listener's next snapshot puts the old status back.
+   *
+   * The signature stays synchronous and boolean-returning because eighteen
+   * screens call it that way. It reports whether the transition was *accepted*
+   * for sending, not whether the server has finished applying it.
+   *
+   * Not used by the five vendor order-detail actions (accept/reject/mark
+   * in-progress/complete/cancel) as of Order-R1 -- those now await the real
+   * callable themselves (data/api.ts) and apply the confirmed result via
+   * applyConfirmedStatus below, so the optimistic-then-fire-and-forget
+   * pattern here no longer runs for them. This function's own contract is
+   * unchanged for its other callers (customer order cancellation, the vendor
+   * chat screen's mark-in-progress action).
+   */
+  const updateOrderStatus = useCallback((
+    orderId: string,
+    newStatus: OrderStatus,
+    reason?: string,
+    reasonCode?: string,
+    reasonText?: string
+  ): boolean => {
+    if (!applyStatusLocally(orderId, newStatus, reason, reasonCode, reasonText)) {
+      return false;
+    }
+
     // Demo logins exist only in local seed data and have no backend order to
     // update, so the optimistic write is the whole story for them.
     if (!DEMO_ORDER_ACCOUNTS[accountId ?? '']) {
@@ -293,7 +329,44 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
 
     console.log(`[OrdersContext] Status updated: ${orderId} → ${newStatus}`);
     return true;
-  }, [orders, isValidTransition]);
+  }, [applyStatusLocally, accountId]);
+
+  /**
+   * Applies a status change the backend has *already* confirmed (Order-R1):
+   * the same local shaping as updateOrderStatus, with no network call of its
+   * own, since the caller has already awaited the real callable itself
+   * (data/api.ts) before invoking this.
+   *
+   * The Firestore listener above is racing this call, because both are
+   * driven by the same backend write: the listener can deliver the
+   * authoritative snapshot (already at newStatus) before this mutation's own
+   * onSuccess runs. When that happens the order is already sitting at the
+   * confirmed target status, and ALLOWED_TRANSITIONS has no entry for a
+   * status transitioning to itself -- isValidTransition would reject it as
+   * illegal, mislabeling a confirmed backend success as an invalid
+   * transition. That is reconciliation, not a new transition, so it is
+   * checked and short-circuited here rather than in isValidTransition or
+   * applyStatusLocally: updateOrderStatus's own callers still need every
+   * real duplicate/illegal transition rejected exactly as before, and this
+   * function is the only one reconciling an already-confirmed result rather
+   * than initiating a change.
+   */
+  const applyConfirmedStatus = useCallback((
+    orderId: string,
+    newStatus: OrderStatus,
+    reason?: string,
+    reasonCode?: string,
+    reasonText?: string
+  ): boolean => {
+    const order = orders.find((o) => o.id === orderId);
+    if (order?.status === newStatus) return true;
+    return applyStatusLocally(orderId, newStatus, reason, reasonCode, reasonText);
+  }, [orders, applyStatusLocally]);
+
+  /** Whether accountId is one of the built-in demo/local-test logins. */
+  const isDemoOrderAccount = useCallback((id?: string): boolean => {
+    return !!DEMO_ORDER_ACCOUNTS[id ?? ''];
+  }, []);
 
   const addVendorEvent = useCallback((
     orderId: string,
@@ -351,7 +424,7 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
    * anywhere. Callers that want the old fire-and-forget behaviour can still
    * ignore the returned promise.
    */
-  const addOrder = useCallback((order: Order): Promise<{ success: boolean; error?: string }> => {
+  const addOrder = useCallback((order: Order): Promise<{ success: boolean; error?: string; orderId?: string; publicOrderId?: string }> => {
     setOrders((prev) => [order, ...prev]);
 
     if (DEMO_ORDER_ACCOUNTS[accountId ?? '']) return Promise.resolve({ success: true });
@@ -384,11 +457,16 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
       orderNote: order.orderNote,
     })
       .then((priced) => create({ cartId: priced.data.cartId }))
-      .then(() => {
+      .then((created) => {
         // The listener now holds the authoritative row under the server's id.
         // Dropping the placeholder avoids the same order appearing twice.
         setOrders((prev) => prev.filter((o) => o.id !== order.id));
-        return { success: true };
+        // The real orderId used to be discarded here entirely (only
+        // {success:true} was returned) — callers had no way to reference the
+        // order the backend actually created, e.g. to attach a delivery
+        // contact snapshot to it (submitDeliveryContact requires this exact
+        // id, not the client-side placeholder passed into this function).
+        return { success: true as const, orderId: created.data.orderId, publicOrderId: created.data.publicOrderId };
       })
       .catch((err) => {
         console.error('[Orders] createOrder rejected:', err);
@@ -397,6 +475,78 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
         return { success: false, error: message };
       });
   }, [accountId]);
+
+  /**
+   * submitDeliveryContact — attaches an order-scoped delivery contact
+   * snapshot (fullName, phoneNumber, address) to a real order. Backend
+   * (functions/src/orders/submitDeliveryContact.ts) validates ownership,
+   * refuses a second call for the same order (already-exists), and never
+   * logs the values in full. Safe to retry after a failed attempt: it only
+   * rejects once a snapshot has already been *successfully* stored.
+   */
+  const submitDeliveryContact = useCallback(
+    async (
+      orderId: string,
+      contact: { fullName: string; phoneNumber: string; address?: string },
+    ): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const submit = callable<
+          { orderId: string; fullName: string; phoneNumber: string; address?: string },
+          { success: true }
+        >('submitDeliveryContact');
+        await submit({ orderId, ...contact });
+        return { success: true };
+      } catch (err) {
+        // A retry after a network drop can legitimately hit "already-exists"
+        // if the first call actually succeeded server-side and only the
+        // response was lost - that's not a failure, the data is safely
+        // stored under this order. Only a genuine already-exists counts;
+        // anything else is a real failure.
+        const code = (err as { code?: string })?.code;
+        if (code === 'already-exists' || code === 'functions/already-exists') {
+          return { success: true };
+        }
+        console.error('[Orders] submitDeliveryContact failed:', err);
+        const message = err instanceof Error ? err.message : 'Could not save delivery details.';
+        return { success: false, error: message };
+      }
+    },
+    [],
+  );
+
+  /**
+   * getOrderDeliveryContact — the ONLY sanctioned way to read the actual
+   * fullName/phoneNumber/address of an order's delivery contact. Calls the
+   * real getOrderDetails callable, which strips deliveryContact from the
+   * response once the order is terminal (vendor side only — a customer
+   * reading their own order always gets it back). Deliberately not derived
+   * from the live orders listener/mapOrderDoc: that pipeline is shared by
+   * both customer and vendor screens and has no concept of terminal-status
+   * expiry, so exposing the raw field there would let a vendor's order
+   * screen bypass the expiry this callable enforces.
+   */
+  const getOrderDeliveryContact = useCallback(
+    async (
+      orderId: string,
+    ): Promise<{ deliveryContact: { fullName: string; phoneNumber: string; address?: string | null; submittedAt?: unknown } | null; expired: boolean }> => {
+      try {
+        const getDetails = callable<
+          { orderId: string },
+          { success: true; order: Record<string, unknown> }
+        >('getOrderDetails');
+        const res = await getDetails({ orderId });
+        const order = res.data.order;
+        return {
+          deliveryContact: (order.deliveryContact as { fullName: string; phoneNumber: string; address?: string | null } | undefined) ?? null,
+          expired: Boolean(order.deliveryContactExpired),
+        };
+      } catch (err) {
+        console.error('[Orders] getOrderDetails (delivery contact) failed:', err);
+        return { deliveryContact: null, expired: false };
+      }
+    },
+    [],
+  );
 
 
   /**
@@ -419,7 +569,7 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
    */
   const priceCart = useCallback(async (input: {
     vendorId: string;
-    items: { itemId: string; quantity: number }[];
+    items: { itemId: string; quantity: number; selectedAddOns?: { groupId: string; optionId: string }[] }[];
     fulfillmentType: 'pickup' | 'delivery' | 'shipping';
     orderNote?: string;
   }): Promise<PricedCart> => {
@@ -433,7 +583,7 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     return res.data;
   }, []);
 
-  const markCustomerPaid = useCallback((orderId: string, proofs?: PaymentProof[]): boolean => {
+  const markCustomerPaid = useCallback(async (orderId: string, proofs?: PaymentProof[]): Promise<boolean> => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) {
       console.error(`[OrdersContext] Order not found for markCustomerPaid: ${orderId}`);
@@ -474,15 +624,27 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     // customer's device. Uploads each image to Storage first, then submits
     // the real storagePaths — submitPaymentProof rejects any payload without
     // one. Demo orders have no backend order to attach this to.
+    //
+    // This used to be fired with `void ... .catch(console.error)` and return
+    // true regardless — the customer saw "marked paid" succeed even when the
+    // real upload/submission failed silently in the background (a rejected
+    // image, a network drop, hitting the 2-attempt lockout), with no way to
+    // know their payment was never actually recorded. Now awaited: a real
+    // failure rolls the optimistic update back to its pre-call state and
+    // reports failure to the caller, instead of lying about success.
     if (!DEMO_ORDER_ACCOUNTS[accountId ?? ''] && proofs && proofs.length > 0) {
-      void uploadAndSubmitPaymentProof(orderId, order.vendorId, proofs).catch((err) => {
+      try {
+        await uploadAndSubmitPaymentProof(orderId, order.vendorId, proofs);
+      } catch (err) {
         console.error('[Orders] submitPaymentProof rejected:', err);
-      });
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? order : o)));
+        throw err;
+      }
     }
     return true;
   }, [orders, accountId]);
 
-  const addPaymentProof = useCallback((orderId: string, proof: PaymentProof): boolean => {
+  const addPaymentProof = useCallback(async (orderId: string, proof: PaymentProof): Promise<boolean> => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) {
       console.error(`[OrdersContext] Order not found for addPaymentProof: ${orderId}`);
@@ -499,16 +661,21 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     );
 
     // Same upload-then-submit path as markCustomerPaid, for the "upload
-    // proof later" flow — one image, one submission.
+    // proof later" flow — one image, one submission. Same silent-failure fix
+    // as above: awaited, rolled back and reported on real rejection.
     if (!DEMO_ORDER_ACCOUNTS[accountId ?? '']) {
-      void uploadAndSubmitPaymentProof(orderId, order.vendorId, [proof]).catch((err) => {
+      try {
+        await uploadAndSubmitPaymentProof(orderId, order.vendorId, [proof]);
+      } catch (err) {
         console.error('[Orders] submitPaymentProof rejected:', err);
-      });
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? order : o)));
+        throw err;
+      }
     }
     return true;
   }, [orders, accountId]);
 
-  const vendorConfirmPayment = useCallback((orderId: string, proofId?: string): boolean => {
+  const vendorConfirmPayment = useCallback(async (orderId: string, proofId?: string): Promise<boolean> => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) {
       console.error(`[OrdersContext] Order not found for vendorConfirmPayment: ${orderId}`);
@@ -565,11 +732,21 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     );
     console.log(`[OrdersContext] Vendor confirmed payment: ${orderId}`);
 
+    // Same silent-failure fix as markCustomerPaid/addPaymentProof: this used
+    // to fire reviewPaymentProof with `void ... .catch(console.error)` and
+    // return true unconditionally — the vendor saw "confirmed" even if the
+    // real call was rejected (a stale proofId, a permission mismatch, a race
+    // with the customer's own submission). Now awaited, with the optimistic
+    // update rolled back and the failure reported if it actually fails.
     if (proofId && !isDemo) {
       const review = callable<Record<string, unknown>, { success: true }>('reviewPaymentProof');
-      void review({ orderId, proofId, decision: 'accept' }).catch((err) => {
+      try {
+        await review({ orderId, proofId, decision: 'accept' });
+      } catch (err) {
         console.error('[Orders] reviewPaymentProof (accept) rejected:', err);
-      });
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? order : o)));
+        throw err;
+      }
     }
     return true;
   }, [orders, accountId]);
@@ -594,7 +771,7 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     return true;
   }, [orders]);
 
-  const vendorMarkNotPaid = useCallback((orderId: string, proofId?: string): boolean => {
+  const vendorMarkNotPaid = useCallback(async (orderId: string, proofId?: string): Promise<boolean> => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) {
       console.error(`[OrdersContext] Order not found for vendorMarkNotPaid: ${orderId}`);
@@ -631,16 +808,21 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     );
     console.log(`[OrdersContext] Vendor marked not paid: ${orderId}`);
 
+    // Same silent-failure fix as vendorConfirmPayment's accept path.
     if (proofId && !DEMO_ORDER_ACCOUNTS[accountId ?? '']) {
       const review = callable<Record<string, unknown>, { success: true }>('reviewPaymentProof');
-      void review({
-        orderId,
-        proofId,
-        decision: 'reject',
-        reviewReason: 'Vendor marked payment as not received.',
-      }).catch((err) => {
+      try {
+        await review({
+          orderId,
+          proofId,
+          decision: 'reject',
+          reviewReason: 'Vendor marked payment as not received.',
+        });
+      } catch (err) {
         console.error('[Orders] reviewPaymentProof (reject) rejected:', err);
-      });
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? order : o)));
+        throw err;
+      }
     }
     return true;
   }, [orders, accountId]);
@@ -665,6 +847,8 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     getOrder,
     isValidTransition,
     updateOrderStatus,
+    applyConfirmedStatus,
+    isDemoOrderAccount,
     addVendorEvent,
     addOrder,
     priceCart,
@@ -677,7 +861,9 @@ export const [OrdersProvider, useOrders] = createContextHook(() => {
     setOrderPendingChanges,
     hasOrderPendingChanges,
     markOrderRated,
-  }), [orders, getOrder, isValidTransition, updateOrderStatus, addVendorEvent, addOrder, priceCart, markCustomerPaid, addPaymentProof, vendorConfirmPayment, vendorRequestPaymentProof, vendorMarkNotPaid, setOrderPendingChanges, hasOrderPendingChanges, markOrderRated]);
+    submitDeliveryContact,
+    getOrderDeliveryContact,
+  }), [orders, getOrder, isValidTransition, updateOrderStatus, applyConfirmedStatus, isDemoOrderAccount, addVendorEvent, addOrder, priceCart, markCustomerPaid, addPaymentProof, vendorConfirmPayment, vendorRequestPaymentProof, vendorMarkNotPaid, setOrderPendingChanges, hasOrderPendingChanges, markOrderRated, submitDeliveryContact, getOrderDeliveryContact]);
 });
 
 function buildOrderSnapshot(order: Order): OrderSnapshot {

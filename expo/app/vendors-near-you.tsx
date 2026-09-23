@@ -46,7 +46,7 @@ export default function VendorsNearYouScreen() {
           loadingSkeleton={<VendorListSkeleton count={5} />}
           emptyIcon={<MapPin size={36} color={Colors.textMuted} strokeWidth={1.5} />}
           emptyTitle="No vendors nearby"
-          emptyDescription="We couldn't find vendors in your area yet. More vendors are joining the platform soon."
+          emptyDescription="We couldn't find vendors in your area yet. More vendors are joining Platform soon."
           style={styles.stateContainer}
         >
           <FlatList

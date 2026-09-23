@@ -1,8 +1,10 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth } from '@/lib/firebase';
 
-const CART_STORAGE_KEY = '@platform_vendor_carts';
+const CART_STORAGE_KEY_PREFIX = '@platform_vendor_carts';
+const cartStorageKey = (uid: string) => `${CART_STORAGE_KEY_PREFIX}:${uid}`;
 const PERSIST_DEBOUNCE_MS = 600;
 
 export interface CartAddOn {
@@ -69,26 +71,54 @@ export const [CartProvider, useCart] = createContextHook(() => {
   const [vendorCarts, setVendorCarts] = useState<VendorCart[]>([]);
   const [activeVendorId, setActiveVendorId] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
+  // Which uid the currently-loaded/persisted cart belongs to. The cart used
+  // to live under one device-global key (`@platform_vendor_carts`) with no uid
+  // in it at all: Customer B signing in right after Customer A signed out on
+  // the same device inherited A's leftover vendor/items/quantities and could
+  // carry them straight into a real checkout under B's own identity. Now the
+  // storage key is uid-scoped, and switching identities clears the in-memory
+  // cart immediately rather than waiting for a screen to happen to reload it.
+  const currentUidRef = useRef<string | null>(null);
   /** Debounce timer ref — clears on each cart mutation before scheduling a new write */
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem(CART_STORAGE_KEY)
-      .then((data) => {
-        if (data) {
-          const parsed = JSON.parse(data) as any[];
-          const saved = parsed
-            .map(migrateCart)
-            .filter((c) => c.items.length > 0 && c.status !== 'submitted');
-          setVendorCarts(saved);
-        }
-      })
-      .catch((err) => console.error('[CART] Failed to load persisted carts:', err))
-      .finally(() => {
-        hasLoadedRef.current = true;
-      });
+    const unsubscribe = auth.onIdTokenChanged((fbUser) => {
+      const uid = fbUser?.uid ?? null;
+      if (uid === currentUidRef.current) return;
+      currentUidRef.current = uid;
+
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+      hasLoadedRef.current = false;
+      setActiveVendorId(null);
+
+      if (!uid) {
+        // Signed out: nothing persists for "no one," and the previous
+        // identity's cart must not linger in memory for whoever looks next.
+        setVendorCarts([]);
+        return;
+      }
+
+      setVendorCarts([]);
+      AsyncStorage.getItem(cartStorageKey(uid))
+        .then((data) => {
+          if (currentUidRef.current !== uid) return; // identity moved on again before this resolved
+          if (data) {
+            const parsed = JSON.parse(data) as any[];
+            const saved = parsed
+              .map(migrateCart)
+              .filter((c) => c.items.length > 0 && c.status !== 'submitted');
+            setVendorCarts(saved);
+          }
+        })
+        .catch((err) => console.error('[CART] Failed to load persisted carts:', err))
+        .finally(() => {
+          if (currentUidRef.current === uid) hasLoadedRef.current = true;
+        });
+    });
 
     return () => {
+      unsubscribe();
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     };
   }, []);
@@ -99,10 +129,12 @@ export const [CartProvider, useCart] = createContextHook(() => {
    */
   useEffect(() => {
     if (!hasLoadedRef.current) return;
+    const uid = currentUidRef.current;
+    if (!uid) return;
 
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = setTimeout(() => {
-      AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(vendorCarts)).catch(
+      AsyncStorage.setItem(cartStorageKey(uid), JSON.stringify(vendorCarts)).catch(
         (err) => console.error('[CART] Failed to persist carts:', err),
       );
     }, PERSIST_DEBOUNCE_MS);

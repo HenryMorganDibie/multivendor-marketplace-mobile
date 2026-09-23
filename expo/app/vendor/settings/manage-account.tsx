@@ -32,7 +32,7 @@ export default function ManageAccountScreen() {
     (isRealVendor ? vendor.username : undefined) || username || systemGeneratedUsername || 'loading';
   const isSystemGenerated = plan === 'basic';
   const canEditUsername = plan !== 'basic';
-  const eligibility = getUsernameChangeEligibility();
+  const eligibility = getUsernameChangeEligibility(isRealVendor ? vendor.usernameChangeHistory : undefined);
 
   const isVerified = vendor.isVerified === true;
 

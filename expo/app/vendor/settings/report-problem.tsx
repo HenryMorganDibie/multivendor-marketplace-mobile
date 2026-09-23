@@ -69,7 +69,7 @@ export default function ReportProblemScreen() {
 
   const canSubmit = !!issueType && message.trim().length > 0 && !isSending;
 
-  // Files into the same real support-ticket system as the platform Vendor
+  // Files into the same real support-ticket system as Platform Vendor
   // Support (vendor/settings/support-chat.tsx), reusing
   // createSupportTicket/sendChatMessage rather than inventing a separate
   // reports collection. Picked images are still previewed here but not yet

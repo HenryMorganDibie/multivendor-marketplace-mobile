@@ -12,10 +12,10 @@ come from driving the real app.
 Two terminals.
 
 ```bash
-# 1. Backend, from platform-backend/
+# 1. Backend, from multivendor-marketplace-platform/
 npx firebase-tools emulators:start --project demo-platform
 
-# 2. Tests, from platform-backend/scripts/
+# 2. Tests, from multivendor-marketplace-platform/scripts/
 npm install          # first time only
 node phase1-acceptance-tests.js
 node phase2-acceptance-tests.js
@@ -23,7 +23,7 @@ node phase2-acceptance-tests.js
 
 Each prints one line per check and exits non-zero if any fail.
 
-For the native run, from `platform-mobile/`:
+For the native run, from `this repo/`:
 
 ```bash
 maestro test maestro/phase1-vendor-registration.yaml
@@ -111,7 +111,7 @@ worth calling out:
 ### 12 — iOS and Android
 
 Both builds succeed, neither needs a paid store account, and both are under
-the platform's Expo organisation. See `docs/native-builds.md`.
+Platform's Expo organisation. See `docs/native-builds.md`.
 
 Phase 1 is captured on a real Android build in `docs/native-evidence/android/`,
 including the two negative checks that matter most: no placeholder social
@@ -159,5 +159,5 @@ Found while verifying other things:
 | `docs/phase2-evidence/` | Each moderation state, 5 screenshots |
 | `docs/native-evidence/android/` | Phase 1 on a real Android build, 8 screenshots |
 | `docs/native-builds.md` | Build profiles, commands, what needs which account |
-| `platform-backend/scripts/` | Both acceptance suites |
+| `multivendor-marketplace-platform/scripts/` | Both acceptance suites |
 | `maestro/` | The native flows |

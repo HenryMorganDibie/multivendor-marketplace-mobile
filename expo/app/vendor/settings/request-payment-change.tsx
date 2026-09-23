@@ -292,7 +292,7 @@ export default function RequestPaymentChangeScreen() {
                       autoCapitalize="none"
                     />
                     <Text style={styles.helperText}>
-                      Customer may be redirected to the provider. the platform does not process payments.
+                      Customer may be redirected to the provider. Platform does not process payments.
                     </Text>
                   </View>
                   
@@ -310,7 +310,7 @@ export default function RequestPaymentChangeScreen() {
                   <View style={styles.warningBox}>
                     <AlertTriangle size={16} color={Colors.primary} />
                     <Text style={styles.warningBoxText}>
-                      You&apos;ll be redirected to the vendor&apos;s payment provider. the platform does not process card payments.
+                      You&apos;ll be redirected to the vendor&apos;s payment provider. Platform does not process card payments.
                     </Text>
                   </View>
                 </View>

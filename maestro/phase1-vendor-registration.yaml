@@ -54,7 +54,7 @@ appId: com.platform.app
 
 # A fresh address each run, so the flow never trips over "account already
 # exists" from the previous one. Maestro evaluates JS inside ${}.
-- evalScript: ${output.email = 'maestro.vendor.' + Date.now() + '@theplatform.test'}
+- evalScript: ${output.email = 'maestro.vendor.' + Date.now() + '@platform.test'}
 
 # The keyboard is dismissed between fields. On a phone it covers the lower half
 # of the form, so the next input is genuinely off-screen rather than just

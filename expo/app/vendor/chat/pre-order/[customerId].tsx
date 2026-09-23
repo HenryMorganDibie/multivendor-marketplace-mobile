@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Colors } from '@/constants/colors';
 import {
   View,
@@ -9,23 +9,26 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  InteractionManager,
   Modal,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Send, Plus, ArrowUp, FileText, Package, MessageSquare, MapPin, Info } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { ChatMessage } from '@/mocks/chatData';
-import { chatService } from '@/services/chatService';
 import { useChats } from '@/contexts/ChatContext';
+import { chatService } from '@/services/chatService';
 import { useCatalog } from '@/contexts/CatalogContext';
 import { useInbox } from '@/contexts/InboxContext';
 import { useChatRead } from '@/contexts/ChatReadContext';
 import { useVendor } from '@/contexts/VendorContext';
 import { useVendorPickup } from '@/contexts/VendorPickupContext';
 import { useVendorDrafts } from '@/contexts/VendorDraftContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { validateChatMessage } from '@/utils/chatValidation';
+import { useVendorQuickReplies } from '@/hooks/useVendorQuickReplies';
+import { getActiveSlashQuery, filterQuickRepliesByQuery, applyQuickReplySelection } from '@/utils/quickReplyShortcuts';
 import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
 
 const formatVendorDisplayName = (fullName?: string): string => {
@@ -41,16 +44,18 @@ export default function VendorPreOrderChatScreen() {
   const router = useRouter();
   const { customerId } = useLocalSearchParams<{ customerId: string }>();
   const scrollViewRef = useRef<ScrollView>(null);
+  const messageInputRef = useRef<TextInput>(null);
   const { getVendorPreOrderChatByCustomerId, addMessageToChat } = useChats();
   const { vendorInbox, updateInboxAfterMessage } = useInbox();
-  const { vendor } = useVendor();
+  const { vendor, identityStatus } = useVendor();
+  // A real signed-in vendor whose identity hasn't resolved yet (missing/stale
+  // claim, still loading) must never send as if `vendor` were a confirmed
+  // real business -- see VendorContext's identityStatus doc comment. A demo
+  // or already-resolved session is unaffected.
+  const canActAsVendor = identityStatus !== 'loading' && identityStatus !== 'unavailable';
 
   const preOrderChat = getVendorPreOrderChatByCustomerId(customerId);
   const customerName = formatVendorDisplayName(preOrderChat?.customerName);
-  const customerPublicId = preOrderChat?.customerId
-    ? `CUSTOMER-${preOrderChat.customerId.toUpperCase()}`
-    : undefined;
-
 
   const [messages, setMessages] = useState<ChatMessage[]>(preOrderChat?.messages || []);
 
@@ -60,7 +65,15 @@ export default function VendorPreOrderChatScreen() {
     }
   }, [preOrderChat]);
   const [messageText, setMessageText] = useState('');
+  const [messageSelection, setMessageSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  // isSendingMessage (React state) is not a reliable mutex on its own: two
+  // event-handler invocations from a fast double-tap can both read the
+  // stale pre-update value before either one triggers a re-render, so both
+  // still pass the check. sendLockRef is checked and set synchronously,
+  // before any await, closing that gap; isSendingMessage stays purely for
+  // disabling the button visually.
+  const sendLockRef = useRef(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showCatalogModal, setShowCatalogModal] = useState(false);
@@ -70,7 +83,7 @@ export default function VendorPreOrderChatScreen() {
   const [pickupAddress, setPickupAddress] = useState('');
   const [pickupInstructions, setPickupInstructions] = useState('');
   const [showQuickRepliesModal, setShowQuickRepliesModal] = useState(false);
-  const [quickReplies, setQuickReplies] = useState<{id: string; shortcut: string; message: string}[]>([]);
+  const { quickReplies } = useVendorQuickReplies(vendor?.id);
   const { items: catalogItems, categories } = useCatalog();
   const { pickupDetails, isLoaded: isPickupLoaded } = useVendorPickup();
   const { getDraft, saveDraft, clearDraft } = useVendorDrafts();
@@ -78,10 +91,17 @@ export default function VendorPreOrderChatScreen() {
   const chatId = preOrderChat?.id ?? '';
   const { markChatAsRead } = useChatRead();
 
-  /** Clear unread for vendor when this chat opens. */
+  /**
+   * Clear unread for vendor when this chat opens, and write the real read
+   * receipt. Only the local unread-badge update used to happen here — the
+   * order-chat screens already call chatService.markRead too, but this
+   * pre-order inquiry screen never did, so chatThreads/{chatId}/readReceipts
+   * and message status never advanced for this chat type at all.
+   */
   useEffect(() => {
     if (!chatId) return;
     markChatAsRead(chatId, 'vendor');
+    void chatService.markRead(chatId);
   }, [chatId, markChatAsRead]);
 
   useEffect(() => {
@@ -99,45 +119,35 @@ export default function VendorPreOrderChatScreen() {
   }, [messages]);
 
   useEffect(() => {
-    loadQuickReplies();
-  }, []);
-
-  useEffect(() => {
-    if (showQuickRepliesModal) {
-      loadQuickReplies();
-    }
-  }, [showQuickRepliesModal]);
-
-  useEffect(() => {
     if (showPickupModal && !editingPickup && isPickupLoaded) {
-      const fullAddress = pickupDetails.unit 
-        ? `${pickupDetails.streetAddress}, ${pickupDetails.unit}`
+      const fullAddress = pickupDetails.unitSuite
+        ? `${pickupDetails.streetAddress}, ${pickupDetails.unitSuite}`
         : pickupDetails.streetAddress;
       setPickupAddress(fullAddress);
       setPickupInstructions(pickupDetails.instructions);
     }
   }, [showPickupModal, editingPickup, pickupDetails, isPickupLoaded]);
 
-  const loadQuickReplies = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('quickReplies');
-      if (stored) {
-        setQuickReplies(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error('Failed to load quick replies:', error);
-    }
-  };
-
   const handleBackPress = () => {
     router.back();
   };
 
-  const handleSendMessage = () => {
-    // isSendingMessage guard: messageText only clears once React re-renders,
-    // so a rapid double-tap could fire this handler twice on the same
-    // content before that happens, sending the same message twice.
-    if (messageText.trim() === '' || !preOrderChat || isSendingMessage) return;
+  const handleSendMessage = async () => {
+    // sendLockRef is the real guard - see its declaration above for why
+    // isSendingMessage (React state) can't reliably stop a fast double-tap
+    // on its own. A previous version of this handler also reset
+    // isSendingMessage back to false in the very same synchronous tick it
+    // set it, before addMessageToChat's own real send even resolved, which
+    // meant it was never actually true when a second tap's handler ran -
+    // the guard existed but never held.
+    if (messageText.trim() === '' || !preOrderChat || sendLockRef.current) return;
+
+    if (!canActAsVendor) {
+      Alert.alert('Could not send', 'We could not verify your vendor account. Please try again or contact support.');
+      return;
+    }
+
+    sendLockRef.current = true;
 
     const messageContent = messageText.trim();
 
@@ -145,45 +155,40 @@ export default function VendorPreOrderChatScreen() {
     if (!validation.isValid) {
       setValidationError(validation.errorMessage || 'Invalid message');
       setTimeout(() => setValidationError(null), 4000);
+      sendLockRef.current = false;
       return;
     }
 
     setIsSendingMessage(true);
-
-    addMessageToChat(preOrderChat.id, {
-      type: 'text',
-      content: messageContent,
-      sender: 'vendor',
-    });
-
-    if (preOrderChat.id) {
-      chatService
-        .sendMessage({
-          chatId: preOrderChat.id,
-          type: 'text',
-          content: messageContent,
-          sender: 'vendor',
-        })
-        .then((m) => console.log('[VENDOR PRE-ORDER CHAT] Message persisted via chatService:', m.id))
-        .catch((err) => console.log('[VENDOR PRE-ORDER CHAT] sendMessage failed:', err))
-        .finally(() => setIsSendingMessage(false));
-    } else {
-      setIsSendingMessage(false);
-    }
-
-    clearDraft(chatId);
-    setMessageText('');
-    console.log('[PRE-ORDER CHAT] Vendor message sent:', messageContent);
-
-    const conv = vendorInbox.find(item => item.customerId === customerId && item.conversationType === 'inquiry');
-    if (conv) {
-      updateInboxAfterMessage({
-        conversationId: conv.conversationId,
-        lastMessageText: messageContent,
-        lastSenderId: vendor?.id ?? '',
-        senderRole: 'vendor',
+    try {
+      // addMessageToChat already calls chatService.sendMessage itself (and
+      // handles the away-message auto-reply) - a second, separate
+      // chatService.sendMessage call used to run right alongside it, sending
+      // every vendor message here twice with no way to tell the two apart
+      // afterward.
+      await addMessageToChat(preOrderChat.id, {
+        type: 'text',
+        content: messageContent,
+        sender: 'vendor',
       });
-      console.log('[PRE-ORDER CHAT] Vendor inbox snapshot updated:', conv.conversationId);
+
+      clearDraft(chatId);
+      setMessageText('');
+      console.log('[PRE-ORDER CHAT] Vendor message sent:', messageContent);
+
+      const conv = vendorInbox.find(item => item.customerId === customerId && item.conversationType === 'inquiry');
+      if (conv) {
+        updateInboxAfterMessage({
+          conversationId: conv.conversationId,
+          lastMessageText: messageContent,
+          lastSenderId: vendor?.id ?? '',
+          senderRole: 'vendor',
+        });
+        console.log('[PRE-ORDER CHAT] Vendor inbox snapshot updated:', conv.conversationId);
+      }
+    } finally {
+      setIsSendingMessage(false);
+      sendLockRef.current = false;
     }
   };
 
@@ -215,8 +220,26 @@ export default function VendorPreOrderChatScreen() {
     }, 300);
   };
 
-  const handleSendCatalogItems = () => {
-    console.log('Sending catalog items:', selectedCatalogItems);
+  const handleSendCatalogItems = async () => {
+    if (!preOrderChat || selectedCatalogItems.length === 0) return;
+    if (!canActAsVendor) {
+      Alert.alert('Could not send', 'We could not verify your vendor account. Please try again or contact support.');
+      return;
+    }
+    // sendChatMessage takes one itemId per call and snapshots the real item
+    // server-side (name/price/photo) rather than trusting anything sent from
+    // here — this only needs to reference which items, one message each,
+    // matching how the backend's catalog_item type is actually shaped.
+    for (const itemId of selectedCatalogItems) {
+      const item = catalogItems.find(i => i.id === itemId);
+      if (!item) continue;
+      await addMessageToChat(preOrderChat.id, {
+        type: 'catalog_item',
+        content: `Shared: ${item.name}`,
+        sender: 'vendor',
+        catalogItemData: { id: item.id, name: item.name, price: item.salePrice || item.basePrice, image: item.photos[0] },
+      });
+    }
     setShowCatalogModal(false);
     setSelectedCatalogItems([]);
   };
@@ -229,28 +252,92 @@ export default function VendorPreOrderChatScreen() {
     }, 300);
   };
 
-  const handleSendPickupDetails = () => {
-    console.log('Sending pickup details:', { address: pickupAddress, instructions: pickupInstructions });
+  /**
+   * Sends a plain text message, not a structured `pickup-details` typed
+   * message. That type is reserved for the backend's own automatic send
+   * (sendPickupDetailsIfEligible, fired when payment is confirmed) — per the
+   * Phase 3 architecture, there is no manual trigger for it anywhere in the
+   * product, and sendChatMessage would reject it from a client regardless
+   * ("pickup-details" isn't in its CLIENT_CREATABLE_TYPES). When a vendor
+   * wants to share pickup info manually (e.g. auto-send conditions weren't
+   * met yet), the documented fallback is exactly this: a normal text message.
+   */
+  const handleSendPickupDetails = async () => {
+    if (!preOrderChat || !pickupAddress.trim() || !pickupInstructions.trim()) return;
+    if (!canActAsVendor) {
+      Alert.alert('Could not send', 'We could not verify your vendor account. Please try again or contact support.');
+      return;
+    }
+    await addMessageToChat(preOrderChat.id, {
+      type: 'text',
+      content: `Pickup address: ${pickupAddress.trim()}\nInstructions: ${pickupInstructions.trim()}`,
+      sender: 'vendor',
+    });
     setShowPickupModal(false);
     setEditingPickup(false);
   };
 
   const handleQuickReplyPress = () => {
     setShowActionsMenu(false);
-    if (quickReplies.length === 0) {
-      setTimeout(() => {
-        router.push('/vendor/settings/quick-replies' as any);
-      }, 300);
-    } else {
-      setTimeout(() => {
-        setShowQuickRepliesModal(true);
-      }, 300);
-    }
+    setTimeout(() => {
+      setShowQuickRepliesModal(true);
+    }, 300);
   };
 
   const handleSelectQuickReply = (message: string) => {
     setMessageText(message);
     setShowQuickRepliesModal(false);
+    // Closing this Modal takes composer focus with it; nothing returns it on
+    // its own. RN's Modal onDismiss (below) only ever fires on iOS -- Android
+    // and web never invoke it at all -- so those two need their own trigger
+    // here rather than waiting on a callback that will never arrive. Neither
+    // platform's Modal registers an InteractionManager handle around its own
+    // animation, so this isn't a true "animation finished" signal either, but
+    // it defers to whatever the current JS/render work actually requires
+    // instead of a guessed fixed duration.
+    if (Platform.OS !== 'ios') {
+      InteractionManager.runAfterInteractions(() => {
+        messageInputRef.current?.focus();
+      });
+    }
+  };
+
+  // iOS-only: fires once the Modal's real native dismiss animation finishes.
+  const handleQuickRepliesModalDismissed = () => {
+    messageInputRef.current?.focus();
+  };
+
+  const activeSlashQuery = useMemo(
+    () => getActiveSlashQuery(messageText, messageSelection.start),
+    [messageText, messageSelection.start]
+  );
+
+  const slashSuggestions = useMemo(
+    () => (activeSlashQuery ? filterQuickRepliesByQuery(quickReplies, activeSlashQuery.query) : []),
+    [activeSlashQuery, quickReplies]
+  );
+
+  const handleSelectSlashSuggestion = (reply: { message: string }) => {
+    if (!activeSlashQuery) return;
+    const { text, cursor } = applyQuickReplySelection(messageText, activeSlashQuery, reply.message);
+    handleMessageTextChange(text);
+    setMessageSelection({ start: cursor, end: cursor });
+    // No modal is involved here -- the composer never lost focus, so a
+    // same-frame nudge (once the new value has actually reached the native
+    // view) is enough, rather than the modal-dismiss handling above.
+    // TextInput.setSelection is a real RN TextInput method (see
+    // TextInput.d.ts) but react-native-web's TextInput does not implement it
+    // (or setNativeProps) at all -- only .focus() works there, as a plain
+    // DOM method. Guarding with typeof keeps native cursor placement exact
+    // while degrading safely (composer still focused, just without a forced
+    // cursor position) on web instead of throwing.
+    requestAnimationFrame(() => {
+      const input = messageInputRef.current;
+      input?.focus();
+      if (input && typeof input.setSelection === 'function') {
+        input.setSelection(cursor, cursor);
+      }
+    });
   };
 
   const formatTime = (timestamp: string) => {
@@ -386,7 +473,7 @@ export default function VendorPreOrderChatScreen() {
             <View style={styles.headerCenter}>
               <Text style={styles.headerTitle} numberOfLines={1}>{customerName}</Text>
               <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {customerPublicId || 'Pre-order inquiry'}
+                Pre-order inquiry
               </Text>
             </View>
             {/* Reserved for future call/video actions. Intentionally empty. */}
@@ -426,6 +513,27 @@ export default function VendorPreOrderChatScreen() {
               <Text style={styles.validationErrorText}>{validationError}</Text>
             </View>
           )}
+          {activeSlashQuery && quickReplies.length > 0 && (
+            <View style={styles.slashSuggestionsContainer}>
+              {slashSuggestions.length === 0 ? (
+                <Text style={styles.slashSuggestionsEmpty}>No matching quick replies</Text>
+              ) : (
+                slashSuggestions.slice(0, 5).map((reply) => (
+                  <TouchableOpacity
+                    key={reply.id}
+                    style={styles.slashSuggestionItem}
+                    onPress={() => handleSelectSlashSuggestion(reply)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.slashSuggestionShortcut}>/{reply.shortcut}</Text>
+                    <Text style={styles.slashSuggestionMessage} numberOfLines={1}>
+                      {reply.message}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+          )}
           <View style={styles.inputContainer}>
             <TouchableOpacity
               style={styles.plusButton}
@@ -438,11 +546,13 @@ export default function VendorPreOrderChatScreen() {
             </TouchableOpacity>
             <View style={styles.inputWrapper}>
               <TextInput
+                ref={messageInputRef}
                 style={styles.input}
                 placeholder="Send a message…"
                 placeholderTextColor="#AEAEB2"
                 value={messageText}
                 onChangeText={handleMessageTextChange}
+                onSelectionChange={(e) => setMessageSelection(e.nativeEvent.selection)}
                 multiline
                 maxLength={500}
               />
@@ -489,17 +599,12 @@ export default function VendorPreOrderChatScreen() {
                   <Text style={styles.actionsMenuGridItemText}>Catalog</Text>
                 </TouchableOpacity>
                 
-                <TouchableOpacity
-                  style={styles.actionsMenuGridItem}
-                  onPress={handleCreateCustomOrder}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.actionsMenuIconCircle}>
-                    <FileText size={24} color={Colors.primary} strokeWidth={2} />
-                  </View>
-                  <Text style={styles.actionsMenuGridItemText}>Custom Order</Text>
-                </TouchableOpacity>
-                
+                {/* Custom Order entry point hidden for MVP per Founder
+                    (2026-09-15) — feature requirements not finalized yet,
+                    revisit post-MVP. handleCreateCustomOrder and the
+                    destination screen are left in place, just unreachable
+                    from here. */}
+
                 <TouchableOpacity
                   style={styles.actionsMenuGridItem}
                   onPress={handleQuickReplyPress}
@@ -551,7 +656,11 @@ export default function VendorPreOrderChatScreen() {
 
             <ScrollView style={styles.catalogContent} showsVerticalScrollIndicator={false}>
               {categories.map(category => {
-                const categoryItems = catalogItems.filter(item => item.categoryId === category.id && item.isAvailable);
+                // moderationStatus check closes a real gap: nothing stopped a vendor
+                // from sharing a pending/rejected item straight to a customer in
+                // chat, bypassing the review gate that's supposed to keep unreviewed
+                // listings from reaching anyone.
+                const categoryItems = catalogItems.filter(item => item.categoryId === category.id && item.isAvailable && item.moderationStatus === 'approved');
                 if (categoryItems.length === 0) return null;
 
                 return (
@@ -678,6 +787,7 @@ export default function VendorPreOrderChatScreen() {
           animationType="slide"
           presentationStyle="pageSheet"
           onRequestClose={() => setShowQuickRepliesModal(false)}
+          onDismiss={handleQuickRepliesModalDismissed}
         >
           <SafeAreaView style={styles.modalContainer} edges={['top', 'bottom']}>
             <View style={styles.quickReplyModalHeader}>
@@ -685,23 +795,41 @@ export default function VendorPreOrderChatScreen() {
                 <Text style={styles.quickReplyCancelText}>Cancel</Text>
               </TouchableOpacity>
               <Text style={styles.quickReplyModalTitle}>Quick Replies</Text>
-              <View style={styles.quickReplyHeaderSpacer} />
+              <TouchableOpacity
+                style={styles.quickReplyManageButton}
+                onPress={() => {
+                  setShowQuickRepliesModal(false);
+                  setTimeout(() => {
+                    router.push('/vendor/settings/quick-replies' as any);
+                  }, 300);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.quickReplyManageText}>Manage</Text>
+              </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.quickReplyContent}>
-              {quickReplies.map((reply) => (
-                <TouchableOpacity
-                  key={reply.id}
-                  style={styles.quickReplyItem}
-                  onPress={() => handleSelectQuickReply(reply.message)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.quickReplyItemContent}>
-                    <Text style={styles.quickReplyShortcut}>/{reply.shortcut}</Text>
-                    <Text style={styles.quickReplyMessage} numberOfLines={2}>{reply.message}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+              {quickReplies.length === 0 ? (
+                <View style={styles.quickReplyEmptyContainer}>
+                  <Text style={styles.quickReplyEmptyText}>No quick replies saved</Text>
+                  <Text style={styles.quickReplyEmptySubtext}>Tap Manage to create your first quick reply</Text>
+                </View>
+              ) : (
+                quickReplies.map((reply) => (
+                  <TouchableOpacity
+                    key={reply.id}
+                    style={styles.quickReplyItem}
+                    onPress={() => handleSelectQuickReply(reply.message)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.quickReplyItemContent}>
+                      <Text style={styles.quickReplyShortcut}>/{reply.shortcut}</Text>
+                      <Text style={styles.quickReplyMessage} numberOfLines={2}>{reply.message}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
             </ScrollView>
           </SafeAreaView>
         </Modal>
@@ -837,7 +965,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start' as const,
   },
   messageBubble: {
-    maxWidth: '75%',
+    // Cap moved to bubbleWithTail below - resolving a percentage against
+    // this shrink-wrapped parent collapsed short messages to a fixed width.
+    flexShrink: 1,
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 20,
@@ -853,6 +983,7 @@ const styles = StyleSheet.create({
   bubbleWithTail: {
     flexDirection: 'row' as const,
     alignItems: 'flex-end' as const,
+    maxWidth: '75%',
   },
   bubbleTailOutgoing: {
     width: 0,
@@ -893,6 +1024,33 @@ const styles = StyleSheet.create({
   },
   inputSafeArea: {
     backgroundColor: '#FFFFFF',
+  },
+  slashSuggestionsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingVertical: 4,
+    maxHeight: 220,
+  },
+  slashSuggestionsEmpty: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  slashSuggestionItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  slashSuggestionShortcut: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.primary,
+    marginBottom: 1,
+  },
+  slashSuggestionMessage: {
+    fontSize: 13,
+    color: Colors.textSecondary,
   },
   inputContainer: {
     flexDirection: 'row' as const,
@@ -1192,12 +1350,34 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: Colors.text,
   },
-  quickReplyHeaderSpacer: {
-    width: 60,
+  quickReplyManageButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  quickReplyManageText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.primary,
   },
   quickReplyContent: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  quickReplyEmptyContainer: {
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    alignItems: 'center' as const,
+  },
+  quickReplyEmptyText: {
+    fontSize: 15,
+    color: Colors.textMuted,
+    textAlign: 'center' as const,
+    marginBottom: 8,
+  },
+  quickReplyEmptySubtext: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    textAlign: 'center' as const,
   },
   quickReplyItem: {
     paddingHorizontal: 16,

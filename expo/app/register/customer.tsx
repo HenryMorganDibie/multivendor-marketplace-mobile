@@ -267,7 +267,7 @@ export default function CustomerSignupScreen() {
                 style={styles.brandLogo}
                 resizeMode="contain"
                 accessibilityRole="image"
-                accessibilityLabel="the platform"
+                accessibilityLabel="Platform"
               />
               <Text style={styles.title}>Create your account</Text>
               <Text style={styles.subtitle}>Discover vendors, place orders and manage your purchases.</Text>
@@ -418,7 +418,7 @@ export default function CustomerSignupScreen() {
                 what they are agreeing to before the action, not after it. Each
                 document is separately tappable. */}
             <Text style={styles.legalText}>
-              By creating a customer account, you agree to the platform&apos;s{' '}
+              By creating a customer account, you agree to Platform&apos;s{' '}
               <Text
                 style={styles.legalLink}
                 onPress={() => void openLegalDocument('termsOfUse')}

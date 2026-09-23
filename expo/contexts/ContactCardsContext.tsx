@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth } from '@/lib/firebase';
 
 export interface ContactCard {
   id: string;
@@ -20,19 +21,42 @@ interface ContactCardsContextType {
 
 const ContactCardsContext = createContext<ContactCardsContextType | undefined>(undefined);
 
-const CONTACT_CARDS_STORAGE_KEY = '@platform_contact_cards';
+const CONTACT_CARDS_STORAGE_KEY_PREFIX = '@platform_contact_cards';
+const contactCardsStorageKey = (uid: string) => `${CONTACT_CARDS_STORAGE_KEY_PREFIX}:${uid}`;
 
+/**
+ * These are saved name/phone/address entries — real customer PII, the exact
+ * kind of data Phase 3's `users/{uid}/contactCards/{cardId}` collection
+ * spec calls "the most security-sensitive collection in Phase 3," owner-only
+ * with no exceptions. This was stored under one device-global AsyncStorage
+ * key with no uid in it at all: Customer B signing in after Customer A
+ * signed out on the same device would see A's saved names/phone
+ * numbers/addresses, and any card B added while A's list was still loaded
+ * (before this fix) would have merged into the same shared key. Still not
+ * the real Firestore-backed, per-user collection the spec describes — that
+ * would need a full backend migration — but at minimum it no longer leaks
+ * across accounts on a shared device.
+ */
 export function ContactCardsProvider({ children }: { children: ReactNode }) {
   const [cards, setCards] = useState<ContactCard[]>([]);
+  const currentUidRef = useRef<string | null>(null);
 
   useEffect(() => {
-    loadCards();
+    const unsubscribe = auth.onIdTokenChanged((fbUser) => {
+      const uid = fbUser?.uid ?? null;
+      if (uid === currentUidRef.current) return;
+      currentUidRef.current = uid;
+      setCards([]);
+      if (uid) void loadCards(uid);
+    });
+    return unsubscribe;
   }, []);
 
-  const loadCards = async () => {
+  const loadCards = async (uid: string) => {
     try {
       console.log('[CONTACT_CARDS] Loading contact cards from device storage');
-      const stored = await AsyncStorage.getItem(CONTACT_CARDS_STORAGE_KEY);
+      const stored = await AsyncStorage.getItem(contactCardsStorageKey(uid));
+      if (currentUidRef.current !== uid) return; // identity moved on again before this resolved
       if (stored) {
         const parsed = JSON.parse(stored);
         setCards(parsed);
@@ -46,8 +70,10 @@ export function ContactCardsProvider({ children }: { children: ReactNode }) {
   };
 
   const saveCards = async (updatedCards: ContactCard[]) => {
+    const uid = currentUidRef.current;
+    if (!uid) return;
     try {
-      await AsyncStorage.setItem(CONTACT_CARDS_STORAGE_KEY, JSON.stringify(updatedCards));
+      await AsyncStorage.setItem(contactCardsStorageKey(uid), JSON.stringify(updatedCards));
       console.log('[CONTACT_CARDS] Saved', updatedCards.length, 'cards to device');
     } catch (error) {
       console.error('[CONTACT_CARDS] Failed to save cards:', error);

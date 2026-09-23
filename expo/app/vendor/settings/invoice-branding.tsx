@@ -53,13 +53,13 @@ import type { Currency } from '@/utils/formatPrice';
 /**
  * Invoice Branding settings — controls how vendor invoices look.
  *
- * Plan-based behavior (exactly matches the approved the platform plan matrix):
- *  - Basic:  the platform Default template only. No logo, no brand color, no
+ * Plan-based behavior (exactly matches the approved Platform plan matrix):
+ *  - Basic:  Platform Default template only. No logo, no brand color, no
  *            thank-you message, no footer text.
- *  - Standard: the platform Default template only, plus logo upload.
- *  - Pro:      the platform Default template only, plus logo, brand color,
+ *  - Standard: Platform Default template only, plus logo upload.
+ *  - Pro:      Platform Default template only, plus logo, brand color,
  *              thank-you message, and footer text.
- *  - Pro+:     the platform Default plus all premium templates (Classic, Modern,
+ *  - Pro+:     Platform Default plus all premium templates (Classic, Modern,
  *              Elegant, Restaurant, Retail, Beauty), plus seasonal themes
  *              and print layout.
  *
@@ -133,7 +133,7 @@ export default function InvoiceBrandingScreen() {
   // Approved invoice number format: VENDORSLUG-INV-12345
   const previewInvoiceNumber = `${vendorSlug}-INV-12345`;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const thankYouError = getInvoiceTextLimitError('thankYouMessage', draft.thankYouMessage);
     const footerError = getInvoiceTextLimitError('footerText', draft.footerText);
     if (thankYouError || footerError) {
@@ -152,14 +152,28 @@ export default function InvoiceBrandingScreen() {
     // Backend integration note (Henry): validate these same limits server-side:
     //   thankYouMessage ≤ 120 chars, footerText ≤ 300 chars.
     //   Reject oversized values rather than silently truncating.
-    updateBranding({
-      ...draft,
-      thankYouMessage: draft.thankYouMessage ? sanitizeInvoiceText(draft.thankYouMessage) : null,
-      footerText: draft.footerText ? sanitizeInvoiceText(draft.footerText) : null,
-    });
-    unsavedChanges.resetChanges();
-    Alert.alert('Branding saved', 'New invoices will use your updated branding.');
-    router.back();
+    //
+    // Awaited now — this used to fire-and-forget and unconditionally show
+    // "Branding saved" and navigate back regardless of the result.
+    // updateInvoiceBranding returns permission-denied (no partial save) for
+    // any field the vendor's plan doesn't permit, e.g. a Standard vendor
+    // setting brandColor — which was previously invisible: the vendor saw
+    // "saved" while the field was silently never persisted.
+    try {
+      await updateBranding({
+        ...draft,
+        thankYouMessage: draft.thankYouMessage ? sanitizeInvoiceText(draft.thankYouMessage) : null,
+        footerText: draft.footerText ? sanitizeInvoiceText(draft.footerText) : null,
+      });
+      unsavedChanges.resetChanges();
+      Alert.alert('Branding saved', 'New invoices will use your updated branding.');
+      router.back();
+    } catch (error) {
+      console.error('[InvoiceBranding] Save failed:', error);
+      const message = (error as { message?: string })?.message
+        ?? 'Could not save your branding. Please try again.';
+      Alert.alert('Could not save branding', message);
+    }
   };
 
   const handleUploadLogo = async () => {
@@ -503,7 +517,7 @@ export default function InvoiceBrandingScreen() {
             <View style={styles.templateGrid}>
               <TemplateOption
                 id="default"
-                name="the platform Default"
+                name="Platform Default"
                 description="Clean, standard layout"
                 selected={draft.templateId === 'default'}
                 onSelect={() => setDraft((d) => ({ ...d, templateId: 'default' }))}
@@ -550,7 +564,7 @@ export default function InvoiceBrandingScreen() {
               <Text style={styles.previewCaption}>
                 Preview: {getTemplateDisplayName(previewBranding.templateId)}.{' '}
                 {previewBranding.templateId === 'default'
-                  ? 'Unpaid and new invoices will use the default the platform layout.'
+                  ? 'Unpaid and new invoices will use the default Platform layout.'
                   : 'Unpaid and new invoices will use this premium template.'}
               </Text>
             </View>
@@ -590,9 +604,9 @@ function PlanBanner({ plan }: { plan: string }) {
   const label = plan === 'pro+' ? 'Pro+' : plan.charAt(0).toUpperCase() + plan.slice(1);
   const subtitle = useMemo(() => {
     switch (plan) {
-      case 'basic': return 'the platform Default template · vendor name only';
-      case 'standard': return 'the platform Default template + logo';
-      case 'pro': return 'the platform Default template + logo, color, thank-you, footer';
+      case 'basic': return 'Platform Default template · vendor name only';
+      case 'standard': return 'Platform Default template + logo';
+      case 'pro': return 'Platform Default template + logo, color, thank-you, footer';
       case 'pro+': return 'All templates + all branding features';
       default: return '';
     }
@@ -968,7 +982,7 @@ interface CuratedColor {
 }
 
 const PRIMARY_COLORS: CuratedColor[] = [
-  { hex: '#FF7A28', name: 'the platform Orange' },
+  { hex: '#FF7A28', name: 'Platform Orange' },
   { hex: '#0B0C0F', name: 'Black' },
   { hex: '#10A862', name: 'Emerald Green' },
   { hex: '#2563EB', name: 'Royal Blue' },
@@ -1012,10 +1026,10 @@ const EXTENDED_COLORS: CuratedColor[] = [
 /** All curated colors, primary first. Used to resolve a hex → friendly name. */
 const ALL_CURATED_COLORS: CuratedColor[] = [...PRIMARY_COLORS, ...EXTENDED_COLORS];
 
-/** Friendly name for a hex value. Falls back to "the platform default" when null,
+/** Friendly name for a hex value. Falls back to "Platform default" when null,
  *  and "Custom" only if a non-curated hex somehow slips through (rare). */
 function getAccentColorName(hex: string | null | undefined): string {
-  if (!hex) return 'the platform default';
+  if (!hex) return 'Platform default';
   const match = ALL_CURATED_COLORS.find(
     (c) => c.hex.toUpperCase() === hex.toUpperCase(),
   );
@@ -1077,7 +1091,7 @@ function ColorPalette({
           activeOpacity={0.7}
         >
           <Text style={[styles.colorTextActionText, { color: Colors.textSecondary }]}>
-            Use the platform default
+            Use Platform default
           </Text>
         </TouchableOpacity>
       </View>

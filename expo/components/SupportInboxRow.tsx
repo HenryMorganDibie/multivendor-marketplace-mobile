@@ -33,9 +33,9 @@ interface SupportInboxRowProps {
 }
 
 /**
- * Pinned inbox row representing the official the platform Support conversation.
+ * Pinned inbox row representing the official Platform Support conversation.
  * Rendered separately from commerce/order/AI chats. Uses an official support
- * icon avatar (the platform orange) rather than a vendor/customer avatar.
+ * icon avatar (Platform orange) rather than a vendor/customer avatar.
  *
  * MVP: fed from the local support-chat context. When the Firebase backend
  * adds `conversationType: 'support'` documents, this row can be driven from
@@ -56,7 +56,7 @@ export function SupportInboxRow({
           <ShieldCheck size={24} color={Colors.white} strokeWidth={2} />
         </CircularIconAvatar>
       }
-      primaryText="the platform Support"
+      primaryText="Platform Support"
       secondaryText="Official support account"
       previewText={previewText}
       timestamp={formatTimestamp(lastActivityAt)}

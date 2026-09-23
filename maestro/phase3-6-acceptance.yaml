@@ -94,9 +94,9 @@ appId: com.platform.app
     visible: "Create Invoice"
     timeout: 30000
 
-# the platform customer, so the invoice binds to a real customer and conversation —
+# Platform customer, so the invoice binds to a real customer and conversation —
 # which is what makes the chat delivery section below possible at all.
-- tapOn: "the platform customer"
+- tapOn: "Platform customer"
 - tapOn: "Select customer"
 - extendedWaitUntil:
     visible: "Choose"

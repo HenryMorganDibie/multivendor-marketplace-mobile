@@ -3,7 +3,7 @@ import { Share } from 'react-native';
 /**
  * Sharing a storefront.
  *
- * The share used to send "Check out my catalog on the platform!" with no link in it
+ * The share used to send "Check out my catalog on Platform!" with no link in it
  * at all, so a vendor posting it to WhatsApp gave their customers a sentence
  * and nothing to tap. This builds the real link and refuses to share one that
  * would not work.
@@ -16,10 +16,10 @@ import { Share } from 'react-native';
  * WhatsApp, Instagram and SMS where most recipients do not have the app. The
  * web page handles opening the app if it is installed.
  */
-// theplatform.com is not a live domain — it does not resolve at all. The app is
+// example.com is not a live domain — it does not resolve at all. The app is
 // actually deployed on Firebase Hosting, which is where /store/[username]
 // really exists and where every previous link was silently pointing away
-// from. Update this the day theplatform.com is a real, deployed custom domain.
+// from. Update this the day example.com is a real, deployed custom domain.
 const STOREFRONT_BASE_URL = 'https://platform-dev.web.app/store';
 
 export function storefrontUrl(username: string): string {
@@ -90,8 +90,8 @@ export async function shareStorefront(vendor: {
   const name = vendor.businessName?.trim();
 
   const message = name
-    ? `${name} on the platform — browse and order directly.\n${url}`
-    : `My storefront on the platform — browse and order directly.\n${url}`;
+    ? `${name} on Platform — browse and order directly.\n${url}`
+    : `My storefront on Platform — browse and order directly.\n${url}`;
 
   try {
     const result = await Share.share({
@@ -99,7 +99,7 @@ export async function shareStorefront(vendor: {
       // iOS shows url separately; Android folds it into the message, which is
       // why it appears in both rather than only one.
       url,
-      title: name ?? 'My the platform storefront',
+      title: name ?? 'My Platform storefront',
     });
     return { shared: result.action === Share.sharedAction };
   } catch (error) {
@@ -126,7 +126,7 @@ export async function shareItem(
   if (!check.canShare) return { shared: false, reason: check.reason };
 
   const url = itemUrl(vendor.username!, item.id);
-  const message = `${item.name} — ${vendor.businessName ?? 'on the platform'}\n${url}`;
+  const message = `${item.name} — ${vendor.businessName ?? 'on Platform'}\n${url}`;
 
   try {
     const result = await Share.share({ message, url, title: item.name });

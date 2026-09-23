@@ -31,6 +31,14 @@ import {
 export interface InsightData {
   id: string;
   type: 'payment' | 'bestseller' | 'response_time' | 'inventory' | 'growth' | 'customers' | 'promotion' | 'custom';
+  /**
+   * Standard-plan vendors may only ever see 'operational' cards (pending
+   * payments, low stock) per Founder's dashboard-insights spec - anything
+   * that would surface a Business Insights metric for free (best seller
+   * performance, new-customer growth, reply-time analytics) is
+   * 'analytical' and stays Pro/Pro+ only, even as a dashboard card.
+   */
+  tier: 'operational' | 'analytical';
   iconName: string;
   iconColor: string;
   iconBg: string;
@@ -56,6 +64,7 @@ export function buildInsightCards(context: {
     list.push({
       id: 'payment_pending',
       type: 'payment',
+      tier: 'operational',
       iconName: 'CreditCard',
       iconColor: '#2563EB',
       iconBg: '#EFF6FF',
@@ -71,6 +80,7 @@ export function buildInsightCards(context: {
     list.push({
       id: 'bestseller',
       type: 'bestseller',
+      tier: 'analytical',
       iconName: 'Star',
       iconColor: '#D97706',
       iconBg: '#FFFBEB',
@@ -86,6 +96,7 @@ export function buildInsightCards(context: {
     list.push({
       id: 'new_customers',
       type: 'customers',
+      tier: 'analytical',
       iconName: 'Users',
       iconColor: '#16A34A',
       iconBg: '#F0FDF4',
@@ -102,6 +113,7 @@ export function buildInsightCards(context: {
     list.push({
       id: 'response_time',
       type: 'response_time',
+      tier: 'analytical',
       iconName: 'MessageCircle',
       iconColor: isGood ? '#16A34A' : '#D97706',
       iconBg: isGood ? '#F0FDF4' : '#FFFBEB',
@@ -117,6 +129,7 @@ export function buildInsightCards(context: {
     list.push({
       id: 'response_time_default',
       type: 'response_time',
+      tier: 'analytical',
       iconName: 'MessageCircle',
       iconColor: '#16A34A',
       iconBg: '#F0FDF4',
@@ -131,6 +144,7 @@ export function buildInsightCards(context: {
     list.push({
       id: 'low_stock',
       type: 'inventory',
+      tier: 'operational',
       iconName: 'Package',
       iconColor: '#C2410C',
       iconBg: '#FFF7ED',
@@ -144,6 +158,7 @@ export function buildInsightCards(context: {
     list.push({
       id: 'inventory_default',
       type: 'inventory',
+      tier: 'operational',
       iconName: 'Package',
       iconColor: '#C2410C',
       iconBg: '#FFF7ED',

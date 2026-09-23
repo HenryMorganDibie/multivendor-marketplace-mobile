@@ -55,7 +55,7 @@ export default function AllVendorsScreen() {
           loadingSkeleton={<VendorListSkeleton count={6} />}
           emptyIcon={<Store size={36} color={Colors.textMuted} strokeWidth={1.5} />}
           emptyTitle="No vendors yet"
-          emptyDescription="Vendors will appear here once they join the platform in your region."
+          emptyDescription="Vendors will appear here once they join Platform in your region."
           style={styles.stateContainer}
         >
           <FlatList

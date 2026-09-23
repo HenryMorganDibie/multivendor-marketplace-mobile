@@ -1,5 +1,5 @@
 /**
- * DEVELOPMENT-ONLY route — the platform AI state preview tool.
+ * DEVELOPMENT-ONLY route — Platform AI state preview tool.
  *
  * Reachable ONLY from the `__DEV__`-gated button in
  * `app/chat/ai/[vendorId].tsx`. In production, `__DEV__` is false, so the

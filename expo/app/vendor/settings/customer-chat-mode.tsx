@@ -136,7 +136,7 @@ export default function CustomerChatModeScreen() {
                 <Text style={styles.modalBullet}>• Customers can still place orders normally.</Text>
                 <Text style={styles.modalBullet}>• Customers still enter delivery address when placing an order.</Text>
                 <Text style={styles.modalBullet}>• Customers still receive payment requests in the order screen + system messages.</Text>
-                <Text style={styles.modalBullet}>• the platform AI will still help customers with questions.</Text>
+                <Text style={styles.modalBullet}>• Platform AI will still help customers with questions.</Text>
               </View>
 
               <Text style={styles.modalNote}>

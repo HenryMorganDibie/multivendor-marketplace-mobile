@@ -155,7 +155,7 @@ export default function VendorSupportChatScreen() {
               </View>
             </View>
             <View style={styles.headerCenter}>
-              <Text style={styles.headerTitle} numberOfLines={1}>the platform Vendor Support</Text>
+              <Text style={styles.headerTitle} numberOfLines={1}>Platform Vendor Support</Text>
               <Text style={styles.headerSubtitle} numberOfLines={1}>Official support account</Text>
             </View>
             <View style={styles.headerButton} />

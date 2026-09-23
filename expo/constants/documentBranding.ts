@@ -4,7 +4,7 @@ import type { VendorPlan, PlanLimits } from '@/contexts/VendorPlanContext';
  * Plan-based document branding capabilities for invoices and receipts.
  *
  * This mirrors the backend-provided `PlanLimits` object
- * (functions/src/types4.ts in platform-backend) so Henry can swap the source
+ * (functions/src/types4.ts in multivendor-marketplace-platform) so Henry can swap the source
  * of truth to Firestore later without touching UI. Branding is applied
  * automatically based on the vendor's plan — vendors never toggle it
  * manually. Tier boundaries below are intentionally kept in lockstep with
@@ -38,7 +38,7 @@ export interface DocumentBranding {
   allowPremiumTemplates: boolean;
   /** Printable receipt / packing slip support (Pro+; may be shown as locked/future) */
   allowPrintableDocs: boolean;
-  /** How the "Powered by the platform" attribution renders */
+  /** How the "Powered by Platform" attribution renders */
   poweredByPlatform: 'visible' | 'subtle';
 }
 
@@ -181,7 +181,7 @@ export interface InvoiceBrandingSettings {
   /** Local file:// uri or remote https URL for the uploaded logo. `null`
    * means no logo has been uploaded. Preserved across downgrades. */
   logoUri: string | null;
-  /** Hex accent color (e.g. "#FF7A28"). `null` means "use the platform default". */
+  /** Hex accent color (e.g. "#FF7A28"). `null` means "use Platform default". */
   brandColor: string | null;
   /** Optional thank-you headline shown under the vendor name. */
   thankYouMessage: string | null;
@@ -220,7 +220,7 @@ export interface InvoiceTemplateOption {
 }
 
 export const INVOICE_TEMPLATE_OPTIONS: InvoiceTemplateOption[] = [
-  { id: 'default', name: 'the platform Default', description: 'Clean, standard layout', isPremium: false, layoutTag: 'Default' },
+  { id: 'default', name: 'Platform Default', description: 'Clean, standard layout', isPremium: false, layoutTag: 'Default' },
   { id: 'classic', name: 'Classic', description: 'Clean and professional', isPremium: true, layoutTag: 'Classic' },
   { id: 'modern', name: 'Modern', description: 'Bold and contemporary', isPremium: true, layoutTag: 'Modern' },
   { id: 'elegant', name: 'Elegant', description: 'Refined, serif accents', isPremium: true, layoutTag: 'Elegant' },
@@ -307,7 +307,7 @@ export function getEffectiveInvoiceBranding(
 
 /** Friendly display name for a template ID. */
 export function getTemplateDisplayName(templateId: DocumentTemplateId): string {
-  return INVOICE_TEMPLATE_OPTIONS.find((t) => t.id === templateId)?.name ?? 'the platform Default';
+  return INVOICE_TEMPLATE_OPTIONS.find((t) => t.id === templateId)?.name ?? 'Platform Default';
 }
 
 /** Resolve whether a template is selectable for the current plan. */

@@ -1,6 +1,6 @@
-# the platform — Backend Integration Guide (for Henry)
+# Platform — Backend Integration Guide (for Henry)
 
-This document is the single reference for connecting the platform mobile app to
+This document is the single reference for connecting the Platform mobile app to
 Firebase. The app already runs on a layered, backend-ready architecture; your job
 is to swap the **repository** internals from mock/AsyncStorage reads to Firestore,
 without touching services, contexts, or UI.
@@ -283,11 +283,11 @@ on `OrderEvent`/`PaymentRecord` to ISO strings inside `orderMapper.fromRaw`.
 
 `Order.orderSource` (`OrderSource`) = `internal | external`:
 
-- `internal` — placed inside the platform app by a customer.
+- `internal` — placed inside the Platform app by a customer.
 - `external` — logged manually by the vendor (WhatsApp, Instagram, walk-in, phone).
   Carries an optional `externalReference` (e.g. "Instagram", "Phone call").
 
-Legacy value `'the platform'` normalizes to `'internal'` via `normalizeOrderSource()` at
+Legacy value `'platform'` normalizes to `'internal'` via `normalizeOrderSource()` at
 the data boundary — call it when reading any document that may still carry the old
 value. `Order.completedBy` (`CompletionSource = vendor | system`) records who
 completed the order.
@@ -304,7 +304,7 @@ canonical kinds:
 | `pre_order_inquiry` | customer asking before ordering |
 | `order_chat` | conversation tied to an order |
 | `ai_help` | AI assistant thread |
-| `support` | the platform support thread |
+| `support` | Platform support thread |
 
 Backend-canonical names (`BackendConversationType`): `inquiry | order | ai | support`.
 Legacy `custom_order` / `creator` kinds collapse onto `order` / `inquiry` at the
@@ -374,7 +374,7 @@ support → auth, then write flows last.
 
 ## 16. Invoice payments & revenue (double-counting rule)
 
-the platform's dashboard revenue represents money the vendor has **confirmed
+Platform's dashboard revenue represents money the vendor has **confirmed
 receiving**. Unpaid invoice totals are never counted as revenue. The rules:
 
 | Invoice payment status | Revenue contribution |

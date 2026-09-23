@@ -44,6 +44,27 @@ export interface SendMessageParams {
 const chats: Chat[] = mockChats;
 
 /**
+ * Pristine snapshot of the original demo fixtures.
+ *
+ * Captured once here, at module load, from `mockChats` before this module
+ * (or anything else) has had a chance to mutate it. Each entry is cloned — a
+ * fresh `Chat` object plus a fresh `messages` array — so every entry here is
+ * a distinct object from anything in `chats`/`mockChats`. `restoreDemoFixtures`
+ * below clones AGAIN from these on every restore and replaces `chats`
+ * wholesale with the new clones; the objects captured here are never
+ * themselves inserted into the mutable runtime store, so nothing a demo
+ * session does (sendMessage's `messages.push`, updateChat's `Object.assign`,
+ * clearLocalMessages's filter) can ever reach them. Shallow-plus-one is
+ * sufficient (not a deep/JSON clone): no code in this module mutates a
+ * `ChatMessage`'s fields in place after creation, only whether it's present
+ * in a chat's `messages` array.
+ */
+function cloneChatForDemoRestore(chat: Chat): Chat {
+  return { ...chat, messages: [...chat.messages] };
+}
+const pristineDemoChats: Chat[] = mockChats.map(cloneChatForDemoRestore);
+
+/**
  * In-session reactivity: lightweight pub/sub keyed by chatId.
  *
  * Why: chatService.sendMessage mutates the shared mockChats array in place.
@@ -63,6 +84,36 @@ const listenersByChat = new Map<string, Set<ChatListener>>();
 const versionsByChat = new Map<string, number>();
 const allListeners = new Set<AllListener>();
 let globalVersion = 0;
+
+/**
+ * Whether hydrateFromBackend has landed at least one real snapshot for the
+ * currently signed-in identity. A consumer needs this to tell "nothing
+ * fetched from the backend yet" apart from "fetched, and genuinely empty" —
+ * without it, a cold app load and a real account with zero conversations
+ * both look identical (an empty chats array), so the Chats tab has no way
+ * to show a loading state instead of "No conversations yet".
+ */
+let backendHydrated = false;
+
+/**
+ * Set only when the real-time listener fails before any successful
+ * hydration for the current identity — a cold-start failure. A later,
+ * transient failure after real data has already loaded must not set this:
+ * the conversations already on screen stay authoritative and visible, and
+ * only a first-load failure counts as a user-facing error state.
+ */
+let backendHydrationError = false;
+
+/**
+ * chatIds present in the most recent hydrateFromBackend snapshot — i.e.
+ * real, backend-authoritative commerce threads, as opposed to a client-side
+ * scaffold id (getOrCreateConversation's fallback for a pair with no
+ * backend thread yet). Kept in lockstep with `chats` so a chatId is never
+ * queryable as authoritative outside the snapshot that actually contained
+ * it. Used by InboxContext to pick a winner when two inbox rows exist for
+ * the same vendor/customer pair with different chatIds.
+ */
+const backendChatIds = new Set<string>();
 
 function notifyChat(chatId: string): void {
   const next = (versionsByChat.get(chatId) ?? 0) + 1;
@@ -143,12 +194,139 @@ export const chatService = {
     chats.length = 0;
     chats.push(...next);
     globalVersion += 1;
+    backendHydrated = true;
+    backendHydrationError = false;
+    // Rebuilt before the per-chat notify loop below, so any listener a
+    // notification reaches in that loop (InboxContext's reconciliation
+    // included) already sees every id in `next` as authoritative — no
+    // window where a real backend chat is momentarily unrecognized.
+    backendChatIds.clear();
+    for (const c of next) backendChatIds.add(c.id);
     // One notification per thread, so a screen already mounted on a specific
     // chat re-renders rather than only list-level consumers.
+    //
+    // allListeners used to get a single call with the literal string '*'
+    // instead of a real chat id. ChatContext ignores the argument (tick-based
+    // re-render), so that was invisible there, but InboxContext and
+    // ChatReadContext both do chatService.getByIdSync(chatId) with whatever
+    // this passes them -- getByIdSync('*') is always undefined, so both
+    // silently no-op on every single backend sync. A vendor's real inbox
+    // never gained a row for a new conversation and unread/read-receipt
+    // tracking never updated for a real chat, no matter how many messages
+    // arrived; only a manually-triggered per-chat write (updateChat,
+    // sendMessage, etc., which already call notifyChat with a real id) ever
+    // reached them. Real ids fix both without either file needing to change.
     for (const c of next) {
       versionsByChat.set(c.id, (versionsByChat.get(c.id) ?? 0) + 1);
       listenersByChat.get(c.id)?.forEach(fn => fn(c));
+      allListeners.forEach(fn => fn(c.id));
     }
+    // The loop above never runs for a genuinely empty snapshot, so a
+    // consumer that only cares about hydration state (not any specific
+    // chat, e.g. a "has the first sync landed yet" check) would never hear
+    // about a real, successful, zero-result snapshot. Fires unconditionally
+    // using the same '*' sentinel already handled everywhere allListeners
+    // is consumed.
+    allListeners.forEach(fn => fn('*'));
+  },
+
+  /** True once hydrateFromBackend has landed a snapshot for the current identity. */
+  isBackendHydrated(): boolean {
+    return backendHydrated;
+  },
+
+  /** True only for a cold-start hydration failure — see backendHydrationError above. */
+  isBackendHydrationError(): boolean {
+    return backendHydrationError;
+  },
+
+  /**
+   * Clears the store and its hydration state for a clean slate on every
+   * auth identity change (sign-out, sign-in, switching accounts). Safe to
+   * call more than once in a row.
+   */
+  resetBackendHydration(): void {
+    chats.length = 0;
+    backendHydrated = false;
+    backendHydrationError = false;
+    backendChatIds.clear();
+    globalVersion += 1;
+    allListeners.forEach(fn => fn('*'));
+  },
+
+  /**
+   * Repopulate the store with a fresh clone of the pristine demo fixtures
+   * (see `pristineDemoChats` above). Callers are expected to gate this on a
+   * recognized demo account — this method has no notion of who is signed
+   * in. Never touches backendHydrated/backendHydrationError/backendChatIds:
+   * a demo session is never "backend hydrated", exactly as before this
+   * method existed.
+   *
+   * Exists because `resetBackendHydration` above wipes this same store
+   * (`chats.length = 0`, `chats` and `mocks/chatData.ts`'s exported
+   * `mockChats` are the same array object) on every Firebase auth-state
+   * callback — including the very first one at app boot, before any login
+   * at all, since a demo login never touches Firebase Auth. With nothing to
+   * refill it, every seeded demo chat's message history would be gone the
+   * instant the app starts, regardless of whether a demo session ever
+   * begins.
+   *
+   * `force: true` — use exactly once, when a session freshly becomes a
+   * recognized demo account (cold launch into demo, or switching from a
+   * real account or a different demo account into this one): always
+   * replaces whatever is currently in `chats`, so a prior session's
+   * locally-added messages never survive into this one.
+   *
+   * `force: false` (default) — use on an ordinary store-change notification
+   * while already in a demo session: only restores when the store is empty,
+   * i.e. right after some `resetBackendHydration` call wiped it. A
+   * non-empty store is left completely alone, so this can never duplicate a
+   * fixture or clobber a message the demo session already sent locally.
+   */
+  restoreDemoFixtures(force = false): void {
+    if (!force && chats.length > 0) return;
+    chats.length = 0;
+    chats.push(...pristineDemoChats.map(cloneChatForDemoRestore));
+    globalVersion += 1;
+    allListeners.forEach(fn => fn('*'));
+  },
+
+  /**
+   * Whether `chatId` was present in the most recent `hydrateFromBackend`
+   * snapshot for the current identity -- see `backendChatIds` above.
+   */
+  isBackendChatId(chatId: string): boolean {
+    return backendChatIds.has(chatId);
+  },
+
+  /**
+   * A defensive copy of `backendChatIds` at the moment of the call -- not
+   * the live backing Set. Callers that need to make an authority decision
+   * inside a React functional state updater must capture this once, at the
+   * same event boundary where the triggering chat itself is captured, and
+   * consult that frozen copy from inside the updater instead of querying
+   * `isBackendChatId` there directly. `backendChatIds` can be mutated by a
+   * later `hydrateFromBackend`/`resetBackendHydration` call at any point
+   * before React actually invokes a previously-scheduled updater (no
+   * synchronous-execution guarantee exists for that), so reading the live
+   * Set from inside an updater makes it depend on mutable state outside its
+   * arguments -- this snapshot removes that dependency instead of relying
+   * on scheduler timing.
+   */
+  getBackendChatIdsSnapshot(): ReadonlySet<string> {
+    return new Set(backendChatIds);
+  },
+
+  /**
+   * Records a cold-start hydration failure -- only when no successful
+   * hydration has happened yet for the current identity. A later, transient
+   * failure after real data has already loaded must not flip this (and
+   * therefore must not replace already-visible conversations with an error
+   * screen), so this is a deliberate no-op once `backendHydrated` is true.
+   */
+  markBackendHydrationError(): void {
+    if (backendHydrated) return;
+    backendHydrationError = true;
     allListeners.forEach(fn => fn('*'));
   },
 
@@ -300,7 +478,16 @@ export const chatService = {
         type: params.type,
         content: params.content,
         contactCardData: params.contactCardData ?? null,
-        catalogItemData: params.catalogItemData ?? null,
+        // sendChatMessage (backend) requires catalogItemData.itemId and looks
+        // the real item up server-side itself — it never trusts a
+        // client-supplied name/price. The app's own CatalogItemData shape
+        // calls that same field `id` (it also doubles as the shape rendered
+        // messages carry, post-mapChatDoc translation), so it's renamed here
+        // rather than sent as-is, which the backend would reject with
+        // "catalogItemData.itemId is required."
+        catalogItemData: params.catalogItemData?.id
+          ? { itemId: params.catalogItemData.id }
+          : null,
       });
 
       return {

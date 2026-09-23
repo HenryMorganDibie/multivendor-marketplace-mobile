@@ -182,6 +182,29 @@ export async function getVendorActivePromotions(vendorId: string): Promise<Vendo
     .filter((p) => p.active);
 }
 
+/**
+ * Loads a viewed vendor's real promotions into promotionsData.ts's
+ * getActivePromotions()/getPromotionItemIds()/getPromotionBadgeForItem() so
+ * every screen still calling those directly (cart, item modals, storefront
+ * previews) picks up real data instead of only ever matching the ten demo
+ * vendor ids. Returns a version number that flips from 0 once loaded, to
+ * add to a useMemo's deps so it recomputes after the async fetch resolves.
+ */
+export function usePrimeVendorPromotions(vendorId: string | undefined): number {
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    if (!vendorId) return;
+    let cancelled = false;
+    void getVendorActivePromotions(vendorId).then((list) => {
+      if (cancelled) return;
+      setExternalPromotions(vendorId, list);
+      setVersion((v) => v + 1);
+    });
+    return () => { cancelled = true; };
+  }, [vendorId]);
+  return version;
+}
+
 export const [PromoContext, usePromo] = createContextHook(() => {
   const [promotions, setPromotions] = useState<VendorPromotion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -209,7 +232,7 @@ export const [PromoContext, usePromo] = createContextHook(() => {
     const unsubscribe = onSnapshot(q, (snap) => {
       const list = snap.docs.map((d) => toVendorPromotion(d.data() as PromotionDoc));
       setPromotions(list);
-      setExternalPromotions(list);
+      setExternalPromotions(vendorId, list);
       setIsLoading(false);
     });
     return unsubscribe;

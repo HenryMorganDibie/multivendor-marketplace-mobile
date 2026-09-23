@@ -26,6 +26,16 @@ let menuItems: MenuItem[] = [...mockMenuItems];
 const DEMO_VENDOR_IDS = new Set(['v1', 'v2', 'v3']);
 const DEMO_SLUGS = new Set(['spicyrest']);
 
+/**
+ * Why a vendor lookup resolved to no vendor, for callers that must fail
+ * closed differently depending on which: 'permission-denied' is very
+ * likely (but not provably) an inactive vendor -- Firestore rules deny an
+ * ordinary customer's read of a suspended/deactivated vendor's document
+ * outright -- 'not-found' is a genuinely nonexistent id, and 'transient' is
+ * a network/availability failure the customer could just retry.
+ */
+export type VendorFetchError = 'not-found' | 'permission-denied' | 'transient';
+
 async function findOneBy(field: 'slug' | 'username', value: string): Promise<Vendor | undefined> {
   try {
     const discoverableSnap = await getDocs(
@@ -96,15 +106,35 @@ export const vendorRepository = {
   },
 
   async getById(vendorId: string): Promise<Vendor | undefined> {
+    return (await vendorRepository.getByIdClassified(vendorId)).vendor;
+  },
+
+  /**
+   * Same lookup as `getById`, but preserves WHY a vendor could not be
+   * resolved instead of collapsing every failure into `undefined`.
+   *
+   * Firestore rules (vendors/{vendorId}) deny a customer read access to a
+   * vendor document the instant its vendorStatus leaves 'active' -- so a
+   * suspended/deactivated vendor's document throws 'permission-denied' here,
+   * it is never readable-but-showing-an-inactive-status. Callers that must
+   * fail closed on that (customer-facing chat composer gating) need to tell
+   * "confirmed can't chat" apart from "network hiccup, try again" so the
+   * copy shown to a customer never claims a suspension the client was never
+   * actually able to confirm.
+   */
+  async getByIdClassified(vendorId: string): Promise<{ vendor: Vendor | undefined; error: VendorFetchError | null }> {
     if (DEMO_VENDOR_IDS.has(vendorId)) {
-      return vendorId === 'v1' ? mockVendor : mockVendors.find((v) => v.id === vendorId);
+      const v = vendorId === 'v1' ? mockVendor : mockVendors.find((mv) => mv.id === vendorId);
+      return { vendor: v, error: v ? null : 'not-found' };
     }
     try {
       const snap = await getDoc(doc(db, 'vendors', vendorId));
-      return snap.exists() ? mapVendorDoc(snap.id, snap.data()) : undefined;
+      if (!snap.exists()) return { vendor: undefined, error: 'not-found' };
+      return { vendor: mapVendorDoc(snap.id, snap.data()), error: null };
     } catch (error) {
       console.error('[vendorRepository] Could not load vendor:', vendorId, error);
-      return undefined;
+      const code = (error as { code?: string } | undefined)?.code;
+      return { vendor: undefined, error: code === 'permission-denied' ? 'permission-denied' : 'transient' };
     }
   },
 

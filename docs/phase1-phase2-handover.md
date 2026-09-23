@@ -10,14 +10,14 @@ test you can run, a screenshot, or a commit.
 
 | Repository | Branch | State |
 |---|---|---|
-| `platform-mobile` | `henry/phase-1-registration` | Pushed, PR open |
-| `platform-backend` | `main` | Pushed |
-| `platform-website` | `main` | Pushed |
-| `platform-vendor-portal` | `main` | Pushed |
+| `this repo` | `henry/phase-1-registration` | Pushed, PR open |
+| `multivendor-marketplace-platform` | `main` | Pushed |
+| `multivendor-marketplace-platform (website/)` | `main` | Pushed |
+| `multivendor-marketplace-platform (vendor-portal/)` | `main` | Pushed |
 
-Pull request: **`platformTech/platform-mobile` #1**
+Pull request: **`YourOrg/this repo` #1**
 
-Everything is in platform-owned repositories under the `platformTech` organisation.
+Everything is in Platform-owned repositories under the `YourOrg` organisation.
 Nothing exists only on a local machine. Working trees are clean in all four.
 
 ## 2. Test suites
@@ -29,10 +29,10 @@ Nothing exists only on a local machine. Working trees are clean in all four.
 | `scripts/sales-counting-tests.js` | 6 | All passing |
 
 ```bash
-# terminal 1, from platform-backend/
+# terminal 1, from multivendor-marketplace-platform/
 npx firebase-tools emulators:start --project demo-platform
 
-# terminal 2, from platform-backend/scripts/
+# terminal 2, from multivendor-marketplace-platform/scripts/
 npm install                          # first run only
 node seed-demo-vendor.js             # Phase 2 needs the seeded vendor
 node phase1-acceptance-tests.js
@@ -152,6 +152,6 @@ platforms.
 
 ## 7. Confirmation
 
-No uncommitted the platform changes. No files that exist only on a local machine. All
+No uncommitted Platform changes. No files that exist only on a local machine. All
 four working trees clean, all branches pushed, all documentation and evidence in
 the repositories listed above.

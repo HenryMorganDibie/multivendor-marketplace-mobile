@@ -80,7 +80,7 @@ export default function DeliveryResponsibilityScreen() {
               <CheckItem
                 checked={check2}
                 onToggle={() => setCheck2((v) => !v)}
-                label="I understand the platform does not handle delivery"
+                label="I understand Platform does not handle delivery"
                 testID="delivery-check-2"
               />
             </View>

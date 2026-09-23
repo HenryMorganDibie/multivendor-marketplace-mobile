@@ -9,7 +9,7 @@ const PROHIBITED_USERNAMES = [
   'art',
   'services',
   'catering',
-  'the platform',
+  'platform',
   'admin',
   'support',
   'help',
@@ -23,7 +23,7 @@ const PROHIBITED_USERNAMES = [
   'undefined',
 ];
 
-const RESERVED_PREFIXES = ['the platform', 'admin', 'support', 'help', 'official'];
+const RESERVED_PREFIXES = ['platform', 'admin', 'support', 'help', 'official'];
 
 export interface UsernameValidationResult {
   isValid: boolean;
@@ -93,9 +93,16 @@ export function generateSystemUsername(): string {
   return `platform-${shortId}`;
 }
 
+/**
+ * A search only means "find this exact @handle" when the customer typed the
+ * `@` themselves — the previous version also matched any bare 3-30 char
+ * alphanumeric word, which meant an ordinary keyword search (including the
+ * search screen's own suggested category chips, e.g. "Food", "Fashion")
+ * was misread as a username lookup and returned "not found" instead of
+ * running the real keyword search.
+ */
 export function isUsernameSearch(query: string): boolean {
-  const trimmed = query.trim();
-  return trimmed.startsWith('@') || /^[a-zA-Z0-9_]{3,30}$/.test(trimmed);
+  return query.trim().startsWith('@');
 }
 
 export function extractUsername(query: string): string {

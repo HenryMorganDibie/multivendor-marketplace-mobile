@@ -22,10 +22,10 @@ consume them. Anything described as done has a test suite named beside it.
 | `vendor-discovery-tests.js` | 8 | Customer-facing vendor listing |
 
 ```bash
-# from platform-backend/, in one terminal
+# from multivendor-marketplace-platform/, in one terminal
 npx firebase-tools emulators:start --project demo-platform
 
-# from platform-backend/scripts/, in another
+# from multivendor-marketplace-platform/scripts/, in another
 node phase1-acceptance-tests.js      # and the seven others
 ```
 

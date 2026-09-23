@@ -65,7 +65,7 @@ function getTagLabel(tag: ItemTag, item: CatalogItem): string {
 }
 
 export default function VendorCatalogScreen() {
-  const { categories, getItemsByCategory, items, addCategory, updateItem, deleteItem } = useCatalog();
+  const { categories, getItemsByCategory, items, addCategory, toggleItemHidden, deleteItem } = useCatalog();
   const { vendor } = useVendor();
   const insets = useSafeAreaInsets();
   const [showActionSheet, setShowActionSheet] = useState(false);
@@ -171,7 +171,7 @@ export default function VendorCatalogScreen() {
     if (isWaitlisted) {
       Alert.alert(
         'Catalog Publishing Unavailable',
-        'the platform is in limited availability in your country. Catalog publishing will be available when we fully launch.',
+        'Platform is in limited availability in your country. Catalog publishing will be available when we fully launch.',
         [{ text: 'OK' }]
       );
       return;
@@ -231,9 +231,15 @@ export default function VendorCatalogScreen() {
     }
   };
 
-  const handleToggleHidden = (item: CatalogItem) => {
+  const handleToggleHidden = async (item: CatalogItem) => {
     openSwipeRef.current?.close();
-    updateItem(item.id, { ...item, isHidden: !item.isHidden });
+    try {
+      await toggleItemHidden(item.id, !item.isHidden);
+    } catch (error) {
+      console.error('[Catalog] Failed to toggle item visibility:', error);
+      const message = (error as { message?: string })?.message ?? 'Could not update this item. Please try again.';
+      Alert.alert('Something went wrong', message);
+    }
   };
 
   const handleDeleteItem = (item: CatalogItem) => {
@@ -601,7 +607,7 @@ export default function VendorCatalogScreen() {
             </View>
             <Text style={styles.waitlistTitle}>Catalog publishing unavailable</Text>
             <Text style={styles.waitlistText}>
-              the platform is in limited availability in your country. Catalog publishing will be available when we fully launch.
+              Platform is in limited availability in your country. Catalog publishing will be available when we fully launch.
             </Text>
           </View>
         ) : !hasAnyItems ? (

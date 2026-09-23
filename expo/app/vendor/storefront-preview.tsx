@@ -18,6 +18,7 @@ import { useVendorMenu } from '@/data/hooks';
 import { useResponsive } from '@/constants/layout';
 import { formatPrice } from '@/utils/formatPrice';
 import { getActivePromotions, getPromotionItemIds, getPromotionBadgeForItem } from '@/mocks/promotionsData';
+import { usePrimeVendorPromotions } from '@/contexts/PromoContext';
 import PromotionCarousel from '@/features/storefront/components/PromotionCarousel';
 import { Category, MenuItem } from '@/mocks/vendorData';
 
@@ -37,8 +38,9 @@ export default function StorefrontPreviewScreen() {
 
   const isStoreOpen = !vendor.storeStatus || vendor.storeStatus === 'open';
 
-  const promoItemIds = useMemo(() => getPromotionItemIds(vendor.id), [vendor.id]);
-  const activePromotions = useMemo(() => getActivePromotions(vendor.id), [vendor.id]);
+  const promoVersion = usePrimeVendorPromotions(vendor.id);
+  const promoItemIds = useMemo(() => getPromotionItemIds(vendor.id), [vendor.id, promoVersion]);
+  const activePromotions = useMemo(() => getActivePromotions(vendor.id), [vendor.id, promoVersion]);
 
   const filteredItems = useMemo(() => {
     if (selectedCategory === 'all') return menuItems;
@@ -308,7 +310,7 @@ export default function StorefrontPreviewScreen() {
           {/* Disabled CTAs */}
           <View style={styles.ctaRow}>
             <View style={[styles.ctaButton, styles.ctaButtonPrimary]}>
-              <Text style={styles.ctaButtonPrimaryText}>Ask the platform AI</Text>
+              <Text style={styles.ctaButtonPrimaryText}>Ask Platform AI</Text>
             </View>
             <View style={[styles.ctaButton, styles.ctaButtonOutline]}>
               <Text style={styles.ctaButtonOutlineText}>Message</Text>

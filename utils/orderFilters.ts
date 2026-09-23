@@ -8,14 +8,14 @@ export const CLOSED_STATUSES: OrderStatus[] = ['completed', 'rejected', 'cancell
 export function filterUpcomingOrders(orders: Order[]): Order[] {
   return orders.filter(
     (order) =>
-      order.orderSource === 'the platform' && ACTIVE_STATUSES.includes(order.status)
+      order.orderSource === 'platform' && ACTIVE_STATUSES.includes(order.status)
   );
 }
 
 export function filterPastOrders(orders: Order[]): Order[] {
   return orders.filter(
     (order) =>
-      order.orderSource === 'the platform' && CLOSED_STATUSES.includes(order.status)
+      order.orderSource === 'platform' && CLOSED_STATUSES.includes(order.status)
   );
 }
 

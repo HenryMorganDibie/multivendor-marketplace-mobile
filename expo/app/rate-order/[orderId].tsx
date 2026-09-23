@@ -97,7 +97,7 @@ export default function RateOrderScreen() {
               testID="rate-feedback-input"
             />
             <Text style={styles.feedbackNote}>
-              Visible only to your business and the platform administrators. Not displayed publicly.
+              Visible only to your business and Platform administrators. Not displayed publicly.
             </Text>
           </View>
 

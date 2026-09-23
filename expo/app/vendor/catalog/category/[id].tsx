@@ -44,7 +44,7 @@ function getTagLabel(tag: ItemTag, item: CatalogItem): string {
 
 export default function CategoryItemsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getCategoryById, getItemsByCategory, deleteCategory, updateCategory, updateItem, deleteItem } = useCatalog();
+  const { getCategoryById, getItemsByCategory, deleteCategory, updateCategory, toggleItemHidden, deleteItem } = useCatalog();
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
   const openRowRef = useRef<Swipeable | null>(null);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
@@ -68,9 +68,15 @@ export default function CategoryItemsScreen() {
         {
           text: 'Save',
           style: 'default',
-          onPress: (text?: string) => {
+          onPress: async (text?: string) => {
             if (text && text.trim()) {
-              updateCategory(id as string, text.trim());
+              try {
+                await updateCategory(id as string, text.trim());
+              } catch (error) {
+                console.error('[Category] Failed to rename category:', error);
+                const message = (error as { message?: string })?.message ?? 'Could not rename this category. Please try again.';
+                Alert.alert('Something went wrong', message);
+              }
             }
           },
         },
@@ -110,9 +116,15 @@ export default function CategoryItemsScreen() {
     );
   };
 
-  const handleToggleHidden = (item: CatalogItem) => {
+  const handleToggleHidden = async (item: CatalogItem) => {
     if (openRowRef.current) openRowRef.current.close();
-    updateItem(item.id, { ...item, isHidden: !item.isHidden });
+    try {
+      await toggleItemHidden(item.id, !item.isHidden);
+    } catch (error) {
+      console.error('[Category] Failed to toggle item visibility:', error);
+      const message = (error as { message?: string })?.message ?? 'Could not update this item. Please try again.';
+      Alert.alert('Something went wrong', message);
+    }
   };
 
   const handleDeleteItem = (item: CatalogItem) => {

@@ -52,7 +52,7 @@ export default function ReceiptPreviewScreen() {
 
             <View style={styles.businessInfo}>
               <Text style={styles.businessName}>
-                {branding.allowBrandedHeader ? 'Sanste Catering' : 'the platform Receipt'}
+                {branding.allowBrandedHeader ? 'Sanste Catering' : 'Platform Receipt'}
               </Text>
               {/* Business address deliberately not rendered here — kept out of the
                   invoice branding contract. Many vendors operate from home, and a

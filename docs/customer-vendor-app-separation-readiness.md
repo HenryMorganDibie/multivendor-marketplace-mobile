@@ -1,12 +1,12 @@
 # Customer/Vendor App Separation — Readiness Audit
 
-**Prepared for:** the client
+**Prepared for:** Founder
 **Question asked:** Does the current architecture prevent a future split of the single mobile app into separate Customer and Vendor apps? Not being done for MVP — this is a readiness check and a going-forward discipline, not a migration plan.
 **Scope:** live `expo/` tree only (per the earlier duplicate-tree finding — root-level `app/`, `contexts/`, etc. are stale platform-export copies and were not part of this audit).
 
 ## Short answer
 
-**No, nothing found here blocks a future split**, and the codebase is already in better shape for it than expected — most of the separation the client is asking the team to "keep doing" is already the dominant pattern, not something starting from zero. There is one real gap (app packaging/deep-link identity) and one concrete piece of role-mixed state worth unwinding (`InboxContext`), detailed below.
+**No, nothing found here blocks a future split**, and the codebase is already in better shape for it than expected — most of the separation Founder is asking the team to "keep doing" is already the dominant pattern, not something starting from zero. There is one real gap (app packaging/deep-link identity) and one concrete piece of role-mixed state worth unwinding (`InboxContext`), detailed below.
 
 ---
 
@@ -42,6 +42,6 @@ No other context or the 54 files checked in `components/` showed role-branching 
 
 **Deep links / app identity — the one real gap.** Today there is exactly **one** app bundle serving both roles: a single `bundleIdentifier`/`package` (`com.platform.app`) and a single `scheme` (`rork-app`) in `app.json`. Splitting into two real apps means two app store listings, two bundle identifiers, and a deep-link strategy that doesn't exist yet for cross-role links — e.g. a vendor sharing an invoice or storefront link that a customer opens needs to resolve to the *Customer* app, not the Vendor app that generated it, which requires either universal links/app associations configured per-role or a lightweight resolver. This isn't a code-quality problem to fix now — it's packaging and deployment work that hasn't been started, and won't need to until the split is actually decided.
 
-## Going-forward rule (per the client's request)
+## Going-forward rule (per Founder's request)
 
 Keep customer screens/state/services and vendor screens/state/services separated, following the `Vendor*`/`Customer*` naming convention already dominant in this codebase. Place genuinely reusable logic (domain services, shared UI primitives, auth) in shared modules, as already done. Don't introduce new role-mixed contexts or large `if (role === ...)` components where two smaller, separate ones would be cleaner — `InboxContext` is the one existing exception to unwind when next touched, not a pattern to repeat.

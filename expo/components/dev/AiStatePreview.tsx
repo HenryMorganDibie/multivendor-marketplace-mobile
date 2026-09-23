@@ -1,7 +1,7 @@
 /**
- * DEVELOPMENT-ONLY — the platform AI state preview tool.
+ * DEVELOPMENT-ONLY — Platform AI state preview tool.
  *
- * Purpose: lets designers/QA visually preview every customer-facing the platform AI
+ * Purpose: lets designers/QA visually preview every customer-facing Platform AI
  * state (eligible, empty, loading/typing, product recommendation, customer
  * quota reached, vendor quota reached, basic plan no-AI) from a single screen,
  * without having to manipulate mock data or wait for quota counters to fill.
@@ -158,7 +158,7 @@ function AiAvatarCircle() {
 function AiLabelRow() {
   return (
     <View style={styles.aiLabelRow}>
-      <Text style={styles.aiLabel}>the platform AI</Text>
+      <Text style={styles.aiLabel}>Platform AI</Text>
       <View style={styles.aiLabelPill}>
         <Text style={styles.aiLabelPillText}>AI</Text>
       </View>
@@ -360,7 +360,7 @@ export default function AiStatePreview() {
                 <View style={styles.messageContentWrapper}>
                   <AiLabelRow />
                   <AiBubble>
-                    Hi 👋 Welcome to Preview Bistro. I'm the platform AI assistant for this store.
+                    Hi 👋 Welcome to Preview Bistro. I'm the Platform AI assistant for this store.
                   </AiBubble>
                 </View>
               </View>
@@ -457,7 +457,7 @@ export default function AiStatePreview() {
           ),
           footer: (
             <QuotaBanner
-              title={`You've reached your the platform AI limit for ${PREVIEW_VENDOR.name} this month.`}
+              title={`You've reached your Platform AI limit for ${PREVIEW_VENDOR.name} this month.`}
               message="You can still browse the storefront or message the vendor directly."
               actions={[
                 {
@@ -490,7 +490,7 @@ export default function AiStatePreview() {
           ),
           footer: (
             <QuotaBanner
-              title="the platform AI is unavailable right now."
+              title="Platform AI is unavailable right now."
               message="This vendor has reached their monthly AI reply limit. You can still message the vendor directly."
               actions={[
                 {
@@ -510,9 +510,9 @@ export default function AiStatePreview() {
               <View style={styles.gatingIconWrap}>
                 <Sparkles size={26} color={Colors.textMuted} />
               </View>
-              <Text style={styles.gatingTitle}>the platform AI isn't available for this store.</Text>
+              <Text style={styles.gatingTitle}>Platform AI isn't available for this store.</Text>
               <Text style={styles.gatingMessage}>
-                {PREVIEW_VENDOR.name} hasn't enabled the platform AI. You can still browse the storefront or message them directly.
+                {PREVIEW_VENDOR.name} hasn't enabled Platform AI. You can still browse the storefront or message them directly.
               </Text>
               <View style={styles.gatingActions}>
                 <View style={styles.gatingPrimaryBtn}>

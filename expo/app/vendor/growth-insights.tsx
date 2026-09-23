@@ -87,7 +87,7 @@ const SOURCE_CONFIG: Record<string, { color: string; IconComponent: React.Compon
   'Walk-in':            { color: '#7C3AED', IconComponent: MapPin },
   'Website':            { color: '#0EA5E9', IconComponent: Monitor },
   'Other':              { color: '#9CA3AF', IconComponent: HelpCircle },
-  'the platform Marketplace':{ color: Colors.primary, IconComponent: Store },
+  'Platform Marketplace':{ color: Colors.primary, IconComponent: Store },
 };
 
 const ALL_EXTERNAL_SOURCES = ['WhatsApp', 'Instagram', 'TikTok', 'Phone', 'Walk-in', 'Website', 'Other'];
@@ -130,7 +130,7 @@ function formatAxisVal(val: number): string {
 }
 
 function getRevenueTrendData(
-  the platform: Array<{ orderDate: string; total: number }>,
+  platform: Array<{ orderDate: string; total: number }>,
   external: Array<{ orderDate: string; total: number }>,
   range: TimeRange
 ): TrendPoint[] {
@@ -1012,7 +1012,7 @@ function generateAIInsights(params: {
     insights.push(buildScoredInsight({
       id: 'ext-growth',
       title: 'External growth opportunity',
-      explanation: `All your orders come from the platform Marketplace. You're missing potential direct customers.`,
+      explanation: `All your orders come from Platform Marketplace. You're missing potential direct customers.`,
       action: 'Share your storefront link on WhatsApp, Instagram, or TikTok to attract direct orders.',
       actionLabel: 'View catalog',
       actionType: 'NAVIGATE_CATALOG',
@@ -1045,7 +1045,7 @@ function generateAIInsights(params: {
 
 type VerificationStatusType = 'not_started' | 'pending_review' | 'approved' | 'rejected' | 'retry_required';
 
-function platformAIInsightsSection({
+function PlatformAIInsightsSection({
   insights,
   plan,
   hasData,
@@ -1175,7 +1175,7 @@ function platformAIInsightsSection({
     {
       id: 'mock3',
       title: 'External growth opportunity',
-      explanation: 'Most of your orders come from the platform Marketplace. Share your storefront link to attract direct customers.',
+      explanation: 'Most of your orders come from Platform Marketplace. Share your storefront link to attract direct customers.',
       action: 'Share your link on WhatsApp and Instagram.',
       type: 'info',
       priority: 'opportunity',
@@ -1200,7 +1200,7 @@ function platformAIInsightsSection({
           <Text style={aiStyles.headerBadgeText}>AI</Text>
         </View>
         <View style={aiStyles.headerTextWrap}>
-          <Text style={aiStyles.headerTitle}>the platform AI Insights</Text>
+          <Text style={aiStyles.headerTitle}>Platform AI Insights</Text>
           <Text style={aiStyles.headerSubtitle}>Smart recommendations to help grow your business</Text>
         </View>
         <View style={aiStyles.collapseBtn}>
@@ -1229,7 +1229,7 @@ function platformAIInsightsSection({
               </View>
               <Text style={aiStyles.emptyTitle}>Not enough data yet</Text>
               <Text style={aiStyles.emptyBody}>
-                As customers visit your storefront and place orders, the platform AI will start showing growth recommendations.
+                As customers visit your storefront and place orders, Platform AI will start showing growth recommendations.
               </Text>
             </View>
           ) : (
@@ -1698,7 +1698,7 @@ function SmartInsightsSection({
 
   const mockInsights: SmartInsight[] = [
     { id: 'm1', message: 'Your conversion rate is strong at 6%, visitors are actively buying', type: 'positive', IconComponent: TrendingUp },
-    { id: 'm2', message: 'Most customers come from the platform Marketplace with 5 orders this period', type: 'info', IconComponent: Store },
+    { id: 'm2', message: 'Most customers come from Platform Marketplace with 5 orders this period', type: 'info', IconComponent: Store },
     { id: 'm3', message: 'You have low repeat customers at 15%, consider running promotions to boost loyalty', type: 'warning', IconComponent: Users },
   ];
 
@@ -2113,15 +2113,46 @@ export default function GrowthInsightsScreen() {
     return platformOrders.filter(o => new Date(o.orderDate) >= threshold);
   }, [platformOrders, timeRange]); // threshold is always a Date for the new 5-range set
 
+  // Real backend orders with orderSource: 'external' — created via
+  // createExternalOrder, already loaded in `orders` alongside internal ones.
+  // Record External Order writes only here now, never to the legacy
+  // AsyncStorage store below, so without this a real external order is
+  // invisible to every aggregate metric on this screen.
+  const realExternalOrders = useMemo(
+    () => orders.filter(o => o.orderSource === 'external'),
+    [orders]
+  );
+
+  const filteredRealExternal = useMemo(() => {
+    const threshold = getDateThreshold(timeRange);
+    return realExternalOrders.filter(o => new Date(o.orderDate) >= threshold);
+  }, [realExternalOrders, timeRange]);
+
+  // Aggregate totals/revenue/customer metrics should reflect every external
+  // order, real or legacy-local. Deduped by id: the legacy AsyncStorage store
+  // and the real `orders` collection have never shared a write path (no
+  // migration exists between them) and use independent id schemes (legacy:
+  // `ext_${Date.now()}`; real: a Firestore auto-id), so this guard is
+  // defensive rather than expected to ever actually remove anything.
+  // sourceMap (the per-channel breakdown below) stays on filteredExternal
+  // alone: a real external order has no channel field to bucket into — Order
+  // Source was intentionally removed from the create flow — so it correctly
+  // cannot appear there without inventing one.
+  const allExternalForRange = useMemo(() => {
+    const realIds = new Set(filteredRealExternal.map(o => o.id));
+    const dedupedLegacy = filteredExternal.filter(o => !realIds.has(o.id));
+    return [...filteredRealExternal, ...dedupedLegacy];
+  }, [filteredRealExternal, filteredExternal]);
+
   const sourceMap = useMemo(() => {
     const map: Record<string, SourceData> = {};
 
-    const platformCfg = SOURCE_CONFIG['the platform Marketplace'];
-    map['the platform Marketplace'] = {
-      source: 'the platform Marketplace',
+    const platformCfg = SOURCE_CONFIG['Platform Marketplace'];
+    map['Platform Marketplace'] = {
+      source: 'Platform Marketplace',
       orders: filteredPlatform.length,
       revenue: filteredPlatform.reduce((s, o) => s + o.total, 0),
-      customers: new Set(filteredPlatform.map(o => formatInvoiceCustomerName(o.customerName ?? 'unknown', 'the platform'))),
+      customers: new Set(filteredPlatform.map(o => formatInvoiceCustomerName(o.customerName ?? 'unknown', 'platform'))),
       color: platformCfg.color,
       IconComponent: platformCfg.IconComponent,
     };
@@ -2133,7 +2164,7 @@ export default function GrowthInsightsScreen() {
         source: src,
         orders: srcOrders.length,
         revenue: srcOrders.reduce((s, o) => s + o.total, 0),
-        customers: new Set(srcOrders.map(o => formatInvoiceCustomerName(o.customerName || 'Walk-in', o.orderSource === 'external' ? 'external' : 'the platform'))),
+        customers: new Set(srcOrders.map(o => formatInvoiceCustomerName(o.customerName || 'Walk-in', o.orderSource === 'external' ? 'external' : 'platform'))),
         color: cfg.color,
         IconComponent: cfg.IconComponent,
       };
@@ -2149,7 +2180,7 @@ export default function GrowthInsightsScreen() {
   const maxOrders = useMemo(() => Math.max(...allSources.map(s => s.orders), 1), [allSources]);
   const platformMetrics = useMemo(() => {
     const platformRevenue = filteredPlatform.reduce((s, o) => s + o.total, 0);
-    const externalRevenue = filteredExternal.reduce((s, o) => s + o.total, 0);
+    const externalRevenue = allExternalForRange.reduce((s, o) => s + o.total, 0);
     // Add standalone-invoice payment revenue for the selected period. Invoices
     // linked to an order are skipped so the same payment is not double-counted
     // (see BACKEND_INTEGRATION_GUIDE.md "Invoice payment double-counting").
@@ -2160,13 +2191,13 @@ export default function GrowthInsightsScreen() {
     const invoiceRevenue = getInvoiceRevenueForRange(invoices, threshold, new Date(), linkedOrderIds);
     return {
       platformOrders: filteredPlatform.length,
-      externalOrders: filteredExternal.length,
+      externalOrders: allExternalForRange.length,
       platformRevenue,
       externalRevenue,
-      totalOrders: filteredPlatform.length + filteredExternal.length,
+      totalOrders: filteredPlatform.length + allExternalForRange.length,
       totalRevenue: platformRevenue + externalRevenue + invoiceRevenue,
     };
-  }, [filteredPlatform, filteredExternal, timeRange, invoices, orders]);
+  }, [filteredPlatform, allExternalForRange, timeRange, invoices, orders]);
 
   const hasAnyData = platformMetrics.totalOrders > 0;
 
@@ -2203,9 +2234,9 @@ export default function GrowthInsightsScreen() {
     }
 
     const allCustomers = new Map<string, number>();
-    [...filteredPlatform, ...filteredExternal].forEach(o => {
+    [...filteredPlatform, ...allExternalForRange].forEach(o => {
       const name = ('customerName' in o ? o.customerName : null) || 'Walk-in';
-      const source = 'orderSource' in o && o.orderSource === 'external' ? 'external' : 'the platform';
+      const source = 'orderSource' in o && o.orderSource === 'external' ? 'external' : 'platform';
       allCustomers.set(formatInvoiceCustomerName(name, source), (allCustomers.get(formatInvoiceCustomerName(name, source)) ?? 0) + 1);
     });
     const newCustomers = [...allCustomers.values()].filter(c => c === 1).length;
@@ -2213,7 +2244,7 @@ export default function GrowthInsightsScreen() {
     const total = allCustomers.size;
     const repeatRate = total > 0 ? Math.round((repeatCustomers / total) * 100) : 0;
     return { newCustomers, repeatCustomers, repeatRate, total };
-  }, [serverAnalytics, filteredPlatform, filteredExternal]);
+  }, [serverAnalytics, filteredPlatform, allExternalForRange]);
 
   /**
    * Storefront visits are not tracked, so they are not reported.
@@ -2449,8 +2480,8 @@ export default function GrowthInsightsScreen() {
           onUpgrade={handleUpgrade}
         />
 
-        {/* THE PLATFORM AI INSIGHTS */}
-        <platformAIInsightsSection
+        {/* PLATFORM AI INSIGHTS */}
+        <PlatformAIInsightsSection
           insights={aiInsights}
           plan={plan}
           hasData={hasAnyData}
@@ -2482,7 +2513,7 @@ export default function GrowthInsightsScreen() {
           />
           {isPro ? (
             <>
-              {allSources.filter(s => s.orders > 0 || s.source === 'the platform Marketplace').map((src, i) => (
+              {allSources.filter(s => s.orders > 0 || s.source === 'Platform Marketplace').map((src, i) => (
                 <View key={src.source} style={styles.sourceRow}>
                   <View style={[styles.sourceIconDot, { backgroundColor: `${src.color}20` }]}>
                     <src.IconComponent size={14} color={src.color} strokeWidth={2} />
@@ -2508,7 +2539,7 @@ export default function GrowthInsightsScreen() {
           ) : (
             <LockedSection onUpgrade={handleUpgrade}>
               {[
-                { source: 'the platform Marketplace', orders: 5, revenue: 24500, color: Colors.primary, IconComponent: Store },
+                { source: 'Platform Marketplace', orders: 5, revenue: 24500, color: Colors.primary, IconComponent: Store },
                 { source: 'WhatsApp', orders: 3, revenue: 12000, color: '#25D366', IconComponent: MessageCircle },
                 { source: 'Instagram', orders: 2, revenue: 8700, color: '#E1306C', IconComponent: Camera },
               ].map((src, i) => (
@@ -2536,7 +2567,7 @@ export default function GrowthInsightsScreen() {
         <View style={styles.section}>
           <SectionHeader
             title="Platform vs External"
-            subtitle="the platform marketplace vs manually recorded orders"
+            subtitle="Platform marketplace vs manually recorded orders"
           />
           {isPro ? (
             <View style={styles.compareCard}>
@@ -2545,7 +2576,7 @@ export default function GrowthInsightsScreen() {
                   <Store size={18} color={Colors.primary} strokeWidth={2} />
                 </View>
                 <View style={styles.compareInfo}>
-                  <Text style={styles.compareLabel}>the platform Marketplace</Text>
+                  <Text style={styles.compareLabel}>Platform Marketplace</Text>
                   <View style={styles.compareBarRow}>
                     <AnimatedBar
                       value={platformMetrics.platformOrders}
@@ -2589,7 +2620,7 @@ export default function GrowthInsightsScreen() {
                   <View style={styles.splitRow}>
                     <View style={[styles.splitDot, { backgroundColor: Colors.primary }]} />
                     <Text style={styles.splitLabel}>
-                      {Math.round((platformMetrics.platformOrders / platformMetrics.totalOrders) * 100)}% the platform
+                      {Math.round((platformMetrics.platformOrders / platformMetrics.totalOrders) * 100)}% Platform
                     </Text>
                     <View style={[styles.splitDot, { backgroundColor: '#9CA3AF', marginLeft: 12 }]} />
                     <Text style={styles.splitLabel}>
@@ -2607,7 +2638,7 @@ export default function GrowthInsightsScreen() {
                     <Store size={18} color={Colors.primary} strokeWidth={2} />
                   </View>
                   <View style={styles.compareInfo}>
-                    <Text style={styles.compareLabel}>the platform Marketplace</Text>
+                    <Text style={styles.compareLabel}>Platform Marketplace</Text>
                     <View style={styles.compareBarRow}>
                       <AnimatedBar value={7} max={10} color={Colors.primary} delay={0} />
                       <Text style={styles.compareCount}>7</Text>
@@ -2688,6 +2719,20 @@ export default function GrowthInsightsScreen() {
             subtitle="Visits, orders placed, and conversion from your storefront"
           />
           {isPro ? (
+            storefrontMetrics.visits === null || storefrontMetrics.conversionRate === null ? (
+              // Same "not tracked yet" honesty as the Conversion Funnel below,
+              // which reads these same nullable fields correctly — this card
+              // duplicated the same data one section above it but was never
+              // given the same guard, so it rendered a blank number next to
+              // "Storefront Visits" and a bare "%" for every Pro/Pro+ vendor.
+              <View style={[styles.storefrontCard, { padding: 16 }]}>
+                <Text style={styles.storefrontLabel}>Storefront visits</Text>
+                <Text style={{ fontSize: 13, color: '#6B7280', lineHeight: 19, marginTop: 6 }}>
+                  Visits are not tracked yet, so a conversion rate cannot be shown. You have{' '}
+                  {storefrontMetrics.ordersPlaced} order{storefrontMetrics.ordersPlaced === 1 ? '' : 's'} in this period.
+                </Text>
+              </View>
+            ) : (
             <View style={styles.storefrontCard}>
               <View style={styles.storefrontRow}>
                 <View style={styles.storefrontIconWrap}>
@@ -2733,6 +2778,7 @@ export default function GrowthInsightsScreen() {
                 </View>
               </View>
             </View>
+            )
           ) : (
             <LockedSection onUpgrade={handleUpgrade}>
               <View style={styles.storefrontCard}>
@@ -2884,7 +2930,7 @@ export default function GrowthInsightsScreen() {
           ) : (
             <LockedSection onUpgrade={handleUpgrade}>
               {[
-                { source: 'the platform Marketplace', customers: 8, revenue: 39200, color: Colors.primary, IconComponent: Store },
+                { source: 'Platform Marketplace', customers: 8, revenue: 39200, color: Colors.primary, IconComponent: Store },
                 { source: 'WhatsApp', customers: 5, revenue: 22400, color: '#25D366', IconComponent: MessageCircle },
                 { source: 'Instagram', customers: 3, revenue: 13700, color: '#E1306C', IconComponent: Camera },
               ].map((src, i) => (

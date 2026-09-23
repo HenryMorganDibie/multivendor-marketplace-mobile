@@ -47,7 +47,7 @@ export default function VendorSetupChecklist() {
   /**
    * A vendor can finish every step this checklist tracks — including
    * verification — and still be invisible to customers, because
-   * discoverability also needs the platform to be open for commerce in their
+   * discoverability also needs Platform to be open for commerce in their
    * country, which isn't one of the tracked steps. Without this, the
    * checklist just disappeared once every step was done, and the dashboard
    * looked completely normal while the vendor was silently getting nothing.
@@ -147,7 +147,7 @@ export default function VendorSetupChecklist() {
           <View style={styles.countryNoticeTextWrap}>
             <Text style={styles.countryNoticeTitle}>Not visible to customers yet</Text>
             <Text style={styles.countryNoticeBody}>
-              Your storefront is set up, but the platform isn't open for orders in your country yet.
+              Your storefront is set up, but Platform isn't open for orders in your country yet.
               You'll appear in Home, Search and Explore as soon as it is — nothing more to do on
               your end.
             </Text>
@@ -183,7 +183,7 @@ export default function VendorSetupChecklist() {
           twice on one screen. */}
       {!stageState[3]?.complete && (
         <View style={styles.discoveryNote}>
-          <Text style={styles.discoveryTitle}>Get discovered on the platform</Text>
+          <Text style={styles.discoveryTitle}>Get discovered on Platform</Text>
           <Text style={styles.discoveryBody}>
             Complete verification to appear in Home, Search and Explore. You can still publish and
             share your storefront before verification.

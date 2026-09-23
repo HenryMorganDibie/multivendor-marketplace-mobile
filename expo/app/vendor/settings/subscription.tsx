@@ -221,7 +221,7 @@ export default function SubscriptionPlanScreen() {
             <Text style={styles.portalTitle}>Manage billing on the web</Text>
             <Text style={styles.portalBody}>
               Subscription payments, plan changes and billing details are managed securely through the
-              the platform Vendor Portal.
+              Platform Vendor Portal.
             </Text>
             <TouchableOpacity
               style={styles.portalPrimaryButton}
@@ -327,7 +327,7 @@ export default function SubscriptionPlanScreen() {
           </View>
         }
         primaryButton={{
-          label: 'Keep Pro+',
+          label: `Keep ${subscription.planName}`,
           onPress: () => setShowCancelModal(false),
         }}
         secondaryButton={{

@@ -9,7 +9,7 @@ const PROHIBITED_USERNAMES = [
   'art',
   'services',
   'catering',
-  'the platform',
+  'platform',
   'admin',
   'support',
   'help',
@@ -23,7 +23,7 @@ const PROHIBITED_USERNAMES = [
   'undefined',
 ];
 
-const RESERVED_PREFIXES = ['the platform', 'admin', 'support', 'help', 'official'];
+const RESERVED_PREFIXES = ['platform', 'admin', 'support', 'help', 'official'];
 
 export interface UsernameValidationResult {
   isValid: boolean;

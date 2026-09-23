@@ -21,6 +21,14 @@ export default function VerificationRejectedScreen() {
   const router = useRouter();
   const { verificationData, retryVerification } = useVerification();
 
+  // submitVendorVerification only accepts resubmission from the backend's
+  // own not_started/retry_required states, never from "rejected" - a real
+  // admin decision, not an incomplete-documents request. This screen
+  // previously showed the same "Retry verification" button for both, so a
+  // hard-rejected vendor could re-upload everything and still fail at the
+  // final submit step with no way to know why in advance.
+  const canRetry = verificationData.status === 'retry_required';
+
   const handleRetry = async () => {
     console.log('[VERIFICATION] Retrying verification');
     await retryVerification();
@@ -48,10 +56,14 @@ export default function VerificationRejectedScreen() {
             <XCircle size={80} color={Colors.error} strokeWidth={2} />
           </View>
 
-          <Text style={styles.title}>Verification unsuccessful</Text>
-          
+          <Text style={styles.title}>
+            {canRetry ? 'Verification unsuccessful' : 'Verification declined'}
+          </Text>
+
           <Text style={styles.body}>
-            We couldn&apos;t verify your identity. Please retry using valid documents.
+            {canRetry
+              ? "We couldn't verify your identity. Please retry using valid documents."
+              : 'Your verification was reviewed and declined. This decision is final and cannot be resubmitted. Contact support if you believe this was a mistake.'}
           </Text>
 
           {verificationData.referenceId ? (
@@ -74,29 +86,33 @@ export default function VerificationRejectedScreen() {
             </Text>
           ) : null}
 
-          <View style={styles.tipsCard}>
-            <Text style={styles.tipsTitle}>Tips for successful verification</Text>
-            <View style={styles.listItem}>
-              <Text style={styles.bullet}>•</Text>
-              <Text style={styles.listText}>Use valid, unexpired ID</Text>
+          {canRetry && (
+            <View style={styles.tipsCard}>
+              <Text style={styles.tipsTitle}>Tips for successful verification</Text>
+              <View style={styles.listItem}>
+                <Text style={styles.bullet}>•</Text>
+                <Text style={styles.listText}>Use valid, unexpired ID</Text>
+              </View>
+              <View style={styles.listItem}>
+                <Text style={styles.bullet}>•</Text>
+                <Text style={styles.listText}>Good lighting</Text>
+              </View>
+              <View style={styles.listItem}>
+                <Text style={styles.bullet}>•</Text>
+                <Text style={styles.listText}>Selfie clearly shows your face</Text>
+              </View>
             </View>
-            <View style={styles.listItem}>
-              <Text style={styles.bullet}>•</Text>
-              <Text style={styles.listText}>Good lighting</Text>
-            </View>
-            <View style={styles.listItem}>
-              <Text style={styles.bullet}>•</Text>
-              <Text style={styles.listText}>Selfie clearly shows your face</Text>
-            </View>
-          </View>
+          )}
 
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={handleRetry}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.retryButtonText}>Retry verification</Text>
-          </TouchableOpacity>
+          {canRetry && (
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={handleRetry}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.retryButtonText}>Retry verification</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={styles.supportButton}

@@ -178,7 +178,7 @@ export default function PaymentMethodsScreen() {
               <AlertTriangle size={15} color={Colors.warning} />
               <Text style={styles.noticeTitle}>Security notice</Text>
             </View>
-            <Text style={styles.noticeText}>Frequent or misleading payment method changes may trigger account review. the platform does not process payments or hold escrow.</Text>
+            <Text style={styles.noticeText}>Frequent or misleading payment method changes may trigger account review. Platform does not process payments or hold escrow.</Text>
           </View>
 
           {hasPendingRequest && (

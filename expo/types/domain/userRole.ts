@@ -1,5 +1,5 @@
 /**
- * Roles a the platform account can hold.
+ * Roles a Platform account can hold.
  *
  * Single source of truth. Mirrors the private `UserRole` used inside
  * `AuthContext` and the implicit roles referenced across chat/storefront code.

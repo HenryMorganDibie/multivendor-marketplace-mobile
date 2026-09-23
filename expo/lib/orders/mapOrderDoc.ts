@@ -123,7 +123,7 @@ export function mapOrderDoc(id: string, data: Record<string, unknown>): Order {
     publicOrderId: (data.publicOrderId as string) ?? id,
     vendorId: (data.vendorId as string) ?? '',
     vendorName: vendorSnapshot.name ?? '',
-    // An external order has no the platform customer, so the name the vendor typed
+    // An external order has no Platform customer, so the name the vendor typed
     // in is the only one there is.
     customerName:
       customerSnapshot.displayName ??
@@ -144,5 +144,26 @@ export function mapOrderDoc(id: string, data: Record<string, unknown>): Order {
     paymentState: toPaymentState(data.paymentStatus as string | undefined),
     orderSource: (data.orderSource as Order['orderSource']) ?? 'internal',
     orderNote: (data.orderNote as string) ?? undefined,
+    // submitRating (ratingFunctions.ts) sets this on the real order doc so a
+    // completed order can't be rated twice. Missing here meant the app never
+    // knew an order had already been rated: the rate-order screen kept
+    // re-prompting on every visit, and resubmitting hard-failed against the
+    // backend's own already-exists guard.
+    hasRating: Boolean(data.hasRating),
+    // Boolean only - see Order.hasDeliveryContact. The actual
+    // fullName/phoneNumber/address must only ever reach a vendor through
+    // getOrderDetails (terminal-status stripped), never through this shared
+    // customer+vendor listener mapper.
+    hasDeliveryContact: Boolean(data.deliveryContact),
+    // Already sent to updateOrderStatus and already used for the push
+    // notification body; the order document itself never carried it, so
+    // this screen's own rejectionReason/cancellationReason read always came
+    // back empty once the notification was gone.
+    rejectionReason: (data.rejectionReason as string) ?? undefined,
+    cancellationReason: (data.cancellationReason as string) ?? undefined,
+    // Already persisted on the order document by updateOrderStatus.ts in the
+    // same transaction as the completed status write -- authoritative, and
+    // survives every rehydration unlike a locally-decorated value would.
+    completedAt: data.completedAt ? toIso(data.completedAt as FirestoreTimestampish) : undefined,
   } as Order;
 }

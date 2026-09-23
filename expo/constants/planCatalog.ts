@@ -1,6 +1,6 @@
 /**
  * MOCK_PLAN_CATALOG — the single backend-shaped mock source of truth for all
- * the platform subscription pricing, plan features, usage limits, and launch-sale
+ * Platform subscription pricing, plan features, usage limits, and launch-sale
  * messaging. Every subscription screen (Manage Subscription, Plan Details,
  * Available Plans, Upgrade Plan) reads from this catalog — no screen hard-codes
  * feature labels, prices, or limits.
@@ -273,7 +273,7 @@ export const MOCK_PLAN_CATALOG: PlanCatalog = {
     promoEndsAt: null,
     renewsAtStandardPrice: true,
   },
-  vendorPortalBaseUrl: 'https://vendor.platform.com',
+  vendorPortalBaseUrl: 'https://vendor.example.com',
 
   /* ---------------------------- Country pricing --------------------------- */
   countries: [
@@ -395,16 +395,23 @@ export const MOCK_PLAN_CATALOG: PlanCatalog = {
         { id: F.activePromotions, label: 'Active promotions', category: 'storefront', order: 4 },
         { id: F.minOrderSettings, label: 'Minimum-order settings', category: 'storefront', order: 5 },
         { id: F.businessPolicies, label: 'Business policies', category: 'storefront', order: 6 },
-        { id: F.aiReplies, label: 'Ask the platform AI replies', category: 'ai', value: 0, unit: 'per month', order: 1 },
+        { id: F.aiReplies, label: 'Ask Platform AI replies', category: 'ai', value: 0, unit: 'per month', order: 1 },
         { id: F.aiInsights, label: 'AI business insights', category: 'ai', value: 1, order: 2 },
         { id: F.orderRequests, label: 'Order requests', category: 'orders', included: true, order: 1 },
         { id: F.unlimitedOrders, label: 'Unlimited orders', category: 'orders', included: true, order: 2 },
-        { id: F.externalOrderRecording, label: 'External-order recording', category: 'orders', order: 3 },
+        // Recording an order placed outside Platform is free on every plan
+        // (canAccessExternalOrders is true for all four tiers on the real
+        // backend) — the paid line sits at the platform-vs-external
+        // analytics comparison instead. This entry previously had no
+        // `included`, so Basic vendors saw it marked unavailable and it was
+        // silently omitted from Basic's card on the Upgrade Plan comparison,
+        // contradicting the real, already-enforced entitlement.
+        { id: F.externalOrderRecording, label: 'External-order recording', category: 'orders', included: true, order: 3 },
         { id: F.autoSendPickup, label: 'Auto-send pickup details', category: 'orders', order: 4 },
         { id: F.autoAccept, label: 'Auto-accept orders', category: 'orders', order: 5 },
         { id: F.invoicesPerMonth, label: 'Invoices per month', category: 'invoices', order: 1 },
         { id: F.invoiceHistory, label: 'Invoice history', category: 'invoices', order: 2 },
-        { id: F.invoiceBranding, label: 'Invoice branding', category: 'invoices', text: 'Default the platform template (logo only)', order: 3 },
+        { id: F.invoiceBranding, label: 'Invoice branding', category: 'invoices', text: 'Default Platform template (logo only)', order: 3 },
         { id: F.invoiceSearch, label: 'Invoice search and filters', category: 'invoices', order: 4 },
         { id: F.duplicateInvoice, label: 'Duplicate invoice', category: 'invoices', order: 5 },
         { id: F.pdfDownload, label: 'PDF download', category: 'invoices', order: 6 },
@@ -443,7 +450,7 @@ export const MOCK_PLAN_CATALOG: PlanCatalog = {
         { id: F.activePromotions, label: 'Active promotions', category: 'storefront', order: 4 },
         { id: F.minOrderSettings, label: 'Minimum-order settings', category: 'storefront', order: 5 },
         { id: F.businessPolicies, label: 'Business policies', category: 'storefront', order: 6 },
-        { id: F.aiReplies, label: 'Ask the platform AI replies', category: 'ai', value: 100, unit: 'per month', order: 1 },
+        { id: F.aiReplies, label: 'Ask Platform AI replies', category: 'ai', value: 100, unit: 'per month', order: 1 },
         { id: F.aiInsights, label: 'AI business insights', category: 'ai', value: 3, order: 2 },
         { id: F.orderRequests, label: 'Order requests', category: 'orders', included: true, order: 1 },
         { id: F.unlimitedOrders, label: 'Unlimited orders', category: 'orders', included: true, order: 2 },
@@ -493,7 +500,7 @@ export const MOCK_PLAN_CATALOG: PlanCatalog = {
         { id: F.activePromotions, label: 'Active promotions', category: 'storefront', value: 10, order: 4 },
         { id: F.minOrderSettings, label: 'Minimum-order settings', category: 'storefront', order: 5 },
         { id: F.businessPolicies, label: 'Business policies', category: 'storefront', order: 6 },
-        { id: F.aiReplies, label: 'Ask the platform AI replies', category: 'ai', value: 300, unit: 'per month', order: 1 },
+        { id: F.aiReplies, label: 'Ask Platform AI replies', category: 'ai', value: 300, unit: 'per month', order: 1 },
         { id: F.aiInsights, label: 'AI business insights', category: 'ai', value: 10, order: 2 },
         { id: F.orderRequests, label: 'Order requests', category: 'orders', included: true, order: 1 },
         { id: F.unlimitedOrders, label: 'Unlimited orders', category: 'orders', included: true, order: 2 },
@@ -544,7 +551,7 @@ export const MOCK_PLAN_CATALOG: PlanCatalog = {
         { id: F.activePromotions, label: 'Active promotions', category: 'storefront', value: 25, order: 4 },
         { id: F.minOrderSettings, label: 'Minimum-order settings', category: 'storefront', order: 5 },
         { id: F.businessPolicies, label: 'Business policies', category: 'storefront', order: 6 },
-        { id: F.aiReplies, label: 'Ask the platform AI replies', category: 'ai', value: 500, unit: 'per month', order: 1 },
+        { id: F.aiReplies, label: 'Ask Platform AI replies', category: 'ai', value: 500, unit: 'per month', order: 1 },
         { id: F.aiInsights, label: 'AI business insights', category: 'ai', value: 25, order: 2 },
         { id: F.orderRequests, label: 'Order requests', category: 'orders', included: true, order: 1 },
         { id: F.unlimitedOrders, label: 'Unlimited orders', category: 'orders', included: true, order: 2 },
@@ -672,6 +679,23 @@ export function applyRealPlanLimits(
       return {
         ...plan,
         features: plan.features.map((feature) => {
+          // invoiceHistoryDays doesn't fit the generic 1:1 map below: the
+          // catalog displays this feature in months (a friendlier unit than
+          // a raw day count), so overriding value with the real day count
+          // directly would show e.g. "180 months" instead of "6 months".
+          // Basic (30 days), Standard (180), Pro (548) and Pro+ (1095) were
+          // clearly designed as 1/6/18/36 months stored as day-equivalents
+          // (dividing by the ~30.4-day average month recovers exactly those
+          // integers), so that's the conversion applied here rather than a
+          // straight field copy. Without this, Basic showed no invoice
+          // history at all (the mock catalog never listed a value for it)
+          // and Pro showed a hardcoded 12 months against a real entitlement
+          // of about 18.
+          if (feature.id === F.invoiceHistory) {
+            const realDays = real.invoiceHistoryDays;
+            if (typeof realDays !== 'number') return feature;
+            return { ...feature, value: Math.round(realDays / 30.4), unit: 'months' as const };
+          }
           const backendField = LIMIT_FEATURE_TO_BACKEND_FIELD[feature.id];
           if (!backendField) return feature;
           const realValue = real[backendField];

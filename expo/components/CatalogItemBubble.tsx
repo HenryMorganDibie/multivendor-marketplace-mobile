@@ -4,17 +4,24 @@ import { useRouter } from 'expo-router';
 import { CatalogItemData } from '@/mocks/chatData';
 import { useAuth } from '@/contexts/AuthContext';
 import { Colors } from '@/constants/colors';
-import { formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
-import { mockVendors } from '@/mocks/vendorData';
+import { formatPriceWithCommas, type Currency } from '@/utils/formatPrice';
 
 interface CatalogItemBubbleProps {
   data: CatalogItemData;
   timestamp: string;
   sender: 'customer' | 'vendor' | 'system' | 'ai';
   vendorId?: string;
+  /**
+   * The caller already resolves the real vendor and derives this same
+   * currency elsewhere on the same screen - looking vendorId up in
+   * mockVendors here only ever matched the handful of demo vendors, so
+   * every real vendor's shared catalog items priced in NGN regardless of
+   * their actual currency.
+   */
+  currency: Currency;
 }
 
-export function CatalogItemBubble({ data, timestamp, sender, vendorId }: CatalogItemBubbleProps) {
+export function CatalogItemBubble({ data, timestamp, sender, vendorId, currency }: CatalogItemBubbleProps) {
   const router = useRouter();
   const { user } = useAuth();
 
@@ -59,7 +66,7 @@ export function CatalogItemBubble({ data, timestamp, sender, vendorId }: Catalog
             <Text style={styles.itemDescription} numberOfLines={2}>{data.description}</Text>
           )}
           <View style={styles.itemFooter}>
-            <Text style={styles.itemPrice}>{formatPriceWithCommas(data.price, (() => { const v = mockVendors.find(vv => vv.id === vendorId); return (v?.currency as Currency) || getCurrencyFromCountryCode(v?.countryCode || 'NG'); })())}</Text>
+            <Text style={styles.itemPrice}>{formatPriceWithCommas(data.price, currency)}</Text>
             {data.id && (
               <TouchableOpacity
                 style={styles.viewButton}

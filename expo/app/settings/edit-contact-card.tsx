@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { Alert } from '@/utils/alert';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Trash2, AlertCircle, Lock } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import {
@@ -24,7 +24,7 @@ import {
 import { useContactCards } from '@/contexts/ContactCardsContext';
 import DiscardChangesModal from '@/components/DiscardChangesModal';
 import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
-import { ChevronLeft } from 'lucide-react-native';
+import CustomerHeader from '@/components/CustomerHeader';
 
 export default function EditContactCardScreen() {
   const router = useRouter();
@@ -170,18 +170,11 @@ export default function EditContactCardScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.container}>
         {/* Header */}
-        <SafeAreaView edges={['top']} style={styles.safeTop}>
-          <View style={styles.header}>
-            <TouchableOpacity
-              onPress={handleBackPress}
-              style={styles.headerBack}
-              activeOpacity={0.7}
-            >
-              <ChevronLeft size={22} color={Colors.text} strokeWidth={2} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>
-              {isEditing ? 'Edit Contact Card' : 'New Contact Card'}
-            </Text>
+        <CustomerHeader
+          title={isEditing ? 'Edit Contact Card' : 'New Contact Card'}
+          onBack={handleBackPress}
+          backgroundColor={Colors.backgroundCanvas}
+          rightAction={
             <TouchableOpacity
               onPress={handleSave}
               style={[styles.saveBtn, !isSaveEnabled && styles.saveBtnDisabled]}
@@ -192,8 +185,8 @@ export default function EditContactCardScreen() {
                 Save
               </Text>
             </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+          }
+        />
 
         <KeyboardAvoidingView
           style={styles.flex}
@@ -326,7 +319,7 @@ export default function EditContactCardScreen() {
                 <Lock size={18} color={Colors.primary} strokeWidth={2} />
               </View>
               <Text style={styles.privacyText}>
-                Contact cards are stored locally on your device only. They are not uploaded to the platform servers and cannot be screenshotted.
+                Contact cards are stored locally on your device only. They are not uploaded to Platform servers and cannot be screenshotted.
               </Text>
             </View>
 
@@ -365,29 +358,6 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
-  },
-  safeTop: {
-    backgroundColor: Colors.backgroundCanvas,
-  },
-  header: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  headerBack: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.surface,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600' as const,
-    color: Colors.text,
   },
   saveBtn: {
     paddingHorizontal: 16,

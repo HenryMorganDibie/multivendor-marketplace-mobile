@@ -1,11 +1,11 @@
 import type { Vendor } from '@/mocks/vendorData';
 
 /**
- * Customer-facing the platform AI gating.
+ * Customer-facing Platform AI gating.
  *
  * Two layers of access control:
- * 1. Plan gate — Basic vendors cannot offer the platform AI to customers at all.
- *    The "Ask the platform AI" button is hidden on their storefront and the AI
+ * 1. Plan gate — Basic vendors cannot offer Platform AI to customers at all.
+ *    The "Ask Platform AI" button is hidden on their storefront and the AI
  *    chat route is unreachable.
  * 2. Quota gate — even when the plan allows AI, either the vendor's monthly
  *    reply quota OR the customer's per-vendor monthly reply quota (5/month)
@@ -24,6 +24,15 @@ import type { Vendor } from '@/mocks/vendorData';
 /** Customer per-vendor monthly AI reply limit. */
 export const CUSTOMER_AI_MONTHLY_LIMIT = 5;
 
+/**
+ * MVP hide-only flag: the customer-facing "Ask Platform AI" storefront CTA
+ * is not part of the MVP. This does not disable the AI Help route, the
+ * component, or any backend function -- it only gates whether the
+ * storefront computes canUsePlatformAi as reachable. Flip to true to
+ * re-enable without touching any other file.
+ */
+export const PLATFORM_AI_CUSTOMER_ENABLED = false;
+
 /** Default vendor AI reply quota per plan tier (mock stand-in). */
 const DEFAULT_VENDOR_LIMIT_BY_PLAN: Record<NonNullable<Vendor['plan']>, number> = {
   basic: 0,
@@ -33,7 +42,7 @@ const DEFAULT_VENDOR_LIMIT_BY_PLAN: Record<NonNullable<Vendor['plan']>, number> 
 };
 
 /**
- * Whether a vendor's plan permits customer-facing the platform AI at all.
+ * Whether a vendor's plan permits customer-facing Platform AI at all.
  * Basic → false. Defaults to false when the plan is unknown so the
  * customer-side stays conservative until the backend confirms the tier.
  */

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Colors } from '@/constants/colors';
 import {
   View,
@@ -18,6 +18,25 @@ import { formatCustomerNameFromFull } from '@/utils/formatCustomerName';
 import { formatVendorOrderId } from '@/utils/formatOrderId';
 import { formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
 import { useVendor } from '@/contexts/VendorContext';
+import { callable } from '@/lib/firebase';
+
+/**
+ * Backend's real receipt record (functions/src/receipts/receiptFunctions.ts,
+ * ReceiptDoc in types2.ts). generateReceiptInternal writes one of these to
+ * orders/{orderId}/receipts on order completion, with a receiptNumber in the
+ * LVT-{YEAR}-{VENDOR_CODE}-{SEQUENCE} format — a real, sequential, per-vendor
+ * number, not derivable from the order id. This screen used to fabricate a
+ * "receipt number" by uppercasing the order's own publicOrderId and never
+ * called the getReceipt callable that already existed to fetch the real one.
+ */
+interface BackendReceipt {
+  receiptNumber: string;
+  subtotal: number;
+  tax: number;
+  discount: number;
+  total: number;
+  generatedAt?: { toDate?: () => Date } | { seconds: number } | null;
+}
 
 export default function ReceiptScreen() {
   const { orderId } = useLocalSearchParams();
@@ -25,6 +44,21 @@ export default function ReceiptScreen() {
   const { vendor } = useVendor();
   const order = orders.find(o => o.id === orderId);
   const [showMenu, setShowMenu] = useState(false);
+  const [backendReceipt, setBackendReceipt] = useState<BackendReceipt | null>(null);
+
+  useEffect(() => {
+    if (!orderId || typeof orderId !== 'string') return;
+    const getReceipt = callable<{ orderId: string }, { success: true; receipt: BackendReceipt }>('getReceipt');
+    getReceipt({ orderId })
+      .then((res) => setBackendReceipt(res.data.receipt))
+      .catch((err) => {
+        // Not every order has a receipt yet (only completed orders do), and
+        // older orders predate this call being wired up here at all — either
+        // way the screen falls back to deriving a display value from the
+        // order itself rather than blocking on this.
+        console.error('[Receipt] getReceipt failed, falling back to order data:', err);
+      });
+  }, [orderId]);
 
   if (!order) {
     return (
@@ -73,7 +107,11 @@ export default function ReceiptScreen() {
     );
   };
 
-  const receiptNumber = formatVendorOrderId(order.publicOrderId);
+  const receiptNumber = backendReceipt?.receiptNumber ?? formatVendorOrderId(order.publicOrderId);
+  const displaySubtotal = backendReceipt?.subtotal ?? order.subtotal;
+  const displayTax = backendReceipt?.tax ?? order.tax;
+  const displayDiscount = backendReceipt?.discount ?? order.discount;
+  const displayTotal = backendReceipt?.total ?? order.total;
   const paymentDate = new Date(order.orderDate).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -182,30 +220,30 @@ export default function ReceiptScreen() {
         <View style={styles.settingsCard}>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Subtotal</Text>
-            <Text style={styles.totalValue}>{formatPriceWithCommas(order.subtotal, (vendor.currency as Currency) || 'NGN')}</Text>
+            <Text style={styles.totalValue}>{formatPriceWithCommas(displaySubtotal, (vendor.currency as Currency) || 'NGN')}</Text>
           </View>
-          {order.tax > 0 && (
+          {displayTax > 0 && (
             <>
               <View style={styles.divider} />
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Tax</Text>
-                <Text style={styles.totalValue}>{formatPriceWithCommas(order.tax, (vendor.currency as Currency) || 'NGN')}</Text>
+                <Text style={styles.totalValue}>{formatPriceWithCommas(displayTax, (vendor.currency as Currency) || 'NGN')}</Text>
               </View>
             </>
           )}
-          {order.discount > 0 && (
+          {displayDiscount > 0 && (
             <>
               <View style={styles.divider} />
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Discount</Text>
-                <Text style={styles.totalValue}>-{formatPriceWithCommas(order.discount, (vendor.currency as Currency) || 'NGN')}</Text>
+                <Text style={styles.totalValue}>-{formatPriceWithCommas(displayDiscount, (vendor.currency as Currency) || 'NGN')}</Text>
               </View>
             </>
           )}
           <View style={styles.divider} />
           <View style={styles.totalRow}>
             <Text style={styles.grandTotalLabel}>Total Paid</Text>
-            <Text style={styles.grandTotalValue}>{formatPriceWithCommas(order.total, (vendor.currency as Currency) || 'NGN')}</Text>
+            <Text style={styles.grandTotalValue}>{formatPriceWithCommas(displayTotal, (vendor.currency as Currency) || 'NGN')}</Text>
           </View>
         </View>
 

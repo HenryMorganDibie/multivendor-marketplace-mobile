@@ -18,13 +18,13 @@ export default function ShareYourStoreScreen() {
   const hasAcknowledgedPromise = useRef(false);
   
   const displayUsername = username || systemGeneratedUsername || 'loading';
-  const storeLink = `the platform://@${displayUsername}`;
-  const webLink = `https://theplatform.com/@${displayUsername}`;
+  const storeLink = `platform://@${displayUsername}`;
+  const webLink = `https://example.com/@${displayUsername}`;
 
   const executeShare = async () => {
     await safeShare({
-      message: `Order from my store on the platform! Install the app and visit ${webLink}\n\nAvailable on iOS and Android.`,
-      title: 'Visit my store on the platform',
+      message: `Order from my store on Platform! Install the app and visit ${webLink}\n\nAvailable on iOS and Android.`,
+      title: 'Visit my store on Platform',
     });
   };
 
@@ -37,7 +37,7 @@ export default function ShareYourStoreScreen() {
     setShowQR(true);
     Alert.alert(
       'QR Code',
-      'Customers can scan this QR code to visit your store. They must install the platform app first.',
+      'Customers can scan this QR code to visit your store. They must install the Platform app first.',
       [{ text: 'OK', onPress: () => setShowQR(false) }]
     );
   };
@@ -159,7 +159,7 @@ export default function ShareYourStoreScreen() {
                 <Text style={styles.modalTitle}>🛡️ Your customers stay yours</Text>
                 
                 <Text style={styles.modalBody}>
-                  When customers open your the platform link:
+                  When customers open your Platform link:
                 </Text>
                 
                 <View style={styles.bulletList}>
@@ -185,7 +185,7 @@ export default function ShareYourStoreScreen() {
                   Your storefront opens directly and ordering starts immediately.
                 </Text>
                 
-                <Text style={styles.modalFooter}>Powered by the platform</Text>
+                <Text style={styles.modalFooter}>Powered by Platform</Text>
               </ScrollView>
               
               <View style={styles.modalButtons}>

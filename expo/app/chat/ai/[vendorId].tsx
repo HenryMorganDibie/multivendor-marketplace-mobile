@@ -44,8 +44,8 @@ import {
 const AI_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 // AI chat uses a warm cream palette (NOT the vendor chat's cool gray #E9E9EB)
-// so customers always visually distinguish the platform AI replies from a real
-// vendor's messages. The accent stays in the platform's orange family.
+// so customers always visually distinguish Platform AI replies from a real
+// vendor's messages. The accent stays in Platform's orange family.
 const AI_BUBBLE_BG = '#FFF4EC'; // warm cream — AI's signature surface
 const AI_BUBBLE_BG_DEEPER = '#FDEFE0'; // slightly deeper for nested/tool cards
 const AI_BUBBLE_BORDER = 'rgba(255, 122, 40, 0.22)';
@@ -60,7 +60,7 @@ const SUGGESTION_PROMPTS = [
 ];
 
 /**
- * Customer-facing the platform AI chat for a specific vendor.
+ * Customer-facing Platform AI chat for a specific vendor.
  *
  * Plan + quota gating:
  *  - Basic plan → unreachable (storefront hides the AI button). If a stale
@@ -92,7 +92,7 @@ export default function VendorAIChatScreen() {
   // Real vendor doc. Previously read from mockVendors, which only contains a
   // handful of demo vendors — any real vendor not in that array resolved to
   // `undefined` immediately, which the gates below treat as "store not
-  // found," so the platform AI was unreachable for every real vendor regardless
+  // found," so Platform AI was unreachable for every real vendor regardless
   // of plan or quota. `isVendorLoading` distinguishes "still fetching" from
   // "genuinely doesn't exist" so a real vendor doesn't flash the not-found
   // screen while the fetch is in flight.
@@ -169,7 +169,7 @@ export default function VendorAIChatScreen() {
       .filter(Boolean)
       .join(', ');
 
-    return `You are the platform AI, a virtual assistant representing ${vendor.name}.
+    return `You are Platform AI, a virtual assistant representing ${vendor.name}.
 
 VENDOR INFORMATION:
 - Name: ${vendor.name}
@@ -225,7 +225,7 @@ ESCALATION RULE:
 - Do NOT escalate for routine questions — only use it when genuinely needed
 
 CRITICAL IDENTITY RULES:
-- You represent ${vendor.name}, NOT the platform the platform
+- You represent ${vendor.name}, NOT Platform the platform
 - Never use "we", "our", or "us" when referring to vendor actions
 - Always reference the vendor explicitly by name: "${vendor.name}"
 - WRONG: "Our cancellation policy requires..." → CORRECT: "${vendor.name}'s cancellation policy requires..."
@@ -248,7 +248,7 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
   const greetingText = useMemo(
     () =>
       vendor
-        ? `Hi 👋 Welcome to **${vendor.name}**.\n\nI'm the platform AI assistant for this store. I can help answer questions, explain services, and help you explore what **${vendor.name}** offers.`
+        ? `Hi 👋 Welcome to **${vendor.name}**.\n\nI'm the Platform AI assistant for this store. I can help answer questions, explain services, and help you explore what **${vendor.name}** offers.`
         : '',
     [vendor]
   );
@@ -425,7 +425,7 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
               <Sparkles size={16} color={Colors.white} />
             </View>
             <View style={styles.headerCenter}>
-              <Text style={styles.chatName}>the platform AI</Text>
+              <Text style={styles.chatName}>Platform AI</Text>
             </View>
             <View style={styles.headerSpacer} />
           </View>
@@ -450,7 +450,7 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
               <Sparkles size={16} color={Colors.white} />
             </View>
             <View style={styles.headerCenter}>
-              <Text style={styles.chatName}>the platform AI</Text>
+              <Text style={styles.chatName}>Platform AI</Text>
               <Text style={styles.chatInfo}>Store not found</Text>
             </View>
             <View style={styles.headerSpacer} />
@@ -463,7 +463,7 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
     );
   }
 
-  // Basic plan vendor — customers can never open the platform AI for them.
+  // Basic plan vendor — customers can never open Platform AI for them.
   if (!vendorPlanAllowsAi(vendor)) {
     return (
       <>
@@ -477,7 +477,7 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
               <Lock size={15} color={Colors.white} />
             </View>
             <View style={styles.headerCenter}>
-              <Text style={styles.chatName}>the platform AI</Text>
+              <Text style={styles.chatName}>Platform AI</Text>
               <Text style={styles.chatInfo}>{vendor.name}</Text>
             </View>
             <View style={styles.headerSpacer} />
@@ -487,9 +487,9 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
           <View style={styles.gatingIconWrap}>
             <Sparkles size={26} color={Colors.textMuted} />
           </View>
-          <Text style={styles.gatingTitle}>the platform AI isn't available for this store.</Text>
+          <Text style={styles.gatingTitle}>Platform AI isn't available for this store.</Text>
           <Text style={styles.gatingMessage}>
-            {vendor.name} hasn't enabled the platform AI. You can still browse the storefront or message them directly.
+            {vendor.name} hasn't enabled Platform AI. You can still browse the storefront or message them directly.
           </Text>
           <View style={styles.gatingActions}>
             <TouchableOpacity
@@ -529,7 +529,7 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
               <Sparkles size={16} color={Colors.white} />
             </View>
             <View style={styles.headerCenter}>
-              <Text style={styles.chatName}>the platform AI</Text>
+              <Text style={styles.chatName}>Platform AI</Text>
               <Text style={styles.chatInfo}>{vendor.name}</Text>
             </View>
             <View style={styles.headerSpacer} />
@@ -632,7 +632,7 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
         <View style={[styles.messageContentWrapper, isUser && styles.userContentWrapper]}>
           {!isUser && (
             <View style={styles.aiLabelRow}>
-              <Text style={styles.aiLabel}>the platform AI</Text>
+              <Text style={styles.aiLabel}>Platform AI</Text>
               <View style={styles.aiLabelPill}>
                 <Text style={styles.aiLabelPillText}>AI</Text>
               </View>
@@ -757,7 +757,7 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
             </View>
             <View style={styles.headerCenter}>
               <View style={styles.headerTitleRow}>
-                <Text style={styles.chatName}>the platform AI</Text>
+                <Text style={styles.chatName}>Platform AI</Text>
                 <View style={styles.headerAiPill}>
                   <Sparkles size={9} color={Colors.primary} />
                   <Text style={styles.headerAiPillText}>AI Assistant</Text>
@@ -821,7 +821,7 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
                 </View>
                 <View style={styles.messageContentWrapper}>
                   <View style={styles.aiLabelRow}>
-                    <Text style={styles.aiLabel}>the platform AI</Text>
+                    <Text style={styles.aiLabel}>Platform AI</Text>
                     <View style={styles.aiLabelPill}>
                       <Text style={styles.aiLabelPillText}>AI</Text>
                     </View>
@@ -885,7 +885,7 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
           {quotaState.kind === 'vendor_exhausted' && (
             <QuotaBanner
               icon={<Sparkles size={18} color={Colors.textMuted} />}
-              title="the platform AI is unavailable right now."
+              title="Platform AI is unavailable right now."
               message="This vendor has reached their monthly AI reply limit. You can still message the vendor directly."
               actions={[
                 {
@@ -900,7 +900,7 @@ Be friendly, clear, and concise. Adapt to the vendor's business type.`;
           {quotaState.kind === 'customer_exhausted' && (
             <QuotaBanner
               icon={<Sparkles size={18} color={Colors.textMuted} />}
-              title={`You've reached your the platform AI limit for ${vendor.name} this month.`}
+              title={`You've reached your Platform AI limit for ${vendor.name} this month.`}
               message="You can still browse the storefront or message the vendor directly."
               actions={[
                 {

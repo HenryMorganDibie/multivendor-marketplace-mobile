@@ -10,8 +10,9 @@ import {
   PanResponder,
   Dimensions,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/colors';
-import { ShoppingCart, Clock, MapPin, ExternalLink, Globe, ChevronRight, FileText, Package, AlertCircle, Instagram } from 'lucide-react-native';
+import { ShoppingCart, MapPin, ExternalLink, Globe, ChevronRight, FileText, Package, Instagram } from 'lucide-react-native';
 import { VendorPolicyModal } from '@/components/VendorPolicyModal';
 import Toast from '@/components/Toast';
 import VendorStatusGate, { normalizeVendorStatus } from '@/components/VendorStatusGate';
@@ -20,6 +21,7 @@ import { useStorefrontViewModel } from '@/features/storefront/hooks/useStorefron
 import StorefrontHeader from '@/features/storefront/components/StorefrontHeader';
 import StorefrontCatalog from '@/features/storefront/components/StorefrontCatalog';
 import { formatPrice } from '@/utils/formatPrice';
+import { formatWeeklyHoursCompact } from '@/utils/businessHours';
 
 interface StorefrontScreenProps {
   vendor: Vendor;
@@ -29,6 +31,7 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 function StorefrontContent({ vendor }: StorefrontScreenProps) {
   const vm = useStorefrontViewModel(vendor);
+  const router = useRouter();
   const vendorDetailsTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
   const vendorDetailsPanResponder = useRef(
@@ -90,7 +93,6 @@ function StorefrontContent({ vendor }: StorefrontScreenProps) {
         hasCompletedOrderWithVendor={vm.hasCompletedOrderWithVendor}
         selectedCategory={vm.selectedCategory}
         searchQuery={vm.searchQuery}
-        isStoreOpen={vm.isStoreOpen}
         isVendorBlocked={vm.isVendorBlocked}
         canChat={vm.canChat}
         canUsePlatformAi={vm.canUsePlatformAi}
@@ -106,6 +108,7 @@ function StorefrontContent({ vendor }: StorefrontScreenProps) {
         onIncrementItem={vm.handleIncrementItem}
         onDecrementItem={vm.handleDecrementItem}
         onVendorNamePress={vm.handleVendorNamePress}
+        onRatingPress={() => router.push(`/vendor-ratings/${vendor.id}` as any)}
         onViewPolicy={vm.handleViewPolicy}
         onAskAI={vm.handleAskAI}
         onMessageVendor={vm.handleMessageVendor}
@@ -156,9 +159,14 @@ function StorefrontContent({ vendor }: StorefrontScreenProps) {
                 {vendor.username ? (
                   <Text style={styles.modalUsername}>@{vendor.username}</Text>
                 ) : null}
-                <Text style={styles.modalMetadata}>
-                  ⭐ {vendor.rating} ({vendor.reviewCount}) · {vendor.category}
-                </Text>
+                <TouchableOpacity
+                  onPress={() => router.push(`/vendor-ratings/${vendor.id}` as any)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.modalMetadata}>
+                    ⭐ {vendor.rating} ({vendor.reviewCount}) · {vendor.category}
+                  </Text>
+                </TouchableOpacity>
                 {vendor.area ? (
                   <View style={styles.modalCityRow}>
                     <MapPin size={12} color='#AAAAAA' />
@@ -201,7 +209,7 @@ function StorefrontContent({ vendor }: StorefrontScreenProps) {
                       )}
                       {vendor.delivery && (
                         <View style={styles.modalChip}>
-                          <Text style={styles.modalChipText}>Delivery</Text>
+                          <Text style={styles.modalChipText}>Local Delivery</Text>
                         </View>
                       )}
                       {vendor.shipping && vendor.shippingScope === 'domestic' && (
@@ -220,22 +228,23 @@ function StorefrontContent({ vendor }: StorefrontScreenProps) {
                 </>
               )}
 
-              {vendor.businessHours && vendor.businessHours.trim().length > 0 && (
-                <>
-                  <View style={styles.modalSectionBlock}>
-                    <Text style={styles.modalSectionTitle}>Opening Hours</Text>
-                    <View style={styles.modalInfoRow}>
-                      <View style={styles.modalInfoIconWrap}>
-                        <Clock size={16} color='#6B7280' />
-                      </View>
-                      <Text style={styles.modalInfoText}>{vendor.businessHours}</Text>
+              {vendor.weeklyHours && (() => {
+                const hoursLines = formatWeeklyHoursCompact(vendor.weeklyHours);
+                if (hoursLines.length === 0) return null;
+                return (
+                  <>
+                    <View style={styles.modalSectionBlock}>
+                      <Text style={styles.modalSectionTitle}>Business Hours</Text>
+                      {hoursLines.map((line) => (
+                        <Text key={line} style={styles.modalHoursLine}>{line}</Text>
+                      ))}
                     </View>
-                  </View>
-                  <View style={styles.modalDivider} />
-                </>
-              )}
+                    <View style={styles.modalDivider} />
+                  </>
+                );
+              })()}
 
-              {vendor.minimumOrderAmount ? (
+              {vendor.minimumOrderAmount && vendor.minimumOrderAmount > 0 ? (
                 <>
                   <View style={styles.modalSectionBlock}>
                     <View style={styles.modalInfoRow}>
@@ -256,7 +265,7 @@ function StorefrontContent({ vendor }: StorefrontScreenProps) {
                     {vendor.contactLinks.website && (
                       <TouchableOpacity
                         style={styles.modalLinkRow}
-                        onPress={() => vm.handleOpenLink(vendor.contactLinks!.website!)}
+                        onPress={() => vm.handleOpenLink(vendor.contactLinks!.website!, 'website')}
                         activeOpacity={0.7}
                       >
                         <Globe size={16} color='#6B7280' />
@@ -267,7 +276,7 @@ function StorefrontContent({ vendor }: StorefrontScreenProps) {
                     {vendor.contactLinks.instagram && (
                       <TouchableOpacity
                         style={styles.modalLinkRow}
-                        onPress={() => vm.handleOpenLink(vendor.contactLinks!.instagram!)}
+                        onPress={() => vm.handleOpenLink(vendor.contactLinks!.instagram!, 'instagram')}
                         activeOpacity={0.7}
                       >
                         <Instagram size={16} color='#E1306C' />
@@ -278,7 +287,7 @@ function StorefrontContent({ vendor }: StorefrontScreenProps) {
                     {vendor.contactLinks.tiktok && (
                       <TouchableOpacity
                         style={styles.modalLinkRow}
-                        onPress={() => vm.handleOpenLink(vendor.contactLinks!.tiktok!)}
+                        onPress={() => vm.handleOpenLink(vendor.contactLinks!.tiktok!, 'tiktok')}
                         activeOpacity={0.7}
                       >
                         <Globe size={16} color='#010101' />
@@ -319,7 +328,7 @@ function StorefrontContent({ vendor }: StorefrontScreenProps) {
                 )}
 
                 <View style={styles.trustMessageRow}>
-                  <Text style={styles.trustMessageText}>Payments handled by {vendor.name}</Text>
+                  <Text style={styles.trustMessageText}>Orders and payments are handled directly by {vendor.name}.</Text>
                 </View>
 
                 <View style={styles.modalActionDivider} />
@@ -337,55 +346,6 @@ function StorefrontContent({ vendor }: StorefrontScreenProps) {
             </ScrollView>
             </TouchableOpacity>
           </Animated.View>
-        </TouchableOpacity>
-      </Modal>
-
-      <Modal
-        visible={vm.showClosedModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => vm.setShowClosedModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.closedModalOverlay}
-          activeOpacity={1}
-          onPress={() => vm.setShowClosedModal(false)}
-        >
-          <TouchableOpacity activeOpacity={1} style={styles.closedModalContainer}>
-            <View style={styles.closedModalHandle} />
-
-            <View style={styles.closedModalIconRow}>
-              <View style={styles.closedModalIconBg}>
-                <AlertCircle size={28} color='#FF8C42' />
-              </View>
-            </View>
-
-            <Text style={styles.closedModalTitle}>Store is currently closed</Text>
-            <Text style={styles.closedModalMessage}>
-              {vendor.businessHours
-                ? (() => {
-                    const match = vendor.businessHours.match(/(\d{1,2}:\d{2}\s*[AP]M)/i);
-                    return match ? `Opens at ${match[1]}` : 'This vendor is not accepting orders right now. You can still browse their store.';
-                  })()
-                : 'This vendor is not accepting orders right now. You can still browse their store.'}
-            </Text>
-
-            {vendor.awayMessage || vendor.closedMessage ? (
-              <View style={styles.closedModalVendorMessage}>
-                <Text style={styles.closedModalVendorMessageText}>
-                  {vendor.awayMessage || vendor.closedMessage}
-                </Text>
-              </View>
-            ) : null}
-
-            <TouchableOpacity
-              style={styles.closedModalPrimaryButton}
-              onPress={() => vm.setShowClosedModal(false)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.closedModalPrimaryButtonText}>View Store</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
@@ -583,6 +543,11 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 21,
   },
+  modalHoursLine: {
+    fontSize: 14,
+    color: '#4A4A4A',
+    lineHeight: 22,
+  },
   modalFulfillmentChips: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
@@ -651,81 +616,4 @@ const styles = StyleSheet.create({
   modalBottomSpacer: {
     height: 40,
   },
-  closedModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end' as const,
-  },
-  closedModalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 40,
-  },
-  closedModalHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 2,
-    alignSelf: 'center' as const,
-    marginBottom: 24,
-  },
-  closedModalIconRow: {
-    alignItems: 'center' as const,
-    marginBottom: 16,
-  },
-  closedModalIconBg: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255,140,66,0.10)',
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  closedModalTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: '#2B2B2B',
-    textAlign: 'center' as const,
-    marginBottom: 10,
-  },
-  closedModalMessage: {
-    fontSize: 15,
-    color: '#6B7280',
-    textAlign: 'center' as const,
-    lineHeight: 22,
-    marginBottom: 20,
-  },
-  closedModalVendorMessage: {
-    backgroundColor: 'rgba(255,140,66,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,140,66,0.20)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 20,
-  },
-  closedModalVendorMessageText: {
-    fontSize: 14,
-    color: '#2B2B2B',
-    textAlign: 'center' as const,
-    lineHeight: 20,
-    fontStyle: 'italic' as const,
-  },
-  closedModalPrimaryButton: {
-    backgroundColor: '#FF8C42',
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    marginBottom: 12,
-  },
-  closedModalPrimaryButtonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#FFFFFF',
-  },
-
 });

@@ -80,7 +80,7 @@ function isReferralCodeFormatValid(value: string): boolean {
  * Referral codes are captured at signup, not verified against a registry.
  *
  * This used to check a four-entry hardcoded table after a fake 650ms delay,
- * so the only codes that ever "validated" were THE PLATFORM-LAGOS, FIELD-LAGOS,
+ * so the only codes that ever "validated" were PLATFORM-LAGOS, FIELD-LAGOS,
  * VN7K2M9P and VENDOR-LAGOS — each with an invented rep name and a Lagos
  * address — while every real code a field rep handed a vendor was rejected
  * as "Invalid or inactive referral code" and the signup lost the
@@ -248,7 +248,7 @@ export default function VendorSignupScreen() {
    * Put the server's answer on the field it is actually about.
    *
    * Every failure used to be written to `errors.email`, so "password is too
-   * weak" and "we could not reach the platform" both appeared under the email
+   * weak" and "we could not reach Platform" both appeared under the email
    * address — which is how the screenshot ended up showing a red line under an
    * email that was perfectly fine. AuthContext already reports which field is
    * at fault, read from the Firebase error code; this routes it there and
@@ -451,10 +451,10 @@ export default function VendorSignupScreen() {
                 style={styles.brandLogo}
                 resizeMode="contain"
                 accessibilityRole="image"
-                accessibilityLabel="the platform"
+                accessibilityLabel="Platform"
               />
               <Text style={styles.title}>Create your vendor account</Text>
-              <Text style={styles.subtitle}>Start selling on the platform in minutes</Text>
+              <Text style={styles.subtitle}>Start selling on Platform in minutes</Text>
             </View>
 
             <View style={styles.sectionHeaderRow}>
@@ -679,7 +679,7 @@ export default function VendorSignupScreen() {
                 editable={!isLoading && referralValidation.validationStatus !== 'pending'}
                 testID="vendor-referral-code"
               />
-              <Text style={styles.helperText}>Optional. Enter a referral code from a the platform representative or another vendor.</Text>
+              <Text style={styles.helperText}>Optional. Enter a referral code from a Platform representative or another vendor.</Text>
               {referralValidation.validationStatus === 'pending' ? (
                 <View style={styles.validationRow}>
                   <ActivityIndicator color="#FF8C42" size="small" />
@@ -713,7 +713,7 @@ export default function VendorSignupScreen() {
                 vendor reads what they're agreeing to before the action, not
                 after it. Each document is separately tappable. */}
             <Text style={styles.legalText}>
-              By creating a vendor account, you agree to the platform&apos;s{' '}
+              By creating a vendor account, you agree to Platform&apos;s{' '}
               <Text
                 style={styles.legalLink}
                 onPress={() => void openLegalDocument('termsOfUse')}

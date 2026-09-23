@@ -1,5 +1,5 @@
 /**
- * Central vendor discovery visibility rules for theplatform.
+ * Central vendor discovery visibility rules for Platform.
  *
  * These functions are the single source of truth for which vendors appear in
  * public discovery (Home, Explore, Search) and which can be accessed via
@@ -7,7 +7,7 @@
  * and the storefront route guard.
  *
  * Also contains the normalized internal verification status mapping layer —
- * the bridge between raw provider statuses and the platform's internal status model.
+ * the bridge between raw provider statuses and Platform's internal status model.
  */
 
 import type { Vendor } from '@/mocks/vendorData';
@@ -16,7 +16,7 @@ import type { Vendor } from '@/mocks/vendorData';
 // NORMALIZED INTERNAL VERIFICATION STATUS MAPPING LAYER
 // =============================================================================
 //
-// the platform uses a fixed set of internal verification statuses that are
+// Platform uses a fixed set of internal verification statuses that are
 // independent of any specific KYC/KYB provider's vocabulary. Raw provider
 // status strings (providerStatus, providerWebhookStatus) live inside
 // MockVerificationProviderData and are NEVER used directly for business logic.
@@ -30,7 +30,7 @@ import type { Vendor } from '@/mocks/vendorData';
 // =============================================================================
 
 /**
- * Normalized internal verification statuses used by all the platform business logic.
+ * Normalized internal verification statuses used by all Platform business logic.
  *
  * These are SEPARATE from raw provider status strings (providerStatus,
  * providerWebhookStatus). The mapping function below converts provider-specific
@@ -58,7 +58,7 @@ export type InternalVerificationStatus =
 // Per-provider status mapping reference tables
 // ---------------------------------------------------------------------------
 // These tables document how each provider's raw status values map to
-// the platform's internal statuses. When wiring a provider, extend
+// Platform's internal statuses. When wiring a provider, extend
 // mapProviderStatusToInternalStatus() with the relevant mapping.
 //
 // TODO: Smile Identity webhook payload → internal status mapping
@@ -113,10 +113,10 @@ export type InternalVerificationStatus =
 //   Reference: https://docs.withpersona.com/docs/webhooks
 
 /**
- * Maps a raw provider status to the platform's normalized internal status.
+ * Maps a raw provider status to Platform's normalized internal status.
  *
  * This is the SINGLE place where provider-specific status strings are
- * translated into the platform's internal model. All business logic downstream
+ * translated into Platform's internal model. All business logic downstream
  * consumes only InternalVerificationStatus — never raw providerStatus.
  *
  * Currently only handles the 'mock' provider. When a real provider is wired:
@@ -347,7 +347,7 @@ export function isInternalVerificationStatus(value: string): value is InternalVe
  * Converts a Vendor's status into the normalized InternalVerificationStatus.
  *
  * This is the boundary between raw status data (legacy vendorStatus field,
- * provider data) and the platform's internal status model. All downstream visibility
+ * provider data) and Platform's internal status model. All downstream visibility
  * logic consumes only the return value of this function.
  *
  * TODO: When real provider data is stored on the vendor record (e.g. a

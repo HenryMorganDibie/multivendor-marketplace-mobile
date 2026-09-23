@@ -30,7 +30,7 @@ export default function PublicExternalOrderScreen() {
 
   const handleOpenInApp = () => {
     if (!order) return;
-    const deepLink = `the platform://store/${order.vendorSlug}`;
+    const deepLink = `platform://store/${order.vendorSlug}`;
     console.log('Opening deep link:', deepLink);
     if (Platform.OS === 'web') {
       window.location.href = deepLink;
@@ -43,7 +43,7 @@ export default function PublicExternalOrderScreen() {
 
   const handleDownloadApp = () => {
     console.log('Download app tapped');
-    Linking.openURL('https://theplatform.com/download').catch((err) => {
+    Linking.openURL('https://example.com/download').catch((err) => {
       console.error('Failed to open download link:', err);
     });
   };
@@ -83,7 +83,7 @@ export default function PublicExternalOrderScreen() {
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.header}>
           <Store size={20} color={Colors.primary} />
-          <Text style={styles.headerTitle}>the platform</Text>
+          <Text style={styles.headerTitle}>Platform</Text>
         </View>
       </SafeAreaView>
 
@@ -145,17 +145,17 @@ export default function PublicExternalOrderScreen() {
 
           <TouchableOpacity style={styles.primaryButton} onPress={handleOpenInApp} activeOpacity={0.8}>
             <Store size={18} color={Colors.white} />
-            <Text style={styles.primaryButtonText}>Open in the platform App</Text>
+            <Text style={styles.primaryButtonText}>Open in Platform App</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.secondaryButton} onPress={handleDownloadApp} activeOpacity={0.8}>
             <Download size={18} color={Colors.text} />
-            <Text style={styles.secondaryButtonText}>Download the platform App</Text>
+            <Text style={styles.secondaryButtonText}>Download Platform App</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.footerSection}>
-          <Text style={styles.footerText}>Powered by the platform</Text>
+          <Text style={styles.footerText}>Powered by Platform</Text>
         </View>
       </ScrollView>
     </View>

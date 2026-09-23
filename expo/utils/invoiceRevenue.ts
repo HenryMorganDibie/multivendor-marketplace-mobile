@@ -2,7 +2,7 @@ import type { Invoice, InvoicePaymentRecord } from '@/contexts/InvoiceContext';
 import { getAmountPaid } from '@/contexts/InvoiceContext';
 
 /**
- * Mock revenue rules for the platform's dashboard / Business Insights.
+ * Mock revenue rules for Platform's dashboard / Business Insights.
  *
  * Revenue = money the vendor has CONFIRMED receiving. We never count unpaid
  * invoice totals as revenue. The rules below mirror the approved spec:

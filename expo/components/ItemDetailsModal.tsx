@@ -19,6 +19,7 @@ import { useCatalog } from '@/contexts/CatalogContext';
 import { formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
 import { getMenuItemDisplayPrice, hasItemSalePrice } from '@/utils/itemPricing';
 import { getActivePromotions } from '@/mocks/promotionsData';
+import { usePrimeVendorPromotions } from '@/contexts/PromoContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const IMAGE_HEIGHT = Math.round(SCREEN_WIDTH * 0.55);
@@ -147,6 +148,7 @@ export function ItemDetailsModal({
     });
   }, [catalogItem?.addOnGroups, selectedAddOns]);
 
+  const promoVersion = usePrimeVendorPromotions(vendorId);
   const itemPromoBadges = useMemo(() => {
     if (!vendorId || !item) return [];
     const activePromos = getActivePromotions(vendorId);
@@ -161,7 +163,7 @@ export function ItemDetailsModal({
       }
     }
     return badges;
-  }, [vendorId, item]);
+  }, [vendorId, item, promoVersion]);
 
   if (!item) return null;
 

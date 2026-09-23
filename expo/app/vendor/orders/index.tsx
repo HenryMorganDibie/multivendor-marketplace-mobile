@@ -18,8 +18,8 @@ import { Alert } from '@/utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Plus, FileText, Package, StickyNote, Trash2 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { type Order, type OrderStatus } from '@/mocks/ordersData';
-import { useExternalOrders, type ExternalOrder } from '@/contexts/ExternalOrdersContext';
+import { type Order } from '@/mocks/ordersData';
+import { useExternalOrders, type ExternalOrder, type ExternalOrderDraft } from '@/contexts/ExternalOrdersContext';
 import { useOrders } from '@/contexts/OrdersContext';
 import StatusBadge from '@/components/StatusBadge';
 import { getVendorOrderStatusLabel } from '@/features/orders/selectors/orderStatusSelectors';
@@ -28,6 +28,20 @@ import { useVendor } from '@/contexts/VendorContext';
 import LaektivaModal from '@/components/LaektivaModal';
 
 type FilterType = 'all' | 'new' | 'accepted' | 'confirmed' | 'in_progress' | 'past' | 'today' | 'awaiting_payment';
+
+/**
+ * Provenance is tagged once, at the point the real-orders and legacy-local
+ * arrays are merged, rather than inferred afterwards from field shape.
+ * `orderSource` alone can't distinguish these two — it's required on both a
+ * real Order (`'internal' | 'external'`) and a legacy ExternalOrder
+ * (`'external'` only) — so a shape-based guess would have to keep chasing
+ * whatever field happens to differ today. Tagging here means the render
+ * path never needs an `as Order` / `as ExternalOrder` cast to know which it
+ * has.
+ */
+type OrderListRow =
+  | { kind: 'order'; order: Order }
+  | { kind: 'legacyExternal'; record: ExternalOrder };
 
 const FILTER_LABELS: Record<FilterType, string> = {
   all: 'All',
@@ -144,7 +158,7 @@ const swipeStyles = StyleSheet.create({
 
 export default function VendorOrdersScreen() {
   const router = useRouter();
-  const { getTodayOrders, todayNote, updateTodayNote, deleteExternalOrder } = useExternalOrders();
+  const { getTodayOrders, todayNote, updateTodayNote, deleteExternalOrder, drafts, deleteDraft } = useExternalOrders();
   const { orders } = useOrders();
   const { vendor } = useVendor();
   const { filter: incomingFilter } = useLocalSearchParams<{ filter?: string }>();
@@ -172,14 +186,12 @@ export default function VendorOrdersScreen() {
    * backend-recorded external order never appeared on this screen under any
    * filter - not just today's, since `filtered` is always derived from this
    * list. Real orders belong in the real list regardless of source; only the
-   * legacy local records (identified below by shareToken, a field the real
-   * Order type never has) are the separate, AsyncStorage-only case.
+   * legacy local records (a separate, AsyncStorage-only type) are tagged
+   * `kind: 'legacyExternal'` below.
    */
   const platformOrders = orders;
 
-  const filteredOrders = useMemo(() => {
-    const externalOrders = getTodayOrders();
-
+  const rows = useMemo<OrderListRow[]>(() => {
     let filtered = platformOrders;
 
     if (activeFilter !== 'all') {
@@ -222,11 +234,17 @@ export default function VendorOrdersScreen() {
       });
     }
 
+    const orderRows: OrderListRow[] = filtered.map((order) => ({ kind: 'order', order }));
+
     if (activeFilter === 'today') {
-      return [...externalOrders, ...filtered] as (ExternalOrder | Order)[];
+      const legacyRows: OrderListRow[] = getTodayOrders().map((record) => ({
+        kind: 'legacyExternal',
+        record,
+      }));
+      return [...legacyRows, ...orderRows];
     }
 
-    return filtered;
+    return orderRows;
   }, [activeFilter, getTodayOrders, platformOrders]);
 
   const handleOrderPress = (order: Order) => {
@@ -295,20 +313,34 @@ export default function VendorOrdersScreen() {
     setDeleteOrderId(null);
   };
 
-  const renderOrderCard = ({ item }: { item: Order | ExternalOrder }) => {
-    // shareToken only exists on the legacy AsyncStorage-only ExternalOrder
-    // shape - orderSource: 'external' is not a safe discriminant here since
-    // a real backend order created via createExternalOrder carries the same
-    // value. See platformOrders comment above for the full explanation.
-    const isExternal = 'shareToken' in item;
-    const totalItemCount = item.items.reduce((sum, i) => sum + i.quantity, 0);
+  const handleDeleteDraftRequest = (draft: ExternalOrderDraft) => {
+    Alert.alert(
+      'Delete draft?',
+      'This draft and any attached screenshots will be permanently removed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDraft(draft.id);
+            } catch (error) {
+              console.error('Failed to delete draft:', error);
+              Alert.alert('Error', 'Failed to delete the draft. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
-    let scheduledDate = 'Not scheduled';
-    let scheduledTime = 'No time set';
-    let isUnpaid = false;
+  const renderOrderCard = ({ item }: { item: OrderListRow }) => {
+    if (item.kind === 'legacyExternal') {
+      const extOrder = item.record;
+      const totalItemCount = extOrder.items.reduce((sum, i) => sum + i.quantity, 0);
 
-    if (isExternal && 'fulfillmentDate' in item) {
-      const extOrder = item as ExternalOrder;
+      let scheduledDate = 'Not scheduled';
       const date = new Date(extOrder.fulfillmentDate);
       const todayD = new Date();
       const tomorrow = new Date(todayD);
@@ -325,67 +357,116 @@ export default function VendorOrdersScreen() {
           day: 'numeric',
         });
       }
-      scheduledTime = extOrder.fulfillmentTime || 'No time set';
-      isUnpaid =
+      const scheduledTime = extOrder.fulfillmentTime || 'No time set';
+      const isUnpaid =
         extOrder.paymentStatus === 'payment_pending' ||
         extOrder.paymentStatus === 'partially_received';
-    } else {
-      const laeOrder = item as Order;
-      scheduledDate = laeOrder.scheduledDate
-        ? new Date(laeOrder.scheduledDate).toLocaleDateString('en-US', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-          })
-        : 'Not scheduled';
-      scheduledTime = laeOrder.scheduledTime || 'No time set';
+
+      const cardContent = (
+        <TouchableOpacity
+          style={[styles.orderCard, styles.orderCardNoMargin]}
+          onPress={() => handleExternalOrderPress(extOrder.id)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.orderCardContent}>
+            <View style={styles.orderRow}>
+              <Text style={styles.customerName}>{extOrder.customerName || 'Customer'}</Text>
+              <View style={styles.statusRow}>
+                {isUnpaid ? (
+                  <View style={styles.unpaidExternalPill}>
+                    <Text style={styles.unpaidExternalPillText}>PAYMENT PENDING</Text>
+                  </View>
+                ) : (
+                  <View style={styles.externalPill}>
+                    <Text style={styles.externalPillText}>EXTERNAL</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <Text style={styles.orderId}>{extOrder.id}</Text>
+
+            <View style={styles.orderRow}>
+              <Text style={styles.detailText}>{extOrder.fulfillmentType}</Text>
+              <Text style={styles.detailText}>•</Text>
+              <Text style={styles.detailText}>{scheduledDate}</Text>
+              <Text style={styles.detailText}>•</Text>
+              <Text style={styles.detailText}>{scheduledTime}</Text>
+            </View>
+
+            <View style={styles.orderRow}>
+              <Text style={styles.detailText}>
+                {totalItemCount} {totalItemCount === 1 ? 'item' : 'items'}
+              </Text>
+              <Text style={styles.totalAmount}>
+                {formatPriceWithCommas(extOrder.total, (vendor.currency as Currency) || 'NGN')}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.orderActions}>
+            <TouchableOpacity
+              style={styles.viewDetailsButton}
+              onPress={() => handleExternalOrderPress(extOrder.id)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.viewDetailsButtonText}>View details</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      );
+
+      return (
+        <SwipeableExternalCard
+          id={extOrder.id}
+          openId={openSwipeId}
+          onOpen={(id) => setOpenSwipeId(id)}
+          onClose={() => setOpenSwipeId(null)}
+          onDeleteRequest={() => handleDeleteRequest(extOrder.id)}
+        >
+          <>{cardContent}</>
+        </SwipeableExternalCard>
+      );
     }
 
-    const orderStatus = !isExternal ? (item as Order).status : null;
+    const order = item.order;
+    const isRealExternal = order.orderSource === 'external';
+    const totalItemCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
+    const scheduledDate = order.scheduledDate
+      ? new Date(order.scheduledDate).toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        })
+      : 'Not scheduled';
+    const scheduledTime = order.scheduledTime || 'No time set';
 
-    const cardContent = (
+    return (
       <TouchableOpacity
-        style={[styles.orderCard, isExternal && styles.orderCardNoMargin]}
-        onPress={() => {
-          if (isExternal) {
-            handleExternalOrderPress(item.id);
-          } else {
-            handleOrderPress(item as Order);
-          }
-        }}
+        style={styles.orderCard}
+        onPress={() => handleOrderPress(order)}
         activeOpacity={0.7}
       >
         <View style={styles.orderCardContent}>
           <View style={styles.orderRow}>
-            <Text style={styles.customerName}>{item.customerName || 'Customer'}</Text>
+            <Text style={styles.customerName}>{order.customerName || 'Customer'}</Text>
             <View style={styles.statusRow}>
-              {isExternal && isUnpaid && (
-                <View style={styles.unpaidExternalPill}>
-                  <Text style={styles.unpaidExternalPillText}>PAYMENT PENDING</Text>
-                </View>
-              )}
-              {isExternal && !isUnpaid && (
+              {isRealExternal && (
                 <View style={styles.externalPill}>
                   <Text style={styles.externalPillText}>EXTERNAL</Text>
                 </View>
               )}
-              {!isExternal && orderStatus && (
-                <StatusBadge
-                  status={orderStatus}
-                  label={getVendorOrderStatusLabel(orderStatus as OrderStatus)}
-                />
-              )}
+              <StatusBadge
+                status={order.status}
+                label={getVendorOrderStatusLabel(order.status)}
+              />
             </View>
           </View>
 
-          <Text style={styles.orderId}>
-            {isExternal && 'externalReference' in item
-              ? item.id
-              : (item as Order).publicOrderId}
-          </Text>
+          <Text style={styles.orderId}>{order.publicOrderId}</Text>
 
           <View style={styles.orderRow}>
-            <Text style={styles.detailText}>{item.fulfillmentType}</Text>
+            <Text style={styles.detailText}>{order.fulfillmentType}</Text>
             <Text style={styles.detailText}>•</Text>
             <Text style={styles.detailText}>{scheduledDate}</Text>
             <Text style={styles.detailText}>•</Text>
@@ -397,9 +478,7 @@ export default function VendorOrdersScreen() {
               {totalItemCount} {totalItemCount === 1 ? 'item' : 'items'}
             </Text>
             <Text style={styles.totalAmount}>
-              {isExternal && 'externalReference' in item
-                ? formatPriceWithCommas(item.total, (vendor.currency as Currency) || 'NGN')
-                : formatPriceCents((item as Order).total, (vendor.currency as Currency) || 'NGN')}
+              {formatPriceCents(order.total, (vendor.currency as Currency) || 'NGN')}
             </Text>
           </View>
         </View>
@@ -407,13 +486,7 @@ export default function VendorOrdersScreen() {
         <View style={styles.orderActions}>
           <TouchableOpacity
             style={styles.viewDetailsButton}
-            onPress={() => {
-              if (isExternal) {
-                handleExternalOrderPress(item.id);
-              } else {
-                handleOrderPress(item as Order);
-              }
-            }}
+            onPress={() => handleOrderPress(order)}
             activeOpacity={0.7}
           >
             <Text style={styles.viewDetailsButtonText}>View details</Text>
@@ -421,22 +494,6 @@ export default function VendorOrdersScreen() {
         </View>
       </TouchableOpacity>
     );
-
-    if (isExternal) {
-      return (
-        <SwipeableExternalCard
-          id={item.id}
-          openId={openSwipeId}
-          onOpen={(id) => setOpenSwipeId(id)}
-          onClose={() => setOpenSwipeId(null)}
-          onDeleteRequest={() => handleDeleteRequest(item.id)}
-        >
-          <>{cardContent}</>
-        </SwipeableExternalCard>
-      );
-    }
-
-    return cardContent;
   };
 
   const filters: FilterType[] = ['all', 'new', 'accepted', 'confirmed', 'in_progress', 'past', 'today', 'awaiting_payment'];
@@ -526,15 +583,55 @@ export default function VendorOrdersScreen() {
         )}
       </View>
 
-      {filteredOrders.length === 0 ? (
+      {drafts.length > 0 && (
+        <View style={styles.draftsSection}>
+          <Text style={styles.draftsSectionTitle}>Drafts</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.draftsRowContent}
+          >
+            {drafts.map((draft) => (
+              <TouchableOpacity
+                key={draft.id}
+                style={styles.draftCard}
+                activeOpacity={0.7}
+                onPress={() =>
+                  router.push({
+                    pathname: '/vendor/orders/add-external' as any,
+                    params: { draftId: draft.id },
+                  })
+                }
+              >
+                <View style={styles.draftCardHeader}>
+                  <Text style={styles.draftCardName} numberOfLines={1}>
+                    {draft.customerName || 'Draft order'}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteDraftRequest(draft)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Trash2 size={14} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.draftCardMeta}>
+                  {draft.items.length} {draft.items.length === 1 ? 'item' : 'items'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {rows.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateText}>No orders match your filters</Text>
         </View>
       ) : (
         <FlatList
-          data={filteredOrders}
+          data={rows}
           renderItem={renderOrderCard}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => (item.kind === 'order' ? `order-${item.order.id}` : `legacy-${item.record.id}`)}
           contentContainerStyle={styles.ordersList}
           showsVerticalScrollIndicator={false}
           onScrollBeginDrag={() => setOpenSwipeId(null)}
@@ -556,7 +653,7 @@ export default function VendorOrdersScreen() {
               style={styles.actionSheetOption}
               onPress={() => {
                 setShowActionSheet(false);
-                console.log('Create the platform order - Coming soon');
+                console.log('Create Platform order - Coming soon');
               }}
               activeOpacity={0.7}
             >
@@ -564,9 +661,9 @@ export default function VendorOrdersScreen() {
                 <Package size={22} color={Colors.text} strokeWidth={2} />
               </View>
               <View style={styles.actionSheetTextContainer}>
-                <Text style={styles.actionSheetOptionText}>Create the platform order</Text>
+                <Text style={styles.actionSheetOptionText}>Create Platform order</Text>
                 <Text style={styles.actionSheetOptionDescription}>
-                  Start a new order through the platform
+                  Start a new order through Platform
                 </Text>
               </View>
             </TouchableOpacity>
@@ -582,7 +679,7 @@ export default function VendorOrdersScreen() {
               <View style={styles.actionSheetTextContainer}>
                 <Text style={styles.actionSheetOptionText}>Add external order</Text>
                 <Text style={styles.actionSheetOptionDescription}>
-                  Log an order from outside the platform
+                  Log an order from outside Platform
                 </Text>
               </View>
             </TouchableOpacity>
@@ -710,6 +807,38 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     letterSpacing: 0.3,
   },
+  draftsSection: {
+    backgroundColor: Colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.cardBorder,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  draftsSectionTitle: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.textMuted,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  draftsRowContent: { paddingHorizontal: 16, gap: 10 },
+  draftCard: {
+    width: 150,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 12,
+  },
+  draftCardHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: 6,
+    gap: 6,
+  },
+  draftCardName: { fontSize: 14, fontWeight: '600' as const, color: Colors.text, flex: 1 },
+  draftCardMeta: { fontSize: 12, color: Colors.textSecondary },
   ordersList: { paddingHorizontal: 16, paddingVertical: 16 },
   orderCard: {
     backgroundColor: '#FFFFFF',

@@ -47,6 +47,9 @@ import {
 import { getOrderLockState } from '@/utils/orderImmutability';
 import { useOrders } from '@/contexts/OrdersContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { ContactCardPickerModal } from '@/components/ContactCardPickerModal';
+import { ContactCard } from '@/contexts/ContactCardsContext';
+import { useOrderStatusReason } from '@/data/hooks';
 import { formatPriceWithCommas, getCurrencyFromCountryCode, type Currency } from '@/utils/formatPrice';
 import { mockVendors, type Vendor } from '@/mocks/vendorData';
 import { vendorRepository } from '@/services/repositories/vendorRepository';
@@ -86,7 +89,7 @@ export default function OrderDetailsScreen() {
   const orderId = params.id as string;
   const fromSubmission = params.fromSubmission === 'true';
   const fromChat = params.fromChat === 'true';
-  const { getOrder, updateOrderStatus, markCustomerPaid, addPaymentProof, hasOrderPendingChanges } = useOrders();
+  const { getOrder, updateOrderStatus, markCustomerPaid, addPaymentProof, hasOrderPendingChanges, submitDeliveryContact, TERMINAL_STATUSES } = useOrders();
   const { addMessageToChat, getConversationByPair } = useChats();
   const { user } = useAuth();
 
@@ -97,7 +100,57 @@ export default function OrderDetailsScreen() {
   const { toastVisible, showToast } = useToast();
   const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
 
+  // Order-scoped delivery contact (Phase 3, per Founder 2026-09-15). A
+  // delivery order with no deliveryContact yet - either the checkout-time
+  // submitDeliveryContact call failed, or no contact card was selected at
+  // all - gets a retryable prompt here rather than silently shipping with no
+  // delivery information. hasDeliveryContact is the live, real-time signal
+  // (mapOrderDoc), not a one-shot nav param, so this stays accurate even if
+  // the customer leaves and comes back later.
+  const [showDeliveryContactPicker, setShowDeliveryContactPicker] = useState(false);
+  const [isSubmittingDeliveryContact, setIsSubmittingDeliveryContact] = useState(false);
+
   const order = useMemo(() => getOrder(orderId), [orderId, getOrder]);
+
+  const needsDeliveryContact =
+    !!order &&
+    order.fulfillmentType === 'Delivery' &&
+    !order.hasDeliveryContact &&
+    !TERMINAL_STATUSES.includes(order.status);
+
+  const handleDeliveryContactSelected = useCallback(
+    async (card: ContactCard) => {
+      if (!order) return;
+      setIsSubmittingDeliveryContact(true);
+      try {
+        const result = await submitDeliveryContact(order.id, {
+          fullName: card.name,
+          phoneNumber: card.phone,
+          address: card.address || undefined,
+        });
+        setShowDeliveryContactPicker(false);
+        if (!result.success) {
+          Alert.alert(
+            'Could not save delivery details',
+            result.error ?? 'Please try again.',
+          );
+        }
+        // hasDeliveryContact flips true via the live order listener once the
+        // write lands - nothing else needs updating here.
+      } finally {
+        setIsSubmittingDeliveryContact(false);
+      }
+    },
+    [order, submitDeliveryContact],
+  );
+
+  // See app/vendor/orders/[orderId].tsx for the full rationale: this device's
+  // own transient cancellationReason/rejectionReason (set only in the
+  // session that performed the action) is wiped by the next Firestore
+  // snapshot, so this durably re-derives the same banner from the backend's
+  // order-events subcollection. Purely additive to the banner below -- the
+  // rest of this screen renders the same whether or not it has resolved.
+  const { data: durableStatusReason } = useOrderStatusReason(order?.id, order?.status);
 
   // mockVendors.find only ever matched the ten demo ids (v1-v10). For any
   // real vendor this was always undefined, which silently disabled two
@@ -228,9 +281,23 @@ export default function OrderDetailsScreen() {
     );
   }, [order]);
 
-  const handlePaymentConfirm = useCallback((proofs: PaymentProof[], note?: string) => {
+  const handlePaymentConfirm = useCallback(async (proofs: PaymentProof[], note?: string) => {
     if (!order) return;
-    const success = markCustomerPaid(order.id, proofs);
+    // markCustomerPaid now actually awaits the real upload+submission and
+    // throws on failure (rolling back its own optimistic update first) —
+    // previously it fired that call in the background and always returned
+    // true, so this modal closed and the chat announced success even when
+    // the vendor never actually received anything.
+    let success = false;
+    try {
+      success = await markCustomerPaid(order.id, proofs);
+    } catch (error) {
+      Alert.alert(
+        'Could not submit payment proof',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+      return;
+    }
     if (success) {
       // order.customerId should always be set for a real, live order, but the
       // fallback used to be the hardcoded fixture id 'customer-001' -- wrong
@@ -277,7 +344,11 @@ export default function OrderDetailsScreen() {
           type: 'image',
           uploadedAt: new Date().toISOString(),
         };
-        addPaymentProof(order.id, proof);
+        // addPaymentProof now awaits the real upload+submission and throws
+        // on failure — this used to fire it in the background and always
+        // show "Proof Uploaded" regardless of whether the vendor actually
+        // received anything.
+        await addPaymentProof(order.id, proof);
         // order.customerId should always be set for a real, live order, but the
       // fallback used to be the hardcoded fixture id 'customer-001' -- wrong
       // for any real signed-in customer, and it would have silently matched
@@ -298,6 +369,10 @@ export default function OrderDetailsScreen() {
       }
     } catch (error) {
       console.log('[OrderDetails] Upload proof error:', error);
+      Alert.alert(
+        'Could not upload proof',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
     }
   }, [order, addPaymentProof, getConversationByPair, addMessageToChat, user]);
 
@@ -465,9 +540,9 @@ export default function OrderDetailsScreen() {
                 <Text style={[styles.terminalBannerTitle, isRejected && styles.terminalBannerTitleRejected]}>
                   {isRejected ? `${order.vendorName} declined this order` : 'This order was cancelled'}
                 </Text>
-                {(order.cancellationReason || order.rejectionReason) && (
+                {(order.cancellationReason || order.rejectionReason || durableStatusReason) && (
                   <Text style={styles.terminalBannerReason}>
-                    {order.cancellationReason ?? order.rejectionReason}
+                    {order.cancellationReason ?? order.rejectionReason ?? durableStatusReason}
                   </Text>
                 )}
               </View>
@@ -533,6 +608,29 @@ export default function OrderDetailsScreen() {
             <Text style={styles.safetyBannerText}>
               {order.vendorName} is currently unavailable. Your order is protected and remains accessible.
             </Text>
+          </View>
+        )}
+
+        {/* Delivery contact missing — retryable, order-scoped (Phase 3) */}
+        {needsDeliveryContact && (
+          <View style={styles.safetyBanner}>
+            <View style={styles.safetyBannerRow}>
+              <AlertCircle size={14} color={Colors.warning} />
+              <Text style={styles.safetyBannerTitle}>Delivery details needed</Text>
+            </View>
+            <Text style={styles.safetyBannerText}>
+              This order needs delivery contact information before {order.vendorName} can fulfill it.
+            </Text>
+            <TouchableOpacity
+              style={styles.deliveryContactRetryButton}
+              onPress={() => setShowDeliveryContactPicker(true)}
+              activeOpacity={0.8}
+              disabled={isSubmittingDeliveryContact}
+            >
+              <Text style={styles.deliveryContactRetryButtonText}>
+                {isSubmittingDeliveryContact ? 'Saving...' : 'Add delivery details'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -766,6 +864,14 @@ export default function OrderDetailsScreen() {
         onClose={() => setIsPolicyModalVisible(false)}
         policy={order.vendorPolicy || ''}
         vendorName={order.vendorName}
+      />
+
+      <ContactCardPickerModal
+        visible={showDeliveryContactPicker}
+        onClose={() => setShowDeliveryContactPicker(false)}
+        onSend={handleDeliveryContactSelected}
+        ctaLabel="Save delivery details"
+        showCta={true}
       />
 
     </View>
@@ -1017,6 +1123,15 @@ const styles = StyleSheet.create({
   safetyBannerRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, marginBottom: 4 },
   safetyBannerTitle: { fontSize: 14, fontWeight: '600' as const, color: Colors.warning },
   safetyBannerText: { fontSize: 13, color: Colors.textMuted, lineHeight: 18 },
+  deliveryContactRetryButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start' as const,
+    backgroundColor: Colors.warning,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  deliveryContactRetryButtonText: { fontSize: 13, fontWeight: '600' as const, color: Colors.white },
 
   section: { paddingHorizontal: 20, marginBottom: 20 },
   sectionLabel: {

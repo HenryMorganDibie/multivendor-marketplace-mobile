@@ -1,10 +1,10 @@
 /**
- * Privacy-safe display name formatter for INTERNAL the platform customers.
+ * Privacy-safe display name formatter for INTERNAL Platform customers.
  *
  * Privacy rule: vendors must never see a customer's full last name on any
  * internal-customer surface (invoice selector, invoice detail, chat card,
  * invoice list, notifications, revenue activity, toasts, etc.). Internal
- * the platform customers are always rendered as "First L." (first name + last
+ * Platform customers are always rendered as "First L." (first name + last
  * initial). External customers may use whatever display name the vendor
  * typed manually — those go through `formatExternalCustomerName` below.
  *
@@ -18,7 +18,7 @@ export interface InternalCustomerNameInput {
 }
 
 /**
- * Format an internal the platform customer's name as "First L."
+ * Format an internal Platform customer's name as "First L."
  *
  * @example
  * formatInternalCustomerName({ firstName: 'Jane', lastName: 'Smith' }) // 'Jane S.'
@@ -72,8 +72,8 @@ export function formatInternalCustomerFromFull(fullName?: string): string {
  *
  * - `customerSource === 'external'` → return the vendor-typed display name
  *   verbatim (vendors may enter whatever name they like for external
- *   customers who are not in the platform system).
- * - `customerSource === 'the platform'` (or undefined) → always privacy-safe
+ *   customers who are not in the Platform system).
+ * - `customerSource === 'platform'` (or undefined) → always privacy-safe
  *   "First L." via `formatInternalCustomerFromFull`.
  *
  * This is the canonical helper for invoice list rows, invoice detail,
@@ -82,7 +82,7 @@ export function formatInternalCustomerFromFull(fullName?: string): string {
  */
 export function formatInvoiceCustomerName(
   fullName: string | undefined,
-  customerSource: 'the platform' | 'external' | undefined,
+  customerSource: 'platform' | 'external' | undefined,
 ): string {
   if (customerSource === 'external') {
     const trimmed = (fullName ?? '').trim();

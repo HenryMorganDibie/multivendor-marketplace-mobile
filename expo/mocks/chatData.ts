@@ -1,4 +1,22 @@
 import type { OrderChangeRequest } from '@/types/orderChanges';
+import type { PaymentDestinationRecord } from '@/types/paymentInstructions';
+
+/**
+ * The canonical paymentRequests/{requestId} document (Batch 2C.2.1) --
+ * fetched on demand from Firestore, never duplicated into the chat message
+ * itself. This is the ONLY place the raw structured destination (account
+ * number, IBAN, routing, SWIFT/BIC, contact email/phone) exists.
+ */
+export interface PaymentRequestSnapshot {
+  requestId: string;
+  amount: number;
+  currency: string;
+  paymentDestinationSnapshot: {
+    paymentDestination: PaymentDestinationRecord | null;
+    acceptCash: boolean;
+  };
+  message?: string | null;
+}
 
 export type MessageType = 'text' | 'system' | 'payment-request' | 'contact-card' | 'pickup-details' | 'catalog_item' | 'receipt' | 'invoice' | 'ai' | 'order_context' | 'new_inquiry' | 'change_request';
 export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
@@ -30,6 +48,21 @@ export interface PaymentRequestData {
   isPartialPayment?: boolean;
   remainingBalance?: number;
   status?: 'requested' | 'partial_received' | 'confirmed';
+  /**
+   * Absent -- legacy free-text Payment Instructions snapshot, rendered
+   * exactly as before via the fields above.
+   * 2 -- structured Batch 2C.2.1 request. The raw destination (account
+   * number, IBAN, routing, SWIFT/BIC, contact email/phone) is never
+   * duplicated here -- it lives only on paymentRequests/{requestId},
+   * fetched on demand via `requestId` below. Any other value is an
+   * unsupported future schema and must not be reinterpreted as either
+   * shape.
+   */
+  schemaVersion?: number;
+  /** Present only when schemaVersion === 2 -- the canonical paymentRequests/{requestId} document to fetch for the actual destination. */
+  requestId?: string;
+  /** Present only when schemaVersion === 2 -- the authoritative order currency this request was created in. Never defaulted; its absence on a schemaVersion-2 message is malformed data. */
+  currency?: string;
 }
 
 export interface PickupDetailsData {
@@ -64,7 +97,7 @@ export interface InvoiceData {
   vendorName?: string;
   /** Display number, e.g. INV-000123 */
   invoiceNumber?: string;
-  /** Unguessable public share code for theplatform.app/i/{shareCode} */
+  /** Unguessable public share code for platform.app/i/{shareCode} */
   shareCode?: string;
   /** Snapshot of the invoice status at send time */
   status?: string;
@@ -110,7 +143,7 @@ export interface ChatMessage {
  * - `pre_order_inquiry`: customer/vendor pre-order conversation (no committed order yet)
  * - `order_chat`: conversation tied to an accepted/active order
  * - `ai_help`: in-app AI assistant conversation
- * - `support`: conversation with the platform support
+ * - `support`: conversation with Platform support
  *
  * Legacy values (`'pre-order'`, `'order'`, `'inquiry'`, `'PREORDER_CHAT'`,
  * `'ORDER_CHAT'`, `'ai'`) are still emitted by some upstream code paths and

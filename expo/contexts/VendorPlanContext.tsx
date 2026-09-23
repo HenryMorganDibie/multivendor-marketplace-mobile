@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useState, useEffect, useRef } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import { generateSystemUsername } from '@/utils/usernameValidation';
 import { subscriptionRepository } from '@/services/repositories/subscriptionRepository';
@@ -103,23 +102,30 @@ interface VendorPlanData {
   subscriptionReason: SubscriptionReason;
 }
 
-const VENDOR_PLAN_STORAGE_KEY = '@platform_vendor_plan';
+const defaultPlanData: VendorPlanData = {
+  plan: 'basic',
+  businessCountry: 'Nigeria',
+  brandingEnabled: false,
+  cancellationScheduled: false,
+  cancellationDate: null,
+  username: null,
+  systemGeneratedUsername: null,
+  usernameSelectionPending: false,
+  founderPricingEligible: true,
+  usernameChangeHistory: [],
+  subscriptionReason: 'no_subscription',
+};
 
 export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
-  const [planData, setPlanData] = useState<VendorPlanData>({
-    plan: 'basic',
-    businessCountry: 'Nigeria',
-    brandingEnabled: false,
-    cancellationScheduled: false,
-    cancellationDate: null,
-    username: null,
-    systemGeneratedUsername: null,
-    usernameSelectionPending: false,
-    founderPricingEligible: true,
-    usernameChangeHistory: [],
-    subscriptionReason: 'no_subscription',
-  });
+  const [planData, setPlanData] = useState<VendorPlanData>(defaultPlanData);
   const [isLoading, setIsLoading] = useState(true);
+  // Which uid the loaded/persisted plan cache belongs to. The cache used to
+  // live under one device-global `@platform_vendor_plan` key: Vendor B signing
+  // in right after Vendor A logged out briefly saw A's cached plan/username/
+  // branding state until refreshSubscriptionStatus() resolved for B. Now
+  // scoped per uid; every write below reads the uid from here rather than a
+  // fixed key.
+  const currentUidRef = useRef<string | null>(null);
   // True until the first real getSubscriptionStatus response lands (success
   // or failure). Separate from isLoading, which only covers the local-cache
   // read: a screen that gates a paid-plan-only action (e.g.
@@ -146,58 +152,73 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
   const [planLimits, setPlanLimits] = useState<PlanLimits | null>(null);
 
   useEffect(() => {
-    loadPlan();
     fetchRealPlanLimits().then(setRealPlanLimits);
   }, []);
 
-  // loadPlan's initial refreshSubscriptionStatus() call fires at app boot,
-  // before a signed-out visitor has authenticated — it fails harmlessly
-  // ("Sign in required") and never runs again, since the effect above has an
-  // empty dependency array. Without this, a fresh sign-in on an already-
-  // mounted app (the common case: the provider tree mounts once on the
-  // /login screen itself) would leave plan-gated UI stuck on whatever it
-  // resolved to pre-auth — 'basic' — until something else happened to
-  // refetch it. This is what actually re-fetches on the real sign-in.
+  // Single identity-driven effect, replacing the old split of a bare-mount
+  // loadPlan() plus a separate onIdTokenChanged → refreshSubscriptionStatus()
+  // effect: that split only knew about pre-auth vs post-auth, not about
+  // switching between two different vendors signed in on the same device.
+  // Vendor B signing in right after Vendor A logged out used to briefly run
+  // with A's still-loaded planData (and A's cached plan/username on the very
+  // first paint) until refreshSubscriptionStatus() happened to resolve for B.
   useEffect(() => {
     const unsubscribe = auth.onIdTokenChanged((user) => {
-      if (user) void refreshSubscriptionStatus();
+      const uid = user?.uid ?? null;
+      if (uid === currentUidRef.current) return; // same identity, e.g. a token refresh
+      currentUidRef.current = uid;
+
+      if (!uid) {
+        setPlanData(defaultPlanData);
+        setPlanLimits(null);
+        setIsPlanConfirmed(false);
+        setIsLoading(false);
+        return;
+      }
+
+      setPlanData(defaultPlanData);
+      setIsPlanConfirmed(false);
+      setIsLoading(true);
+      void loadPlan(uid);
     });
     return unsubscribe;
   }, []);
 
-  const loadPlan = async () => {
+  const loadPlan = async (uid: string) => {
     try {
       // Local fields only (username, businessCountry, branding) — plan itself
       // is overwritten immediately after by refreshSubscriptionStatus below.
       // Kept as a cache so username/country render instantly on launch rather
       // than waiting on a network round trip.
-      const data = (await subscriptionRepository.read()) as VendorPlanData | null;
+      const data = (await subscriptionRepository.read(uid)) as VendorPlanData | null;
       if (data) {
         if (data.plan === 'basic' && !data.systemGeneratedUsername && !data.username) {
           const generatedUsername = generateSystemUsername();
           console.log('[VENDOR_PLAN] Generated system username for Basic vendor:', generatedUsername);
           data.systemGeneratedUsername = generatedUsername;
           data.username = generatedUsername;
-          await AsyncStorage.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify(data));
+          await subscriptionRepository.write(data, uid);
         }
 
-        setPlanData(data);
+        if (currentUidRef.current === uid) setPlanData(data);
       } else {
         const generatedUsername = generateSystemUsername();
         console.log('[VENDOR_PLAN] New vendor, generating system username:', generatedUsername);
         const initialData = {
-          ...planData,
+          ...defaultPlanData,
           systemGeneratedUsername: generatedUsername,
           username: generatedUsername,
         };
-        await AsyncStorage.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify(initialData));
-        setPlanData(initialData);
+        await subscriptionRepository.write(initialData, uid);
+        if (currentUidRef.current === uid) setPlanData(initialData);
       }
     } catch (error) {
       console.error('Failed to load vendor plan:', error);
     } finally {
-      await refreshSubscriptionStatus();
-      setIsLoading(false);
+      if (currentUidRef.current === uid) {
+        await refreshSubscriptionStatus();
+        setIsLoading(false);
+      }
     }
   };
 
@@ -255,7 +276,9 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
           cancellationScheduled,
           cancellationDate: cancellationScheduled && periodEnd ? periodEnd.toISOString() : null,
         };
-        void AsyncStorage.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify(updated));
+        if (currentUidRef.current) {
+          void subscriptionRepository.write(updated, currentUidRef.current);
+        }
         return updated;
       });
     } catch (error) {
@@ -271,7 +294,9 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
   const toggleBranding = async () => {
     try {
       const updated = { ...planData, brandingEnabled: !planData.brandingEnabled };
-      await AsyncStorage.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify(updated));
+      if (currentUidRef.current) {
+        await subscriptionRepository.write(updated, currentUidRef.current);
+      }
       setPlanData(updated);
     } catch (error) {
       console.error('Failed to toggle branding:', error);
@@ -340,7 +365,9 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
         usernameSelectionPending: false,
         usernameChangeHistory: changeHistory,
       };
-      await AsyncStorage.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify(updated));
+      if (currentUidRef.current) {
+        await subscriptionRepository.write(updated, currentUidRef.current);
+      }
       setPlanData(updated);
     } catch (error) {
       console.error('Failed to set username:', error);
@@ -354,7 +381,9 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
         ...planData,
         usernameSelectionPending: false,
       };
-      await AsyncStorage.setItem(VENDOR_PLAN_STORAGE_KEY, JSON.stringify(updated));
+      if (currentUidRef.current) {
+        await subscriptionRepository.write(updated, currentUidRef.current);
+      }
       setPlanData(updated);
     } catch (error) {
       console.error('Failed to mark username selection complete:', error);
@@ -362,7 +391,14 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
     }
   };
 
-  const getUsernameChangeEligibility = () => {
+  /**
+   * realHistory, when passed, is the vendor document's own
+   * usernameChangeHistory (written by changeUsername) rather than this
+   * device's local copy - a real vendor's cooldown should hold across a
+   * reinstall or a second device, not reset because this AsyncStorage entry
+   * did.
+   */
+  const getUsernameChangeEligibility = (realHistory?: UsernameChangeRecord[]) => {
     if (planData.plan === 'basic') {
       return {
         canChange: false,
@@ -371,8 +407,8 @@ export const [VendorPlanContext, useVendorPlan] = createContextHook(() => {
         changesThisYear: 0,
       };
     }
-    
-    const history = planData.usernameChangeHistory || [];
+
+    const history = realHistory ?? planData.usernameChangeHistory ?? [];
     const now = new Date();
     const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
     const changesThisYear = history.filter(change => new Date(change.date) > yearAgo).length;

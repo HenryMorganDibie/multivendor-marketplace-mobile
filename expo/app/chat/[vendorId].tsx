@@ -13,7 +13,6 @@ import {
   FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Send, MessageCircle, Plus, User, Clock as ClockIcon, CheckCircle, Search as SearchIcon, ChevronUp, ChevronDown, X as XIcon } from 'lucide-react-native';
-import { Alert } from '@/utils/alert';
 import { renderHighlightedText, messageMatchesQuery } from '@/utils/highlightText';
 import MessageStatusIcon from '@/components/MessageStatusIcon';
 import { PaymentRequestCard } from '@/components/PaymentRequestCard';
@@ -24,8 +23,7 @@ import { chatService } from '@/services/chatService';
 import { useChats } from '@/contexts/ChatContext';
 import { useChatSubscription, mergeChatMessages } from '@/hooks/useChatMessages';
 import { OrderStatus, Order } from '@/mocks/ordersData';
-import { type Vendor } from '@/mocks/vendorData';
-import { vendorRepository } from '@/services/repositories/vendorRepository';
+import { useVendorIdentity } from '@/lib/vendor/useVendorIdentity';
 import { useBlockedUsers } from '@/contexts/BlockedUsersContext';
 import { useChatRead } from '@/contexts/ChatReadContext';
 import { useVendorChatMode } from '@/contexts/VendorChatModeContext';
@@ -118,7 +116,7 @@ export default function CanonicalChatScreen() {
   const { isChatLimited } = useVendorChatMode();
   const { markChatAsRead } = useChatRead();
   const { orders } = useOrders();
-  const { getPreOrderChat } = useChats();
+  const { getPreOrderChat, ensureCommerceThread } = useChats();
 
   // getChatByVendorId (the free function from mocks/chatData) never received
   // a customerId here, and its own signature treats a missing customerId as
@@ -133,18 +131,16 @@ export default function CanonicalChatScreen() {
   // handful of demo vendors: any real vendor not in that array silently fell
   // back to a single hardcoded mock vendor, showing the wrong name and never
   // reading as suspended.
-  const [resolvedVendor, setResolvedVendor] = useState<Vendor | undefined>(undefined);
-  useEffect(() => {
-    if (!vendorId) return;
-    let cancelled = false;
-    void vendorRepository.getById(vendorId).then((v) => {
-      if (!cancelled) setResolvedVendor(v);
-    });
-    return () => { cancelled = true; };
-  }, [vendorId]);
+  const { vendor: resolvedVendor, availability: vendorAvailability, permissions: vendorPermissions, unavailableReason: vendorUnavailableReason } = useVendorIdentity(vendorId);
   const vendorName = resolvedVendor?.name || 'Vendor';
-  const isVendorSuspended = resolvedVendor?.vendorStatus === 'SUSPENDED';
-  console.log('[CHAT] Vendor status:', resolvedVendor?.vendorStatus, '| Suspended:', isVendorSuspended);
+  // Fail-closed: a vendor doc that can no longer be read (Firestore rules
+  // deny a suspended/deactivated vendor's document to an ordinary customer
+  // outright -- see firestore.rules vendors/{vendorId}) must disable the
+  // composer exactly the same as a confirmed-inactive vendor, not silently
+  // pass through as "no problem found" just because resolvedVendor came back
+  // undefined. Only a successfully-read, actually-active vendor allows chat.
+  const isVendorInactive = !(vendorAvailability === 'resolved' && (vendorPermissions?.canChat ?? false));
+  console.log('[CHAT] Vendor availability:', vendorAvailability, '| status:', resolvedVendor?.vendorStatus, '| unavailableReason:', vendorUnavailableReason, '| Inactive:', isVendorInactive);
 
   const activeOrders = useMemo(() => {
     // Real order statuses (types2.ts / OrdersContext) are lowercase
@@ -181,6 +177,7 @@ export default function CanonicalChatScreen() {
   }, [resolvedChat, hasActiveOrders, activeOrders, preOrderChat, vendorName]);
 
   const { hasOrderPendingChanges } = useOrders();
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
   const [messageText, setMessageText] = useState('');
@@ -353,6 +350,11 @@ export default function CanonicalChatScreen() {
     });
   };
 
+  const showValidationError = (message: string) => {
+    setValidationError(message);
+    setTimeout(() => setValidationError(null), 4000);
+  };
+
   const handleSendMessage = async () => {
     const content = messageText.trim();
     // isSendingMessage guard: a rapid double-tap used to fire two real
@@ -360,21 +362,43 @@ export default function CanonicalChatScreen() {
     // there is no idempotency key), producing two identical messages.
     if (content === '' || isSendingMessage) return;
 
-    if (!chatId) {
-      // No resolved chat — this used to silently append a local-only
-      // message that was never persisted anywhere, so the sender believed
-      // it sent while the vendor never saw it. Surfacing the real failure
-      // instead of faking success.
-      Alert.alert('Could not send', 'This conversation could not be found. Please go back and try again.');
-      return;
-    }
-
     setIsSendingMessage(true);
     // Composer is NOT cleared until the send actually succeeds, so a
     // failure leaves the draft intact rather than silently discarding it.
     try {
+      let targetChatId = chatId;
+      if (!targetChatId) {
+        if (hasActiveOrders) {
+          // Active order but no locally-resolved chat: the backend already
+          // guarantees the canonical commerce thread and its
+          // relatedOrderIds association as a side effect of order
+          // creation (injectOrderContext), so this is a local
+          // useBackendChats hydration race, not a missing thread. Calling
+          // ensureCommerceThread here would risk building a wrong local
+          // scaffold (chatType: 'pre_order_inquiry', empty messages) over
+          // a real order-linked thread. Left unchanged.
+          showValidationError('This conversation could not be found. Please go back and try again.');
+          return;
+        }
+
+        // No resolved chat and no active order - a customer can land here
+        // cold (item-forward, a customer_chat notification, a chat push
+        // deep link) with no existing thread. This used to hard-stop with
+        // "conversation could not be found" instead of creating one, even
+        // though the storefront's Message Vendor button already creates
+        // exactly this kind of thread for the same vendor/customer pair via
+        // the same authoritative path. Never fabricate a Date.now()-style
+        // id here -- only the backend-returned canonical chatId is used.
+        const result = await ensureCommerceThread(vendorId, vendorName);
+        if (!result.success) {
+          showValidationError(result.error);
+          return;
+        }
+        targetChatId = result.chatId;
+      }
+
       const sent = await chatService.sendMessage({
-        chatId,
+        chatId: targetChatId,
         type: 'text',
         content,
         sender: 'customer',
@@ -382,9 +406,13 @@ export default function CanonicalChatScreen() {
       console.log('[LEGACY CHAT] Message persisted via chatService:', sent.id);
       setMessageText('');
     } catch (err) {
+      // Surfaced through the same inline validationError banner the
+      // pre-order and order chat screens already use, not a console-only
+      // swallow -- the composer keeps the typed message so the customer can
+      // retry, and no optimistic bubble is shown since none was ever added.
       console.error('[LEGACY CHAT] sendMessage failed:', err);
       const message = err instanceof Error ? err.message : 'Could not send your message.';
-      Alert.alert('Message not sent', message);
+      showValidationError(message);
     } finally {
       setIsSendingMessage(false);
     }
@@ -570,6 +598,7 @@ export default function CanonicalChatScreen() {
             paymentData={message.paymentRequestData}
             timestamp={message.timestamp}
             role="customer"
+            currency={message.paymentRequestData.currency as Currency | undefined}
             onViewOrderDetails={activeOrders[0] ? () => handleViewOrderDetails(activeOrders[0].id) : undefined}
           />
         </View>
@@ -587,11 +616,12 @@ export default function CanonicalChatScreen() {
     if (message.type === 'catalog_item' && message.catalogItemData) {
       return (
         <View key={message.id} style={styles.messageBubbleContainer}>
-          <CatalogItemBubble 
-            data={message.catalogItemData} 
+          <CatalogItemBubble
+            data={message.catalogItemData}
             timestamp={message.timestamp}
             sender={message.sender}
             vendorId={vendorId}
+            currency={(resolvedVendor?.currency as Currency) || getCurrencyFromCountryCode(resolvedVendor?.countryCode || 'NG')}
           />
         </View>
       );
@@ -647,9 +677,24 @@ export default function CanonicalChatScreen() {
     );
   };
 
-  const canSendMessages = !isVendorSuspended && !isBlocked;
-  
-  const inputPlaceholder = isVendorSuspended
+  const canSendMessages = !isVendorInactive && !isBlocked;
+
+  // Copy shown to the customer must never claim a confirmed suspension when
+  // the client only knows the read was denied or the network dropped.
+  // 'resolved' + inactive is a status this screen actually read (reachable
+  // for a demo vendor, or a vendor owner/admin viewing their own thread);
+  // everything else under vendorAvailability !== 'resolved' is an
+  // unconfirmed case and gets neutral wording instead.
+  const vendorStatusBannerText =
+    vendorAvailability === 'loading' || (vendorAvailability === 'resolved' && !isVendorInactive)
+      ? null
+      : vendorAvailability === 'resolved'
+      ? CHAT_BANNERS.vendorSuspended
+      : vendorUnavailableReason === 'transient'
+      ? CHAT_BANNERS.vendorStatusUnknown
+      : CHAT_BANNERS.vendorUnavailable;
+
+  const inputPlaceholder = isVendorInactive
     ? CHAT_INPUT_PLACEHOLDERS.messagingUnavailable
     : isBlocked
     ? (blockedUser?.direction === 'other' ? CHAT_INPUT_PLACEHOLDERS.messagingUnavailable : CHAT_INPUT_PLACEHOLDERS.unblockToSend)
@@ -758,13 +803,13 @@ export default function CanonicalChatScreen() {
           </View>
         )}
 
-        {isVendorSuspended && (
+        {vendorStatusBannerText && (
           <View style={styles.suspendedBanner}>
-            <Text style={styles.suspendedBannerText}>{CHAT_BANNERS.vendorSuspended}</Text>
+            <Text style={styles.suspendedBannerText}>{vendorStatusBannerText}</Text>
           </View>
         )}
 
-        {isChatLimited && !isBlocked && !isVendorSuspended && (
+        {isChatLimited && !isBlocked && !isVendorInactive && (
           <View style={styles.limitedChatBanner}>
             <Text style={styles.limitedChatText}>{CHAT_BANNERS.limitedClarifications}</Text>
           </View>
@@ -816,6 +861,12 @@ export default function CanonicalChatScreen() {
         <View style={styles.businessHoursBanner}>
           <Text style={styles.businessHoursText}>{CHAT_BANNERS.businessHoursHint}</Text>
         </View>
+
+        {validationError && (
+          <View style={styles.validationErrorContainer}>
+            <Text style={styles.validationErrorText}>{validationError}</Text>
+          </View>
+        )}
 
         <SafeAreaView edges={['bottom']} style={styles.inputSafeArea}>
           <View style={styles.inputContainer}>
@@ -1126,6 +1177,19 @@ const styles = StyleSheet.create({
     textAlign: 'center' as const,
     fontWeight: '500' as const,
   },
+  validationErrorContainer: {
+    backgroundColor: Colors.border,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  validationErrorText: {
+    fontSize: 13,
+    color: Colors.primary,
+    textAlign: 'center' as const,
+    lineHeight: 18,
+  },
   contentWrapper: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -1170,6 +1234,7 @@ const styles = StyleSheet.create({
   bubbleWithTail: {
     flexDirection: 'row' as const,
     alignItems: 'flex-end' as const,
+    maxWidth: '78%',
   },
   incomingAvatarSlot: {
     width: 26,
@@ -1227,7 +1292,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   messageBubble: {
-    maxWidth: '78%',
+    // The percentage cap lives on bubbleWithTail above, not here: this
+    // element's own parent is bubbleWithTail, a shrink-wrapped row with no
+    // definite width of its own, so a percentage resolved against it
+    // collapsed short messages to a fixed, viewport-independent width
+    // instead of hugging their content. flexShrink lets it still yield
+    // when the real cap above is reached.
+    flexShrink: 1,
     paddingHorizontal: 13,
     paddingVertical: 8,
     borderRadius: 18,

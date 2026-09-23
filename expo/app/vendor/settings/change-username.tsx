@@ -69,7 +69,7 @@ export default function ChangeUsernameScreen() {
     false
   );
 
-  const eligibility = getUsernameChangeEligibility();
+  const eligibility = getUsernameChangeEligibility(isRealVendor ? vendor.usernameChangeHistory : undefined);
 
   useEffect(() => {
     // Wait for the real backend-confirmed plan before judging — plan starts

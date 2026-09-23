@@ -5,7 +5,6 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { Star } from 'lucide-react-native';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { mockVendors } from '@/mocks/vendorData';
 import { Colors } from '@/constants/colors';
 
 interface PublicRatingStats {
@@ -80,11 +79,38 @@ function useVendorPublicRatingStats(vendorId: string | undefined): { stats: Publ
   return { stats, isLoading };
 }
 
+/** Vendor display name for the header, from the real vendor doc — this
+ * screen used to look the name up in mockVendors, so a deep link to a real
+ * vendor's ratings page showed a generic "Ratings" header (mockVendors
+ * never contains a real vendor's id) instead of their actual business name. */
+function useVendorDisplayName(vendorId: string | undefined): string | undefined {
+  const [name, setName] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!vendorId) {
+      setName(undefined);
+      return;
+    }
+    const unsubscribe = onSnapshot(
+      doc(db, 'vendors', vendorId),
+      (snap) => {
+        const data = snap.data();
+        setName((data?.businessName as string) || (data?.name as string) || undefined);
+      },
+      (error) => {
+        console.error('[VendorRatingsScreen] Failed to read vendor name:', error);
+      }
+    );
+    return () => unsubscribe();
+  }, [vendorId]);
+
+  return name;
+}
+
 export default function VendorRatingsScreen() {
   const { vendorId } = useLocalSearchParams<{ vendorId: string }>();
   const { stats } = useVendorPublicRatingStats(vendorId);
-
-  const vendor = mockVendors.find((v) => v.id === vendorId);
+  const vendorName = useVendorDisplayName(vendorId);
 
   const renderStars = (count: number) => {
     return (
@@ -105,7 +131,7 @@ export default function VendorRatingsScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: vendor ? `${vendor.name} Ratings` : 'Ratings',
+          title: vendorName ? `${vendorName} Ratings` : 'Ratings',
           headerTitleAlign: 'center',
           headerStyle: { backgroundColor: '#fff' },
           headerTintColor: '#000',

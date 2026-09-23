@@ -67,6 +67,7 @@ import {
   useMarkInProgress,
   useCompleteOrder,
   useCancelOrder,
+  useOrderStatusReason,
 } from '@/data/hooks';
 import { getVendorEventMessage } from '@/utils/systemMessages';
 import { formatPriceWithCommas, getCurrencySymbol, type Currency } from '@/utils/formatPrice';
@@ -191,8 +192,43 @@ export default function VendorOrderDetailsScreen() {
   const orderId = params.orderId as string;
   const openedFromChat = params.fromChat === 'true';
 
-  const { getOrder, addVendorEvent } = useOrders();
+  const { getOrder, addVendorEvent, getOrderDeliveryContact } = useOrders();
   const order = getOrder(orderId);
+
+  // Delivery contact (Phase 3, per Founder 2026-09-15) — deliberately fetched
+  // through getOrderDetails rather than read off `order` above. `order`
+  // comes from the live orders listener (mapOrderDoc), which only ever
+  // carries a `hasDeliveryContact` boolean, never the actual
+  // fullName/phoneNumber/address — that split is intentional so this screen
+  // cannot accidentally bypass the terminal-status expiry getOrderDetails
+  // enforces server-side. `expired` distinguishes "never submitted" (both
+  // null) from "was submitted, order is now terminal" (expired: true), which
+  // get different copy below.
+  const [deliveryContact, setDeliveryContact] = useState<{ fullName: string; phoneNumber: string; address?: string | null } | null>(null);
+  const [deliveryContactExpired, setDeliveryContactExpired] = useState(false);
+  useEffect(() => {
+    if (!order || order.fulfillmentType !== 'Delivery' || !order.hasDeliveryContact) {
+      setDeliveryContact(null);
+      setDeliveryContactExpired(false);
+      return;
+    }
+    let cancelled = false;
+    void getOrderDeliveryContact(order.id).then((result) => {
+      if (cancelled) return;
+      setDeliveryContact(result.deliveryContact);
+      setDeliveryContactExpired(result.expired);
+    });
+    return () => { cancelled = true; };
+  }, [order?.id, order?.fulfillmentType, order?.hasDeliveryContact, getOrderDeliveryContact]);
+
+  // Local rejectionReason/cancellationReason* (set immediately after this
+  // device's own action, in the same session) are wiped by the very next
+  // Firestore snapshot -- this durable fetch fills the same banner from the
+  // backend's order-events subcollection so it survives past that moment,
+  // reload, and relogin. Not a prerequisite for anything else on this
+  // screen: while it loads or finds nothing, the rest of the order renders
+  // exactly as it does today.
+  const { data: durableStatusReason } = useOrderStatusReason(order?.id, order?.status);
 
   const acceptOrderMutation = useAcceptOrder();
   const rejectOrderMutation = useRejectOrder();
@@ -279,8 +315,8 @@ export default function VendorOrderDetailsScreen() {
   const orderChatAvailable = !['requested', 'rejected', 'cancelled', 'expired'].includes(orderStatus);
 
   const showAcceptDecline = canAcceptOrder(orderStatus) && !autoAcceptEnabled;
-  const showMarkInProgress = canMarkInProgress(orderStatus, isExternal);
-  const showCancel = canCancelOrder(orderStatus) && !isExternal;
+  const showMarkInProgress = canMarkInProgress(orderStatus);
+  const showCancel = canCancelOrder(orderStatus);
 
 
   const calculatedTotal = calculateTotalWithAdjustments(order.total, appliedAdjustments);
@@ -336,14 +372,19 @@ export default function VendorOrderDetailsScreen() {
   };
 
   const handleMarkInProgress = () => {
-    // Real orders carry the backend's payment-proof workflow state in
-    // paymentState (mapOrderDoc.ts), not the amount-based paymentStatus
-    // values external orders use — paymentStatus never holds
-    // 'payment_received'/'partially_received' for a real order, so checking
-    // it here always failed and blocked every real order from progressing.
-    const isPaymentSufficient = isExternal
-      ? order.paymentStatus === 'payment_received' || order.paymentStatus === 'partially_received'
-      : order.paymentState === 'VENDOR_PAYMENT_CONFIRMED';
+    // order.paymentStatus is the backend's real enum — 'UNPAID' |
+    // 'PROOF_SUBMITTED' | 'PROOF_ACCEPTED' | 'PROOF_REJECTED' | 'PROOF_LOCKED'
+    // (OrderDoc.paymentStatus, types2.ts) — mapped to the friendlier
+    // paymentState by mapOrderDoc.ts's toPaymentState. This is the same
+    // field with the same enum for internal and external orders alike;
+    // there is no separate "amount-based" paymentStatus that external
+    // orders use instead. The previous isExternal branch compared against
+    // 'payment_received'/'partially_received' — values from the app's old
+    // mock-data PaymentStatus union (mocks/ordersData.ts) that no real
+    // order's paymentStatus can ever hold, for either order source — so it
+    // always evaluated false and showed this warning unconditionally,
+    // whether or not payment was actually confirmed.
+    const isPaymentSufficient = order.paymentState === 'VENDOR_PAYMENT_CONFIRMED';
     if (!isPaymentSufficient) {
       setShowPaymentNotRecordedModal(true);
       return;
@@ -659,14 +700,14 @@ export default function VendorOrderDetailsScreen() {
                 </View>
               )}
 
-              {(order.rejectionReason || order.cancellationReason || order.cancellationReasonCode) && (
+              {(order.rejectionReason || order.cancellationReason || order.cancellationReasonCode || durableStatusReason) && (
                 <View style={styles.reasonCard}>
                   <Text style={styles.reasonLabel}>
                     {isRejected ? 'Rejection reason:' : 'Cancellation reason:'}
                   </Text>
                   <Text style={styles.reasonText}>
                     {isRejected
-                      ? order.rejectionReason
+                      ? (order.rejectionReason ?? durableStatusReason)
                       : order.cancellationReasonCode
                         ? (() => {
                             const LABELS: Record<string, string> = {
@@ -684,7 +725,7 @@ export default function VendorOrderDetailsScreen() {
                             const label = LABELS[order.cancellationReasonCode!] ?? order.cancellationReasonCode!;
                             return order.cancellationReasonText ? `${label}: ${order.cancellationReasonText}` : label;
                           })()
-                        : order.cancellationReason
+                        : (order.cancellationReason ?? durableStatusReason)
                     }
                   </Text>
                 </View>
@@ -744,6 +785,31 @@ export default function VendorOrderDetailsScreen() {
               )}
             </View>
           </View>
+
+          {order.fulfillmentType === 'Delivery' && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Delivery Contact</Text>
+              <View style={styles.fulfillmentCard}>
+                {deliveryContact ? (
+                  <>
+                    <Text style={styles.deliveryContactName}>{deliveryContact.fullName}</Text>
+                    <Text style={styles.deliveryContactDetail}>{deliveryContact.phoneNumber}</Text>
+                    {deliveryContact.address && (
+                      <Text style={styles.deliveryContactDetail}>{deliveryContact.address}</Text>
+                    )}
+                  </>
+                ) : deliveryContactExpired ? (
+                  <Text style={styles.deliveryContactEmptyText}>
+                    Delivery details are no longer available for this order.
+                  </Text>
+                ) : (
+                  <Text style={styles.deliveryContactEmptyText}>
+                    The customer hasn&apos;t provided delivery details for this order yet.
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Items · {totalItemCount}</Text>
@@ -1052,8 +1118,29 @@ export default function VendorOrderDetailsScreen() {
       {showMarkInProgress && (
         <SafeAreaView edges={['bottom']} style={styles.actionsContainer}>
           <View style={styles.actions}>
+            {/*
+              showMarkInProgress is now true at status 'accepted' for both
+              order types (previously it could never be true at all — see
+              canMarkInProgress). Before this fix, an accepted order fell
+              through to the standalone Cancel row further below (gated on
+              `!showMarkInProgress`), so fixing the status check would have
+              silently removed the ability to cancel from here. Pairing
+              Cancel alongside Mark In Progress, exactly like Complete is
+              already paired with Notify or Update below, keeps that
+              ability for internal orders and extends it to external ones.
+            */}
+            {showCancel && (
+              <TouchableOpacity
+                style={styles.bottomOutlineButton}
+                onPress={handleCancelOrder}
+                disabled={isProcessing}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.bottomOutlineButtonText}>Cancel Order</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
-              style={styles.actionButton}
+              style={[styles.actionButton, showCancel && { flex: 1 }]}
               onPress={handleMarkInProgress}
               disabled={isProcessing}
               activeOpacity={0.7}
@@ -1066,22 +1153,33 @@ export default function VendorOrderDetailsScreen() {
         </SafeAreaView>
       )}
 
-      {isInProgress && !isExternal && (
+      {isInProgress && (
         <SafeAreaView edges={['bottom']} style={styles.actionsContainer}>
           <View style={styles.actions}>
+            {/*
+              Notify or Update sends a message to the customer (see its
+              modal copy: "Choose an action to send to the customer") — an
+              external order has no real customer behind its synthetic
+              customerId, so this stays internal-only. Complete itself has
+              no such dependency: generateReceiptInternal and
+              adjustInventoryAfterOrder's countsAsSale flag are already
+              orderSource-aware and correct for external orders.
+            */}
+            {!isExternal && (
+              <TouchableOpacity
+                style={styles.bottomOutlineButton}
+                onPress={() => {
+                  setNotifyUpdateMode('menu');
+                  setCustomEventMessage('');
+                  setShowNotifyUpdateModal(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.bottomOutlineButtonText}>Notify or Update</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
-              style={styles.bottomOutlineButton}
-              onPress={() => {
-                setNotifyUpdateMode('menu');
-                setCustomEventMessage('');
-                setShowNotifyUpdateModal(true);
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.bottomOutlineButtonText}>Notify or Update</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, { flex: 1 }]}
+              style={[styles.actionButton, !isExternal && { flex: 1 }]}
               onPress={handleMarkCompleted}
               disabled={isProcessing}
               activeOpacity={0.7}
@@ -1682,6 +1780,9 @@ const styles = StyleSheet.create({
   fulfillmentTypeGreyed: { color: Colors.textSecondary },
   requestedDateTime: { fontSize: 14, color: Colors.textSecondary },
   requestedDateTimeGreyed: { color: Colors.textSecondary },
+  deliveryContactName: { fontSize: 15, fontWeight: '600' as const, color: Colors.text, marginBottom: 4 },
+  deliveryContactDetail: { fontSize: 14, color: Colors.textSecondary, marginBottom: 2 },
+  deliveryContactEmptyText: { fontSize: 14, color: Colors.textSecondary },
   itemCard: { backgroundColor: Colors.white, paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: Colors.borderSoft },
   itemHeader: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: 12 },
   itemImage: { width: 52, height: 52, borderRadius: 10, backgroundColor: Colors.surface },

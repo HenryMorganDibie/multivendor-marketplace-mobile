@@ -13,10 +13,10 @@ data are given below instead of a screenshot of a screen.
 Two terminals.
 
 ```bash
-# 1. Backend, from platform-backend/
+# 1. Backend, from multivendor-marketplace-platform/
 npx firebase-tools emulators:start --project demo-platform
 
-# 2. Tests, from platform-backend/scripts/
+# 2. Tests, from multivendor-marketplace-platform/scripts/
 npm install                # first time only
 node seed-demo-vendor.js   # phase3-ledger and invoice-delivery need this vendor
 node phase3-ledger-tests.js
@@ -120,7 +120,7 @@ travels with the invoice rather than requiring a separate authenticated
 fetch, the `shareToken` itself is stripped from the response, and a
 cancelled invoice's link is revoked rather than still serving content — all
 four are real behaviours of `getPublicInvoice` in
-`platform-backend/functions/src/invoices/invoiceFunctions.ts`, not assumptions.
+`multivendor-marketplace-platform/functions/src/invoices/invoiceFunctions.ts`, not assumptions.
 
 ### 8–10 — storefront publish, unpublish, and the share link
 
@@ -258,9 +258,9 @@ this document does not claim it is.
 
 | Location | Contents |
 |---|---|
-| `platform-backend/scripts/phase3-ledger-tests.js` | Pre-existing, unmodified, run for this pass |
-| `platform-backend/scripts/invoice-delivery-tests.js` | Pre-existing, run for this pass |
-| `platform-backend/scripts/phase4-storefront-tests.js` | New this pass |
-| `platform-backend/scripts/phase5-6-insights-tests.js` | New this pass |
+| `multivendor-marketplace-platform/scripts/phase3-ledger-tests.js` | Pre-existing, unmodified, run for this pass |
+| `multivendor-marketplace-platform/scripts/invoice-delivery-tests.js` | Pre-existing, run for this pass |
+| `multivendor-marketplace-platform/scripts/phase4-storefront-tests.js` | New this pass |
+| `multivendor-marketplace-platform/scripts/phase5-6-insights-tests.js` | New this pass |
 | `maestro/phase3-6-acceptance.yaml` | The intended native flow — not run, see §16 above |
-| `platform-mobile/docs/phase3-6-handover.md` | Repo/branch state, what's wired, what isn't, what was found |
+| `this repo/docs/phase3-6-handover.md` | Repo/branch state, what's wired, what isn't, what was found |

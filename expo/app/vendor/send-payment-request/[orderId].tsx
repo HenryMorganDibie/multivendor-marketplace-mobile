@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Colors } from '@/constants/colors';
 import {
   View,
@@ -17,7 +17,28 @@ import type { Order } from '@/mocks/ordersData';
 import { useOrders } from '@/contexts/OrdersContext';
 import { useVendor } from '@/contexts/VendorContext';
 import { callable } from '@/lib/firebase';
+import { useCurrentPaymentInstructions } from '@/hooks/useCurrentPaymentInstructions';
+import { generateIdempotencyKey } from '@/utils/idempotencyKey';
+import { maskPaymentIdentifier } from '@/utils/maskPaymentIdentifier';
 import { formatPriceWithCommas, formatAmountForInput, getCurrencySymbol, getCurrencyDecimals, type Currency } from '@/utils/formatPrice';
+
+/**
+ * functions/unavailable and functions/deadline-exceeded, and any error with
+ * no .code at all, leave the server's receipt of this attempt unknown.
+ * Every other coded FunctionsError means the callable ran and returned a
+ * structured rejection. Kept local to this screen (not shared with
+ * payment-instructions.tsx) since only two call sites exist so far.
+ */
+function classifyCallableFailure(err: unknown): 'ambiguous' | 'definitive-rejection' {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (code === 'functions/unavailable' || code === 'functions/deadline-exceeded') return 'ambiguous';
+  if (typeof code === 'string' && code.length > 0) return 'definitive-rejection';
+  return 'ambiguous';
+}
+
+function computeCanonicalPayloadJson(orderId: string, chatId: string, amount: number, message: string | null): string {
+  return JSON.stringify({ orderId, chatId, amount, message });
+}
 
 type PaymentType = 'full' | 'partial';
 
@@ -71,16 +92,34 @@ export default function SendPaymentRequestScreen() {
   const [amount, setAmount] = useState<string>('');
   const [note, setNote] = useState<string>('');
   const [isSending, setIsSending] = useState<boolean>(false);
-  // The only real, backend-persisted vendor payment field: a single
-  // free-text instructions string (vendors/{vendorId}.paymentInstructions),
-  // gated by paymentInstructionsEnabled, written via the payment-instructions
-  // settings screen. Confirmed by direct investigation that there is no
-  // structured paymentMethods array, no primary/secondary payment method,
-  // anywhere in this backend — this is what the customer will actually see.
-  const paymentInstructionsEnabled = vendor.paymentInstructionsEnabled === true;
-  const paymentInstructions = paymentInstructionsEnabled ? (vendor.paymentInstructions ?? '').trim() : '';
-  const hasPaymentInstructions = paymentInstructionsEnabled && paymentInstructions.length > 0;
   const [showOrderDropdown, setShowOrderDropdown] = useState<boolean>(false);
+
+  // Canonical Batch 2C.2 source -- the backend remains the final authority
+  // on whether this vendor is actually configured; this is UX only.
+  const {
+    data: currentInstructions,
+    loading: paymentInstructionsLoading,
+    error: paymentInstructionsError,
+  } = useCurrentPaymentInstructions(vendor.id);
+  const hasPaymentInstructions = !paymentInstructionsLoading && !paymentInstructionsError && currentInstructions !== null;
+
+  const idempotencyKeyRef = useRef<string | null>(null);
+  const lastAttemptedPayloadJsonRef = useRef<string | null>(null);
+  const pendingAmbiguousAttemptRef = useRef<boolean>(false);
+  const isSendingRef = useRef<boolean>(false);
+
+  function resolveIdempotencyKeyForAttempt(canonicalPayloadJson: string): string {
+    const reuseExistingKey =
+      pendingAmbiguousAttemptRef.current &&
+      idempotencyKeyRef.current !== null &&
+      lastAttemptedPayloadJsonRef.current === canonicalPayloadJson;
+
+    const key = reuseExistingKey ? idempotencyKeyRef.current! : generateIdempotencyKey();
+    idempotencyKeyRef.current = key;
+    lastAttemptedPayloadJsonRef.current = canonicalPayloadJson;
+    pendingAmbiguousAttemptRef.current = false;
+    return key;
+  }
 
   const selectedOrder = orders.find((o) => o.id === selectedOrderId);
 
@@ -118,6 +157,16 @@ export default function SendPaymentRequestScreen() {
       return;
     }
 
+    if (paymentInstructionsLoading) {
+      Alert.alert('Please wait', 'Still loading your payment setup — try again in a moment.');
+      return;
+    }
+
+    if (paymentInstructionsError) {
+      Alert.alert('Could not load payment setup', 'Please try again.');
+      return;
+    }
+
     if (!hasPaymentInstructions) {
       Alert.alert(
         'Payment Instructions Required',
@@ -142,35 +191,59 @@ export default function SendPaymentRequestScreen() {
       return;
     }
 
-    setIsSending(true);
-    try {
-      const send = callable<
-        { orderId: string; chatId: string; amount: number; message?: string },
-        { success: true; requestId: string; chatId: string; messageId: string }
-      >('sendPaymentRequestInChat');
-      await send({
-        orderId: selectedOrderId,
-        chatId,
-        amount: requestAmount,
-        message: note.trim() || undefined,
-      });
+    if (isSendingRef.current) return;
+    isSendingRef.current = true;
 
-      Alert.alert(
-        'Payment Request Sent',
-        `Payment request for ${currencySymbol}${amount} has been sent to the customer.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
-      );
-    } catch (err) {
-      console.error('[SendPaymentRequest] sendPaymentRequestInChat rejected:', err);
-      const message = err instanceof Error ? err.message : 'Could not send the payment request. Please try again.';
-      Alert.alert('Payment Request Failed', message);
+    try {
+      const normalizedMessage = note.trim() || null;
+      const canonicalPayloadJson = computeCanonicalPayloadJson(selectedOrderId, chatId, requestAmount, normalizedMessage);
+      const idempotencyKey = resolveIdempotencyKeyForAttempt(canonicalPayloadJson);
+
+      setIsSending(true);
+      try {
+        const send = callable<
+          { orderId: string; chatId: string; amount: number; message?: string; idempotencyKey: string },
+          { success: true; requestId: string; chatId: string; messageId: string }
+        >('sendPaymentRequestInChat');
+        await send({
+          orderId: selectedOrderId,
+          chatId,
+          amount: requestAmount,
+          message: normalizedMessage || undefined,
+          idempotencyKey,
+        });
+
+        idempotencyKeyRef.current = null;
+        lastAttemptedPayloadJsonRef.current = null;
+        pendingAmbiguousAttemptRef.current = false;
+
+        Alert.alert(
+          'Payment Request Sent',
+          `Payment request for ${currencySymbol}${amount} has been sent to the customer.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+            },
+          ]
+        );
+      } catch (err) {
+        const classification = classifyCallableFailure(err);
+        if (classification === 'ambiguous') {
+          pendingAmbiguousAttemptRef.current = true;
+        } else {
+          idempotencyKeyRef.current = null;
+          lastAttemptedPayloadJsonRef.current = null;
+          pendingAmbiguousAttemptRef.current = false;
+        }
+        console.error('[SendPaymentRequest] sendPaymentRequestInChat rejected:', err);
+        const message = err instanceof Error ? err.message : 'Could not send the payment request. Please try again.';
+        Alert.alert('Payment Request Failed', message);
+      } finally {
+        setIsSending(false);
+      }
     } finally {
-      setIsSending(false);
+      isSendingRef.current = false;
     }
   };
 
@@ -425,10 +498,28 @@ export default function SendPaymentRequestScreen() {
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>PAYMENT INSTRUCTIONS</Text>
-              {hasPaymentInstructions ? (
+              {paymentInstructionsLoading ? (
+                <View style={styles.instructionsPreview}>
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                  <Text style={styles.instructionsPreviewText}>Loading your payment setup…</Text>
+                </View>
+              ) : paymentInstructionsError ? (
+                <View style={styles.instructionsMissingCard}>
+                  <Text style={styles.instructionsMissingText}>Couldn&apos;t load your payment setup. Please try again.</Text>
+                </View>
+              ) : hasPaymentInstructions ? (
                 <View style={styles.instructionsPreview}>
                   <Text style={styles.instructionsPreviewLabel}>This is what the customer will see</Text>
-                  <Text style={styles.instructionsPreviewText}>{paymentInstructions}</Text>
+                  {currentInstructions!.paymentDestination === null ? (
+                    <Text style={styles.instructionsPreviewText}>Cash</Text>
+                  ) : (
+                    <Text style={styles.instructionsPreviewText}>
+                      {currentInstructions!.paymentDestination.type === 'bank_transfer' ? 'Bank Transfer' : 'Contact Transfer'}
+                      {'  ·  '}
+                      {maskPaymentIdentifier(currentInstructions!.paymentDestination.identifier)}
+                      {currentInstructions!.acceptCash ? '  ·  + Cash accepted' : ''}
+                    </Text>
+                  )}
                 </View>
               ) : (
                 <View style={styles.instructionsMissingCard}>

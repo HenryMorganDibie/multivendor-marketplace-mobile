@@ -6,7 +6,7 @@ import type { Currency } from '@/utils/formatPrice';
 /**
  * DRAFT          — created, not yet delivered
  * SHARED_EXTERNALLY — sent via native share sheet (WhatsApp, email, etc.)
- * SENT_IN_CHAT   — attached to a real the platform customer chat thread
+ * SENT_IN_CHAT   — attached to a real Platform customer chat thread
  * VIEWED         — customer has opened the invoice link (future)
  * PAID           — vendor manually marked as paid
  * CANCELLED      — voided
@@ -33,9 +33,9 @@ export interface Invoice {
   customerName: string;
   customerPhone?: string;
   customerEmail?: string;
-  /** Bound the platform chat thread — required for SENT_IN_CHAT delivery */
+  /** Bound Platform chat thread — required for SENT_IN_CHAT delivery */
   chatId?: string;
-  /** Bound the platform customer id — required for SENT_IN_CHAT delivery */
+  /** Bound Platform customer id — required for SENT_IN_CHAT delivery */
   customerId?: string;
   items: InvoiceLineItem[];
   subtotal: number;
@@ -116,7 +116,7 @@ export const [InvoiceProvider, useInvoices] = createContextHook(() => {
     (invoicesQuery.data || []).find((inv) => inv.id === id);
 
   /**
-   * Mark an invoice as sent inside a the platform chat thread.
+   * Mark an invoice as sent inside a Platform chat thread.
    * Requires a valid chatId — will throw if missing.
    */
   const sendInvoiceInChat = async (id: string, chatId: string, customerId?: string) => {

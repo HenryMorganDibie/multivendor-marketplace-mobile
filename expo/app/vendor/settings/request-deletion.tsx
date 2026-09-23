@@ -9,7 +9,7 @@ import { callable } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 
 const DELETION_REASONS = [
-  'No longer using the platform',
+  'No longer using Platform',
   'Business closed',
   'Switching to another platform',
   'Too complicated to use',
@@ -92,7 +92,7 @@ export default function RequestDeletionScreen() {
           <View style={styles.warningCard}>
             <AlertTriangle size={48} color="#FF3B30" />
             <Text style={styles.warningText}>
-              Deleting your the platform account will disable access to your storefront, orders, chats, and reports. Your account will be scheduled for permanent deletion after 90 days. During this 90-day period, you may undo this request by contacting support.
+              Deleting your Platform account will disable access to your storefront, orders, chats, and reports. Your account will be scheduled for permanent deletion after 90 days. During this 90-day period, you may undo this request by contacting support.
             </Text>
           </View>
 
@@ -157,7 +157,7 @@ export default function RequestDeletionScreen() {
                 <Square size={24} color="#666" />
               )}
               <Text style={styles.checkboxLabel}>
-                I understand that the platform does not process payments or issue refunds, and that deleting my account does not resolve disputes with customers.
+                I understand that Platform does not process payments or issue refunds, and that deleting my account does not resolve disputes with customers.
               </Text>
             </TouchableOpacity>
           </View>

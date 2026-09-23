@@ -138,6 +138,8 @@ export default function VendorChatsScreen() {
     markConversationRead,
     loadMoreVendor,
     hasMoreVendor,
+    isInboxHydrated,
+    hasInboxHydrationError,
   } = useInbox();
   const { markChatAsRead } = useChatRead();
   const { supportChat, getUnreadCount: getSupportUnreadCount } = useVendorSupportChat();
@@ -211,6 +213,7 @@ export default function VendorChatsScreen() {
           tertiaryText={orderStatusLabel}
           chatTypeBadge={chatTypeBadge}
           previewText={displayText}
+          previewType={item.lastMessageType}
           isDraft={isDraft}
           timestamp={formatTimestamp(item.lastMessageAt)}
           showUnreadDot={false}
@@ -292,8 +295,8 @@ export default function VendorChatsScreen() {
       )}
 
       <ListStateView
-        isLoading={false}
-        isError={false}
+        isLoading={!isInboxHydrated && !hasInboxHydrationError}
+        isError={hasInboxHydrationError}
         isEmpty={filteredInbox.length === 0 && !showSupportRow}
         loadingSkeleton={<ChatListSkeleton count={5} />}
         emptyIcon={<MessageSquare size={36} color={Colors.textMuted} strokeWidth={1.5} />}

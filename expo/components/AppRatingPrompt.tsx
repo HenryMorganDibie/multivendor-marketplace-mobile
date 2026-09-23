@@ -191,7 +191,7 @@ export default function AppRatingPrompt() {
                   </View>
                 </View>
 
-                <Text style={styles.title}>Enjoying the platform?</Text>
+                <Text style={styles.title}>Enjoying Platform?</Text>
                 <Text style={styles.subtitle}>
                   Your rating helps us improve and reach more vendors and customers.
                 </Text>
@@ -240,7 +240,7 @@ export default function AppRatingPrompt() {
                 </View>
                 <Text style={styles.title}>Thanks for your feedback.</Text>
                 <Text style={styles.subtitle}>
-                  Would you like to rate the platform on the {Platform.OS === 'ios' ? 'App Store' : 'Google Play'}?
+                  Would you like to rate Platform on the {Platform.OS === 'ios' ? 'App Store' : 'Google Play'}?
                 </Text>
 
                 <TouchableOpacity
@@ -270,7 +270,7 @@ export default function AppRatingPrompt() {
                 </View>
                 <Text style={styles.title}>Thanks for your feedback.</Text>
                 <Text style={styles.subtitle}>
-                  Tell us what we can improve. Your input shapes theplatform.
+                  Tell us what we can improve. Your input shapes Platform.
                 </Text>
 
                 <TextInput
@@ -310,7 +310,7 @@ export default function AppRatingPrompt() {
                 </View>
                 <Text style={styles.title}>Feedback sent.</Text>
                 <Text style={styles.subtitle}>
-                  We appreciate your honesty. We are constantly improving theplatform.
+                  We appreciate your honesty. We are constantly improving Platform.
                 </Text>
               </View>
             )}

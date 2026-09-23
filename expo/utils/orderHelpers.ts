@@ -83,14 +83,32 @@ export function canConfirmPayment(status: OrderStatus, isExternal: boolean): boo
   return status === 'accepted' && !isExternal;
 }
 
-// Backend Enforced Rule — UI Display Only
-export function canMarkInProgress(status: OrderStatus, isExternal: boolean): boolean {
-  return status === 'confirmed' && !isExternal;
+/**
+ * Backend Enforced Rule — UI Display Only.
+ *
+ * Was `status === 'confirmed' && !isExternal` — 'confirmed' is a real
+ * OrderStatus value, but nothing in the backend ever writes it onto an
+ * order (checked every write path in updateOrderStatus.ts and
+ * createOrder.ts); the real vendor transition is accepted -> in_progress.
+ * So this could never return true for any order, internal or external.
+ *
+ * 'accepted' is the correct check for both order types, not just external:
+ * an internal order reaches it after the vendor explicitly accepts it; an
+ * external order is created there directly, since recording the order is
+ * itself the acceptance. Same status, same next action, no isExternal
+ * distinction needed here.
+ */
+export function canMarkInProgress(status: OrderStatus): boolean {
+  return status === 'accepted';
 }
 
-// Backend Enforced Rule — UI Display Only
-export function canMarkCompleted(status: OrderStatus, isExternal: boolean): boolean {
-  return status === 'in_progress' && !isExternal;
+// Backend Enforced Rule — UI Display Only. No isExternal distinction: the
+// backend's completion handling (adjustInventoryAfterOrder's countsAsSale
+// flag, generateReceiptInternal) is already orderSource-aware and correct
+// for both order types — there is no reason for the UI to withhold this
+// action from an external order once it has reached in_progress.
+export function canMarkCompleted(status: OrderStatus): boolean {
+  return status === 'in_progress';
 }
 
 export function canSendVendorEvent(status: OrderStatus, isExternal: boolean): boolean {

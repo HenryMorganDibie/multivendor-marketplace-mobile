@@ -105,8 +105,8 @@ export const helpArticles: HelpArticle[] = [
   {
     id: 'does-platform-process-payments',
     categoryId: 'payments',
-    title: 'Does the platform process payments?',
-    content: 'the platform does not process, hold, or move money.\n\nCustomers pay you directly using your own payment methods.',
+    title: 'Does Platform process payments?',
+    content: 'Platform does not process, hold, or move money.\n\nCustomers pay you directly using your own payment methods.',
     planInfo: 'All plans',
   },
   {
@@ -168,8 +168,8 @@ export const helpArticles: HelpArticle[] = [
   {
     id: 'does-platform-limit-orders',
     categoryId: 'orders',
-    title: 'Does the platform limit how many orders I can accept?',
-    content: 'the platform does not limit the number of orders you can accept on any plan.\n\nWe believe vendors should never be restricted from selling to their customers or growing their business. Your success should not be capped or slowed down by the platform you use.\n\nInstead of limiting orders, the platform\'s plans are based on how much automation and operational support you want, not how much you sell.\n\nThis means:\n- You can accept unlimited orders on all plans\n- You always control your revenue\n- Upgrades are optional and based on convenience, not pressure\n\nHigher plans exist to help reduce manual work — not to limit your growth.',
+    title: 'Does Platform limit how many orders I can accept?',
+    content: 'Platform does not limit the number of orders you can accept on any plan.\n\nWe believe vendors should never be restricted from selling to their customers or growing their business. Your success should not be capped or slowed down by the platform you use.\n\nInstead of limiting orders, Platform\'s plans are based on how much automation and operational support you want, not how much you sell.\n\nThis means:\n- You can accept unlimited orders on all plans\n- You always control your revenue\n- Upgrades are optional and based on convenience, not pressure\n\nHigher plans exist to help reduce manual work — not to limit your growth.',
     planInfo: 'All plans',
   },
   {
@@ -210,7 +210,7 @@ export const helpArticles: HelpArticle[] = [
   {
     id: 'does-platform-track-inventory-automatically',
     categoryId: 'inventory',
-    title: 'Does the platform track inventory automatically?',
+    title: 'Does Platform track inventory automatically?',
     content: 'No. Inventory tracking is optional.\n\nYou can manually set quantities for items if you want to track stock levels.',
     planInfo: 'All plans (optional)',
   },
@@ -245,7 +245,7 @@ export const helpArticles: HelpArticle[] = [
   {
     id: 'how-does-pickup-work',
     categoryId: 'pickup-fulfillment',
-    title: 'How does pickup work on the platform?',
+    title: 'How does pickup work on Platform?',
     content: 'Customers place orders and pay directly to you.\n\nOnce payment is confirmed, you share pickup instructions (address, hours, special notes).\n\nCustomers pick up orders at your specified location.',
     planInfo: 'All plans',
   },
@@ -267,7 +267,7 @@ export const helpArticles: HelpArticle[] = [
     id: 'can-disable-pickup',
     categoryId: 'pickup-fulfillment',
     title: 'Can I disable pickup for my store?',
-    content: 'Pickup is the primary fulfillment method on theplatform.\n\nYou cannot disable pickup, but you can set custom pickup instructions or require delivery coordination.',
+    content: 'Pickup is the primary fulfillment method on Platform.\n\nYou cannot disable pickup, but you can set custom pickup instructions or require delivery coordination.',
     planInfo: 'All plans',
   },
   {
@@ -308,8 +308,8 @@ export const helpArticles: HelpArticle[] = [
   {
     id: 'how-contact-platform-support',
     categoryId: 'support-access',
-    title: 'How do I contact the platform support?',
-    content: 'You can contact the platform support through the Help Center.\n\nTap "Contact Support" at the bottom of the Help Center page to submit a request.',
+    title: 'How do I contact Platform support?',
+    content: 'You can contact Platform support through the Help Center.\n\nTap "Contact Support" at the bottom of the Help Center page to submit a request.',
     planInfo: 'All plans',
   },
   {
@@ -336,8 +336,8 @@ export const helpArticles: HelpArticle[] = [
   {
     id: 'how-orders-work',
     categoryId: 'orders-custom',
-    title: 'How orders work on the platform',
-    content: `Understanding the order flow on the platform:
+    title: 'How orders work on Platform',
+    content: `Understanding the order flow on Platform:
 
 Before ordering
 • Customers can message you before placing an order
@@ -388,11 +388,11 @@ Best practices:
     id: 'vendor-payments',
     categoryId: 'payments-invoicing',
     title: 'How payments work for vendors',
-    content: `Important: the platform does NOT collect or process payments.
+    content: `Important: Platform does NOT collect or process payments.
 
 Payment flow:
 • You receive payments directly from customers
-• the platform is not involved in the transaction
+• Platform is not involved in the transaction
 • You maintain full control over payment methods
 
 How it works:
@@ -431,7 +431,7 @@ Do NOT request:
 • Upfront payments without order confirmation
 
 Safety tips:
-• Use the platform's built-in payment request feature
+• Use Platform's built-in payment request feature
 • Keep all payment communication in chat
 • Only mark orders as paid after verifying payment
 • Watch for fake payment confirmations
@@ -528,18 +528,18 @@ Red flags:
 • Customer refusing to use standard payment methods
 • Requests to fulfill orders before payment clears
 • Suspicious urgency or pressure
-• Requests to communicate outside the platform
+• Requests to communicate outside Platform
 
 Protect yourself:
 • Always verify payments in your bank account
 • Don't fulfill orders until payment is confirmed
-• Keep all communication in the platform chat
+• Keep all communication in Platform chat
 • Report suspicious behavior immediately
 • Trust your instincts
 
 If something seems wrong:
 • Pause the order
-• Contact the platform support
+• Contact Platform support
 • Do not proceed with fulfillment
 • Document all suspicious interactions`,
   },
@@ -587,7 +587,7 @@ Store appearance:
     title: 'Verification & Trust',
     content: `Why we require verification
 
-Verification helps build trust between vendors and customers on theplatform. Verified vendors appear in Home, Explore, and Search — giving them full visibility to new customers browsing the marketplace.
+Verification helps build trust between vendors and customers on Platform. Verified vendors appear in Home, Explore, and Search — giving them full visibility to new customers browsing the marketplace.
 
 Unverified vendors can still receive orders by sharing their storefront link directly, but they will not appear in discovery surfaces until verification is complete.
 
@@ -613,13 +613,13 @@ The identity verification process typically takes 2–5 minutes to complete. Aft
 
 Data privacy and security
 
-Your identity documents are processed securely and are never stored on the platform's servers beyond what is required for the verification review. We use industry-standard encryption and work with trusted verification partners to protect your data. Your personal information is never shared with customers or third parties.`,
+Your identity documents are processed securely and are never stored on Platform's servers beyond what is required for the verification review. We use industry-standard encryption and work with trusted verification partners to protect your data. Your personal information is never shared with customers or third parties.`,
   },
   {
     id: 'setup-vendor-store',
     categoryId: 'getting-started',
     title: 'Getting started as a vendor',
-    content: `Welcome to the platform! Set up your vendor account:
+    content: `Welcome to Platform! Set up your vendor account:
 
 1. Complete your business profile
 • Add your business name and description

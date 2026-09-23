@@ -152,7 +152,7 @@ export default function SecurityScreen() {
                   faked and Firebase Auth cannot actually provide. */}
               <View style={styles.rowContent}>
                 <Text style={styles.rowLabel}>Session Security</Text>
-                <Text style={styles.rowSubtitle}>Sign out of the platform on every device</Text>
+                <Text style={styles.rowSubtitle}>Sign out of Platform on every device</Text>
               </View>
               <ChevronRight size={20} color={Colors.textMuted} />
             </TouchableOpacity>

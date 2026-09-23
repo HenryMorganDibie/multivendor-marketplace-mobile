@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
+import { callable } from '@/lib/firebase';
+import { useVendor } from '@/contexts/VendorContext';
 
 export type FulfillmentMethodType = 'pickup' | 'delivery' | 'shipping';
 
@@ -21,6 +23,19 @@ export interface FulfillmentSavePayload {
 const FULFILLMENT_METHODS_KEY = 'vendor_fulfillment_methods';
 const FULFILLMENT_PROFILE_KEY = 'vendor_fulfillment_profile';
 
+function methodsToTypes(methods: FulfillmentMethods): FulfillmentMethodType[] {
+  const all: FulfillmentMethodType[] = ['pickup', 'delivery', 'shipping'];
+  return all.filter((m) => methods[m]);
+}
+
+function typesToMethods(types: string[]): FulfillmentMethods {
+  return {
+    pickup: types.includes('pickup'),
+    delivery: types.includes('delivery'),
+    shipping: types.includes('shipping'),
+  };
+}
+
 export const [VendorFulfillmentProvider, useVendorFulfillment] = createContextHook(() => {
   const [fulfillmentMethods, setFulfillmentMethodsState] = useState<FulfillmentMethods>({
     pickup: false,
@@ -28,6 +43,8 @@ export const [VendorFulfillmentProvider, useVendorFulfillment] = createContextHo
     shipping: false,
   });
   const [isLoaded, setIsLoaded] = useState(false);
+  const { vendor, identityStatus } = useVendor();
+  const syncedVendorIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     loadFulfillmentMethods();
@@ -54,6 +71,28 @@ export const [VendorFulfillmentProvider, useVendorFulfillment] = createContextHo
     }
   };
 
+  /**
+   * AsyncStorage above is only the first-frame/offline cache. Once the real
+   * vendor doc has actually resolved (identityStatus === 'resolved' -- a
+   * confirmed real vendor, not a demo account and not still loading), its
+   * vendors/{vendorId}.fulfillmentTypes is authoritative and overwrites
+   * whatever the cache held, including correctly representing "never
+   * configured" as empty rather than leaving a stale local value in charge.
+   * Runs once per resolved vendor id (re-arms on logout/account switch to a
+   * different vendor), not on every vendor object change, so it never fights
+   * an in-flight optimistic update from setFulfillmentMethods.
+   */
+  useEffect(() => {
+    if (identityStatus !== 'resolved') return;
+    if (syncedVendorIdRef.current === vendor.id) return;
+    syncedVendorIdRef.current = vendor.id;
+    const authoritative = typesToMethods(vendor.fulfillmentTypes ?? []);
+    setFulfillmentMethodsState(authoritative);
+    AsyncStorage.setItem(FULFILLMENT_METHODS_KEY, JSON.stringify(authoritative)).catch(
+      (err) => console.error('[FULFILLMENT] Failed to cache authoritative methods:', err)
+    );
+  }, [identityStatus, vendor.fulfillmentTypes]);
+
   const setFulfillmentMethods = async (
     methods: FulfillmentMethods,
     payload?: FulfillmentSavePayload,
@@ -63,15 +102,24 @@ export const [VendorFulfillmentProvider, useVendorFulfillment] = createContextHo
     }
 
     const previousMethods = fulfillmentMethods;
+    // Optimistic: shown immediately, reconciled back to the previous
+    // authoritative value below if the real backend call rejects it.
     setFulfillmentMethodsState(methods);
 
     try {
+      const update = callable<{ fulfillmentTypes: string[] }, { success: true }>('updateVendorSettings');
+      await update({ fulfillmentTypes: methodsToTypes(methods) });
+
+      // Cache only after the real save succeeds -- AsyncStorage is a
+      // convenience for the next cold start, never the source of truth.
       await AsyncStorage.setItem(FULFILLMENT_METHODS_KEY, JSON.stringify(methods));
       if (payload) {
         await AsyncStorage.setItem(FULFILLMENT_PROFILE_KEY, JSON.stringify(payload));
       }
       console.log('[FULFILLMENT] Methods saved:', payload ?? methods);
     } catch (error) {
+      // A rejected backend save must not leave the UI showing the vendor's
+      // attempted change as if it had taken effect.
       setFulfillmentMethodsState(previousMethods);
       console.error('[FULFILLMENT] Failed to save methods:', error);
       throw error;

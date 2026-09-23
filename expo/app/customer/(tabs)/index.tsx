@@ -451,12 +451,12 @@ export default function CustomerHomeScreen() {
               <MapPin size={20} color={Colors.textMuted} strokeWidth={2} />
               <Text style={styles.locationRequiredTitle}>
                 {isComingSoon
-                  ? 'the platform is coming soon to your region'
+                  ? 'Platform is coming soon to your region'
                   : 'Vendors are currently waitlisted in your region'}
               </Text>
               <Text style={styles.locationRequiredBody}>
                 {isComingSoon
-                  ? `the platform is not yet available in ${statusCountryName}. We're working hard to bring our platform to more countries.`
+                  ? `Platform is not yet available in ${statusCountryName}. We're working hard to bring our platform to more countries.`
                   : `Vendor discovery is not yet available in ${statusCountryName}. Vendors are being onboarded and will be visible once we fully launch.`}
               </Text>
             </View>
@@ -472,7 +472,7 @@ export default function CustomerHomeScreen() {
               <Users size={20} color={Colors.textMuted} strokeWidth={2} />
               <Text style={styles.locationRequiredTitle}>No vendors available in your area yet</Text>
               <Text style={styles.locationRequiredBody}>
-                We&apos;re onboarding businesses and more vendors will appear soon. You can also invite vendors you know to join theplatform.
+                We&apos;re onboarding businesses and more vendors will appear soon. You can also invite vendors you know to join Platform.
               </Text>
               <TouchableOpacity
                 style={styles.selectLocationButton}

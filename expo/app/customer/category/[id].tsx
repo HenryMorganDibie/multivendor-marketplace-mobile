@@ -6,6 +6,8 @@ import { ChevronLeft } from 'lucide-react-native';
 import { Vendor } from '@/mocks/vendorData';
 import { useVendorFilter } from '@/contexts/VendorFilterContext';
 import VendorCard from '@/components/VendorCard';
+import ListStateView from '@/components/ListStateView';
+import { VendorListSkeleton } from '@/components/SkeletonLoader';
 import { Colors } from '@/constants/colors';
 
 const CATEGORY_MAP: Record<string, { name: string; filter: (v: Vendor) => boolean }> = {
@@ -66,7 +68,7 @@ export default function CategoryScreen() {
 
   const categoryId = typeof id === 'string' ? id : id?.[0] || 'food';
   const categoryInfo = CATEGORY_MAP[categoryId] || CATEGORY_MAP.food;
-  const { verifiedVendors } = useVendorFilter();
+  const { verifiedVendors, isLoading } = useVendorFilter();
 
   const vendors = useMemo(() => {
     console.log('[CATEGORY] Filtering verified vendors for:', categoryInfo.name);
@@ -100,32 +102,36 @@ export default function CategoryScreen() {
           <View style={styles.headerSpacer} />
         </View>
 
-        <FlatList
-          data={vendors}
-          keyExtractor={vendor => vendor.id}
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.vendorList}
-          initialNumToRender={6}
-          maxToRenderPerBatch={8}
-          windowSize={5}
-          removeClippedSubviews
-          ListEmptyComponent={(
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No vendors found</Text>
-              <Text style={styles.emptySubtext}>Check back later for vendors in this category</Text>
-            </View>
-          )}
-          ListFooterComponent={<View style={styles.bottomPadding} />}
-          renderItem={({ item }) => (
-            <VendorCard
-              vendor={item}
-              isFavorite={favorites.has(item.id)}
-              onToggleFavorite={toggleFavorite}
-              variant="compact"
-            />
-          )}
-        />
+        <ListStateView
+          isLoading={isLoading ?? false}
+          isError={false}
+          isEmpty={vendors.length === 0}
+          loadingSkeleton={<VendorListSkeleton count={5} />}
+          emptyTitle="No vendors found"
+          emptyDescription="Check back later for vendors in this category"
+          style={styles.stateContainer}
+        >
+          <FlatList
+            data={vendors}
+            keyExtractor={vendor => vendor.id}
+            style={styles.scrollView}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.vendorList}
+            initialNumToRender={6}
+            maxToRenderPerBatch={8}
+            windowSize={5}
+            removeClippedSubviews
+            ListFooterComponent={<View style={styles.bottomPadding} />}
+            renderItem={({ item }) => (
+              <VendorCard
+                vendor={item}
+                isFavorite={favorites.has(item.id)}
+                onToggleFavorite={toggleFavorite}
+                variant="compact"
+              />
+            )}
+          />
+        </ListStateView>
       </SafeAreaView>
     </View>
   );
@@ -169,21 +175,8 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 20,
   },
-  emptyState: {
-    alignItems: 'center' as const,
-    paddingVertical: 64,
-    paddingHorizontal: 24,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: Colors.textMuted,
-    textAlign: 'center' as const,
+  stateContainer: {
+    flex: 1,
   },
   bottomPadding: {
     height: 32,

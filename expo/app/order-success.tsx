@@ -7,19 +7,23 @@ import { Colors } from '@/constants/colors';
 
 export default function OrderSuccessScreen() {
   const router = useRouter();
-  const { vendorName, orderId, vendorWasClosed, vendorNextOpenTime } = useLocalSearchParams<{
+  const { vendorName, orderId, vendorWasClosed, vendorNextOpenTime, deliveryContactPending } = useLocalSearchParams<{
     vendorName?: string;
     vendorId?: string;
     orderId?: string;
     vendorWasClosed?: string;
     vendorNextOpenTime?: string;
+    deliveryContactPending?: string;
   }>();
 
   const wasClosed = vendorWasClosed === 'true';
 
   const handleViewOrder = () => {
     if (orderId) {
-      router.replace(`/order/${orderId}` as any);
+      router.replace({
+        pathname: `/order/${orderId}` as any,
+        params: deliveryContactPending === 'true' ? { deliveryContactPending: 'true' } : {},
+      });
     } else {
       router.replace('/customer/(tabs)' as any);
     }

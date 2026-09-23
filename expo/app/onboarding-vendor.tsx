@@ -26,7 +26,7 @@ const slides: Slide[] = [
   {
     icon: 'banknote',
     title: 'Sell without commissions',
-    body: 'the platform never takes a cut from your sales. You keep 100% of what you earn.',
+    body: 'Platform never takes a cut from your sales. You keep 100% of what you earn.',
   },
   {
     icon: 'wallet',

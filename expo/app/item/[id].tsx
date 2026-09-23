@@ -41,6 +41,7 @@ import { safeShare } from '@/utils/share';
 import { formatPriceWithCommas } from '@/utils/formatPrice';
 import { useOrders } from '@/contexts/OrdersContext';
 import { getActivePromotions } from '@/mocks/promotionsData';
+import { usePrimeVendorPromotions } from '@/contexts/PromoContext';
 import { getMenuItemDisplayPrice, hasItemSalePrice } from '@/utils/itemPricing';
 import { catalogService } from '@/services/catalogService';
 
@@ -241,6 +242,7 @@ function ItemViewContent({
     }
   }, [cartItemInfo, isInitialized, catalogItem?.addOnGroups]);
 
+  const promoVersion = usePrimeVendorPromotions(vendorId);
   const itemPromoBadges = useMemo(() => {
     if (!vendorId) return [];
     const activePromos = getActivePromotions(vendorId);
@@ -255,7 +257,7 @@ function ItemViewContent({
       }
     }
     return badges;
-  }, [vendorId, id]);
+  }, [vendorId, id, promoVersion]);
 
   const { orders } = useOrders();
   const orderedBefore = useMemo(() => {
@@ -478,7 +480,7 @@ function ItemViewContent({
 
   const handleShare = async () => {
     setShowActionsModal(false);
-    await safeShare({ message: `Check out ${item.name} on the platform!`, title: item.name });
+    await safeShare({ message: `Check out ${item.name} on Platform!`, title: item.name });
   };
 
   const handleForward = () => {

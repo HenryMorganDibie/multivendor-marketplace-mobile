@@ -19,7 +19,7 @@ app.use(
 );
 
 app.get("/", (c) => {
-  return c.json({ status: "ok", message: "the platform API is running" });
+  return c.json({ status: "ok", message: "Platform API is running" });
 });
 
 export default app;

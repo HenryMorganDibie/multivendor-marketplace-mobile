@@ -196,7 +196,7 @@ export default function ReportsScreen() {
             </tbody>
           </table>
           <div class="disclaimer">
-            <p><strong>Disclaimer:</strong> This report is generated from vendor-entered order data. the platform does not process payments, verify transactions, or guarantee financial accuracy.</p>
+            <p><strong>Disclaimer:</strong> This report is generated from vendor-entered order data. Platform does not process payments, verify transactions, or guarantee financial accuracy.</p>
           </div>
         </body>
       </html>
@@ -494,7 +494,7 @@ export default function ReportsScreen() {
         <View style={styles.disclaimerCard}>
           <Text style={styles.disclaimerTitle}>About these reports</Text>
           <Text style={styles.disclaimerText}>
-            Reports are generated from vendor-entered order data. the platform does not process payments, verify transactions, or guarantee financial accuracy. Not suitable for official tax filings without independent verification.
+            Reports are generated from vendor-entered order data. Platform does not process payments, verify transactions, or guarantee financial accuracy. Not suitable for official tax filings without independent verification.
           </Text>
         </View>
 

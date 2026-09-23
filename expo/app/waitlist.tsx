@@ -29,7 +29,7 @@ export default function WaitlistScreen() {
           <Text style={styles.title}>You're on the waitlist</Text>
           
           <Text style={styles.body}>
-            the platform is currently in limited availability in your country. You can create a vendor account, but storefront creation and menu publishing are not yet available.
+            Platform is currently in limited availability in your country. You can create a vendor account, but storefront creation and menu publishing are not yet available.
           </Text>
 
           <View style={styles.infoBox}>

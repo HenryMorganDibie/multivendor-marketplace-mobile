@@ -19,8 +19,13 @@ import { useVendorMenu } from '@/data/hooks';
 import { useOrders } from '@/contexts/OrdersContext';
 import { useSafeBack } from '@/utils/useSafeBack';
 import { Alert } from '@/utils/alert';
-import { vendorPlanAllowsAi } from '@/utils/platformAiLimits';
+import { vendorPlanAllowsAi, PLATFORM_AI_CUSTOMER_ENABLED } from '@/utils/platformAiLimits';
 import { MenuItem, Vendor } from '@/mocks/vendorData';
+
+const SOCIAL_LINK_HOSTS: Record<'instagram' | 'tiktok', string[]> = {
+  instagram: ['instagram.com', 'www.instagram.com'],
+  tiktok: ['tiktok.com', 'www.tiktok.com'],
+};
 
 export function useStorefrontViewModel(vendor: Vendor) {
   const router = useRouter();
@@ -43,7 +48,6 @@ export function useStorefrontViewModel(vendor: Vendor) {
   const [descriptionExpanded, setDescriptionExpanded] = useState<boolean>(false);
   const [showPolicyModal, setShowPolicyModal] = useState<boolean>(false);
   const { toastVisible: showCopiedToast, showToast: triggerCopiedToast } = useToast();
-  const [showClosedModal, setShowClosedModal] = useState<boolean>(false);
 
   const { items: cartItems, addItem, removeItem, getVendorCart, setActiveVendor } = useCart();
   const { chatMode } = useVendorChatMode();
@@ -51,16 +55,17 @@ export function useStorefrontViewModel(vendor: Vendor) {
   const { canChat, canAccessAI, canAddToCart } = useVendorStatusPermissions();
   const { isUserBlocked } = useBlockedUsers();
   const isVendorBlocked = isUserBlocked(vendor.id);
-  // Plan gate: Basic vendors cannot offer the platform AI to customers at all.
+  // Plan gate: Basic vendors cannot offer Platform AI to customers at all.
   // Combined with the existing vendor-status gate (UNVERIFIED/SUSPENDED/etc.)
   // which already sets canAccessAI=false. Backend will own the plan tier —
   // Henry can swap `vendor.plan` for a Firestore read later.
-  const canUsePlatformAi = canAccessAI && vendorPlanAllowsAi(vendor);
+  const canUsePlatformAi =
+    PLATFORM_AI_CUSTOMER_ENABLED &&
+    canAccessAI &&
+    vendorPlanAllowsAi(vendor);
   const { trackVendorView } = useRecentlyViewed();
   const { isFavorite, toggleFavorite } = useFavorites();
   const vendorFavorited = isFavorite(vendor.id);
-
-  const isStoreOpen = !vendor.storeStatus || vendor.storeStatus === 'open';
 
   const cartScaleAnim = React.useRef(new Animated.Value(0)).current;
   const [cartVisible, setCartVisible] = React.useState<boolean>(false);
@@ -110,19 +115,12 @@ export function useStorefrontViewModel(vendor: Vendor) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vendor.id]);
 
-  React.useEffect(() => {
-    if (!isStoreOpen) {
-      console.log('[STORE] Store is not open, status:', vendor.storeStatus);
-      setShowClosedModal(true);
-    }
-  }, [isStoreOpen, vendor.storeStatus]);
-
   const handleBackPress = () => {
     safeBack();
   };
 
   const handleMenuPress = async () => {
-    // theplatform.com does not resolve, and /@{username} was never the real
+    // example.com does not resolve, and /@{username} was never the real
     // route anyway — /store/[username].tsx is. Matches shareStorefront.ts's
     // storefrontUrl() so there is one link format, not two.
     const shareUrl = `https://platform-dev.web.app/store/${vendor.username}`;
@@ -210,17 +208,42 @@ export function useStorefrontViewModel(vendor: Vendor) {
     console.log('Vendor details opened');
   };
 
-  const handleOpenLink = async (url: string) => {
+  const handleOpenLink = async (url: string, platform: 'website' | 'instagram' | 'tiktok' = 'website') => {
     // Was console.log-only — the Website/Instagram/TikTok rows in the vendor
     // details modal looked tappable but did nothing (same class as the
     // no-op tap targets found elsewhere this session). Matches the
     // Linking.openURL pattern already used for external links, e.g.
     // app/settings/privacy.tsx's handleOpenPrivacyPolicy/handleOpenTerms.
+    //
+    // Re-validated here rather than trusted as stored: backend normalization
+    // (updateVendorStorefront.ts) guards new saves, but a legacy vendor doc
+    // written before that validation existed could still hold an unsafe or
+    // malformed value. Failing closed with a visible error is safer than
+    // silently no-op'ing or handing an arbitrary scheme to Linking.openURL.
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      Alert.alert('Cannot open link', 'This link is not valid.');
+      return;
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      Alert.alert('Cannot open link', 'This link is not valid.');
+      return;
+    }
+    if (platform !== 'website') {
+      const allowedHosts = SOCIAL_LINK_HOSTS[platform];
+      if (!allowedHosts.includes(parsed.hostname.toLowerCase())) {
+        Alert.alert('Cannot open link', 'This link is not valid.');
+        return;
+      }
+    }
     console.log('Opening link:', url);
     try {
-      await Linking.openURL(url);
+      await Linking.openURL(parsed.toString());
     } catch (error) {
       console.error('[STORE] Failed to open link:', url, error);
+      Alert.alert('Cannot open link', 'This link could not be opened.');
     }
   };
 
@@ -235,7 +258,7 @@ export function useStorefrontViewModel(vendor: Vendor) {
       // against any other entry point.
       return;
     }
-    console.log('Ask the platform AI pressed for vendor:', vendor.id);
+    console.log('Ask Platform AI pressed for vendor:', vendor.id);
     router.push(`/chat/ai/${vendor.id}` as any);
   };
 
@@ -358,12 +381,9 @@ export function useStorefrontViewModel(vendor: Vendor) {
     showPolicyModal,
     setShowPolicyModal,
     showCopiedToast,
-    showClosedModal,
-    setShowClosedModal,
     vendorCartCount: currentVendorItemCount,
     cartVisible,
     cartScaleAnim,
-    isStoreOpen,
     isVendorBlocked,
     vendorFavorited,
     canChat,

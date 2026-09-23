@@ -17,7 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Alert } from '@/utils/alert';
 
 const DELETION_REASONS = [
-  "I'm no longer using the platform",
+  "I'm no longer using Platform",
   'I had a bad experience with a vendor',
   'I had a bad experience with the app',
   'Privacy concerns',
@@ -122,7 +122,7 @@ export default function DeleteAccountScreen() {
           </View>
           <View style={styles.infoItem}>
             <Text style={styles.bulletPoint}>•</Text>
-            <Text style={styles.infoText}>You will be logged out of the platform</Text>
+            <Text style={styles.infoText}>You will be logged out of Platform</Text>
           </View>
           <View style={styles.infoItem}>
             <Text style={styles.bulletPoint}>•</Text>

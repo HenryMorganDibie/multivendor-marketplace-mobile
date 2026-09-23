@@ -109,15 +109,20 @@ export const mockVendorPromotions: VendorPromotion[] = [
   },
 ];
 
-let _externalPromotions: VendorPromotion[] = [];
+// Keyed by vendor rather than one flat list: several vendors' real
+// promotions can be primed at once (a customer's cart, a storefront preview,
+// an item modal, each for whichever vendor it's showing), and a single
+// shared list would let the last one to load silently overwrite another
+// vendor's promotions out from under an already-rendered screen.
+const _externalPromotionsByVendor = new Map<string, VendorPromotion[]>();
 
-export function setExternalPromotions(promotions: VendorPromotion[]) {
-  _externalPromotions = promotions;
+export function setExternalPromotions(vendorId: string, promotions: VendorPromotion[]) {
+  _externalPromotionsByVendor.set(vendorId, promotions);
 }
 
 export function getActivePromotions(vendorId: string): VendorPromotion[] {
   const now = new Date();
-  const all = [...mockVendorPromotions, ..._externalPromotions];
+  const all = [...mockVendorPromotions, ...(_externalPromotionsByVendor.get(vendorId) ?? [])];
   const seen = new Set<string>();
   return all.filter((p) => {
     if (seen.has(p.id)) return false;

@@ -302,7 +302,7 @@ export const PaymentStateCard = React.memo(function PaymentStateCard({
               <View style={styles.bannerTextBlock}>
                 <Text style={styles.reviewBannerTitle}>This order is temporarily under review.</Text>
                 <Text style={styles.reviewBannerSubtext}>
-                  The vendor is currently unavailable. the platform support has been notified.
+                  The vendor is currently unavailable. Platform support has been notified.
                 </Text>
               </View>
             </View>
@@ -335,7 +335,7 @@ export const PaymentStateCard = React.memo(function PaymentStateCard({
       {renderContent()}
       <Toast visible={toastVisible} />
       <Text style={styles.legalFooter}>
-        Orders and payments are handled directly by vendors on theplatform.
+        Orders and payments are handled directly by vendors on Platform.
       </Text>
     </Animated.View>
   );

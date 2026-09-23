@@ -73,15 +73,15 @@ function getPaymentStatusDisplay(
 }
 
 /**
- * Invoice page — the in-app representation of https://theplatform.app/i/{shareCode}.
+ * Invoice page — the in-app representation of https://platform.app/i/{shareCode}.
  * Read-only, live: reflects the latest saved invoice state. Branding is applied
  * automatically from the vendor's saved branding settings and current plan.
  *
  * Two experiences share this route and the same InvoiceRenderer:
  * - Public (share URL, no `viewer` param): external customer lands here from the
- *   secure share link. the platform acquisition CTA only — no "Contact Vendor"
+ *   secure share link. Platform acquisition CTA only — no "Contact Vendor"
  *   button. Customer name is shown verbatim as the vendor typed it.
- * - Logged-in the platform customer (`viewer=customer`, opened from the chat invoice
+ * - Logged-in Platform customer (`viewer=customer`, opened from the chat invoice
  *   card): in-app experience. The existing chat is the contact channel, so the
  *   helper reads "Need changes? Reply in chat." and Back returns to the chat
  *   thread via the `returnTo` param. Internal customer is shown as "First L."
@@ -89,7 +89,7 @@ function getPaymentStatusDisplay(
  *
  * MVP rules enforced here:
  *   - No Pay Now / Record Payment / Mark as Paid / Edit / Delete / Convert to
- *     Order. the platform does not process payments.
+ *     Order. Platform does not process payments.
  *   - No "Viewed" status, no view tracking. The invoice status is never flipped
  *     to `viewed` on this screen.
  *   - Customer-facing status uses payment-status labels (Pending Payment /
@@ -154,7 +154,7 @@ export default function PublicInvoiceScreen() {
    *  - the public share-link visitor is not signed in as a vendor at all,
    *    so `vendor` stayed the VendorContext default (the mock "Spicy
    *    Restaurant" fixture) forever;
-   *  - the in-app the platform customer is signed in as a customer, so `vendor`
+   *  - the in-app Platform customer is signed in as a customer, so `vendor`
    *    was whatever the mock default resolves to for them too.
    * Every shared invoice therefore displayed the same fake business's name,
    * phone, email and address regardless of who actually issued it. Fetching
@@ -295,7 +295,7 @@ export default function PublicInvoiceScreen() {
     minute: '2-digit',
   });
 
-  // Privacy: internal the platform customers always render as "First L." External
+  // Privacy: internal Platform customers always render as "First L." External
   // customers use the vendor-typed display name verbatim. For the public
   // external page we show the customer name as stored (which Henry should
   // already have stored privacy-safe for internal customers at the data
@@ -407,21 +407,21 @@ export default function PublicInvoiceScreen() {
               <Text style={styles.helperText}>Need changes? Reply in chat.</Text>
             </View>
           ) : (
-            /* PUBLIC SHARE URL — external customer. the platform acquisition CTA
-             * only. "Powered by the platform" is rendered by InvoiceRenderer above
+            /* PUBLIC SHARE URL — external customer. Platform acquisition CTA
+             * only. "Powered by Platform" is rendered by InvoiceRenderer above
              * for the public page too. */
             <View style={styles.ctaCard}>
               <TouchableOpacity
                 style={styles.ctaPrimary}
-                onPress={() => Linking.openURL('https://theplatform.app')}
+                onPress={() => Linking.openURL('https://platform.app')}
                 activeOpacity={0.8}
               >
                 <Sparkles size={16} color={Colors.white} />
-                <Text style={styles.ctaPrimaryText}>Get the platform</Text>
+                <Text style={styles.ctaPrimaryText}>Get Platform</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.ctaSecondary}
-                onPress={() => Linking.openURL('https://theplatform.app')}
+                onPress={() => Linking.openURL('https://platform.app')}
                 activeOpacity={0.8}
               >
                 <Smartphone size={16} color={Colors.primary} />

@@ -31,11 +31,11 @@ import { useAppRating } from '@/contexts/AppRatingContext';
 
 export function useVendorOrderDetails(orderId: string, openedFromChat: boolean) {
   const router = useRouter();
-  const { getOrder, addVendorEvent, updateOrderStatus } = useOrders();
+  const { getOrder, addVendorEvent } = useOrders();
   const { externalOrders } = useExternalOrders();
   const { autoAcceptEnabled } = useVendorAutoAccept();
   const { logEvent } = useAuditLog();
-  const { createChangeRequest, getRequestForOrder } = useChangeRequests();
+  const { createChangeRequest, getRequestForOrder, subscribeToOrder } = useChangeRequests();
   const { user } = useAuth();
   const { triggerAppRating } = useAppRating();
   const appRatingTriggered = useRef(false);
@@ -105,6 +105,18 @@ export function useVendorOrderDetails(orderId: string, openedFromChat: boolean) 
     };
   }, []);
 
+  const orderItemsTotal = useMemo(() => {
+    if (!order) return 0;
+    return order.items.reduce((sum, item) => {
+      const addOnTotal = item.addOns?.reduce((s, a) => s + a.price, 0) ?? 0;
+      return sum + (item.price + addOnTotal) * item.quantity;
+    }, 0);
+  }, [order]);
+
+  useEffect(() => {
+    if (order) subscribeToOrder(orderId, order.vendorName, orderItemsTotal);
+  }, [order, orderId, orderItemsTotal, subscribeToOrder]);
+
   const displayFlags = order
     ? selectOrderDisplayFlags(order, autoAcceptEnabled)
     : null;
@@ -134,51 +146,42 @@ export function useVendorOrderDetails(orderId: string, openedFromChat: boolean) 
     setShowRequestChangesSheet(true);
   }, [orderId]);
 
-  const handleSendChangeRequest = useCallback((params: {
+  const [isSendingChangeRequest, setIsSendingChangeRequest] = useState<boolean>(false);
+
+  const handleSendChangeRequest = useCallback(async (params: {
     issueType: ChangeRequestIssueType;
     changes: ChangeRequestChange[];
     vendorMessage?: string;
   }) => {
     if (!order) return;
-    console.log('[VendorOrders] Sending change request:', params.issueType);
 
-    const originalTotal = order.items.reduce((sum, item) => {
-      const addOnTotal = item.addOns?.reduce((s, a) => s + a.price, 0) ?? 0;
-      return sum + (item.price + addOnTotal) * item.quantity;
-    }, 0);
-
-    let proposedTotal = originalTotal;
-    for (const change of params.changes) {
-      const origLineTotal = change.originalItem.price * change.originalItem.quantity;
-      if (change.action === 'remove') {
-        proposedTotal -= origLineTotal;
-      } else if (change.action === 'adjust_quantity' && change.newQuantity !== undefined) {
-        proposedTotal += (change.newQuantity - change.originalItem.quantity) * change.originalItem.price;
-      } else if (change.action === 'replace' && change.replacementItem && change.newQuantity !== undefined) {
-        proposedTotal = proposedTotal - origLineTotal + change.replacementItem.price * change.newQuantity;
-      }
+    setIsSendingChangeRequest(true);
+    try {
+      // The order itself stays in "requested" status for the whole
+      // negotiation - handleChangeRequest's own precondition requires that,
+      // and the pending-request card (pendingChangeRequest below) is what
+      // actually drives the "awaiting customer response" UI state, not a
+      // separate order status. There is no real "awaiting_customer_update"
+      // transition on the backend; a previous version of this screen called
+      // updateOrderStatus with that value, which was never a legal
+      // transition and silently did nothing.
+      await createChangeRequest({
+        orderId,
+        vendorName: order.vendorName,
+        issueType: params.issueType,
+        vendorMessage: params.vendorMessage,
+        changes: params.changes,
+        originalTotal: orderItemsTotal,
+        proposedTotal: orderItemsTotal, // display-only fallback; the live subscription recomputes this from the real stored change list
+      });
+      setShowRequestChangesSheet(false);
+    } catch (error) {
+      console.error('[VendorOrders] Failed to send change request:', error);
+      Alert.alert('Could not send changes', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setIsSendingChangeRequest(false);
     }
-
-    createChangeRequest({
-      orderId,
-      vendorName: order.vendorName,
-      issueType: params.issueType,
-      vendorMessage: params.vendorMessage,
-      changes: params.changes,
-      originalTotal,
-      proposedTotal: Math.max(0, proposedTotal),
-    });
-    updateOrderStatus(orderId, 'awaiting_customer_update');
-    void logEvent({
-      eventType: 'order_status_changed',
-      orderId: order.id,
-      vendorId: 'vendor_mock',
-      customerId: order.customerId || 'customer_mock',
-      previousState: order.status,
-      newState: 'awaiting_customer_update',
-    });
-    setShowRequestChangesSheet(false);
-  }, [order, orderId, createChangeRequest, updateOrderStatus, logEvent]);
+  }, [order, orderId, orderItemsTotal, createChangeRequest]);
 
   const pendingChangeRequest = order ? getRequestForOrder(orderId) : undefined;
 

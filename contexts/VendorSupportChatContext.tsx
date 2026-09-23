@@ -25,7 +25,7 @@ const INITIAL_SYSTEM_MESSAGES: SupportMessage[] = [
   {
     id: 'sys-1',
     type: 'system',
-    content: 'This chat is with the official the platform Vendor Support team.',
+    content: 'This chat is with the official Platform Vendor Support team.',
     sender: 'system',
     timestamp: new Date().toISOString(),
   },
@@ -48,7 +48,7 @@ const INITIAL_SYSTEM_MESSAGES: SupportMessage[] = [
 const GREETING_MESSAGE: SupportMessage = {
   id: 'greeting-1',
   type: 'text',
-  content: 'Hi! Thanks for contacting the platform Vendor Support. How can we help you today?',
+  content: 'Hi! Thanks for contacting Platform Vendor Support. How can we help you today?',
   sender: 'support',
   timestamp: new Date().toISOString(),
 };

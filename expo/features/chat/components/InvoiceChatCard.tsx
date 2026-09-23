@@ -100,7 +100,7 @@ function generateInvoiceHTMLMini(params: {
     <span class="status-note">Payment status recorded by vendor</span>
     ${notes ? `<div style="margin-top:16px;padding:14px;background:#F9FAFB;border-radius:10px;"><p style="font-size:13px;color:#374151;">${notes}</p></div>` : ''}
     <div class="footer">
-      <p>the platform does not process payments. Payments are handled directly between customer and vendor.</p>
+      <p>Platform does not process payments. Payments are handled directly between customer and vendor.</p>
     </div>
   </body></html>`;
 }

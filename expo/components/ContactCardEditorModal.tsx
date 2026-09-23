@@ -339,7 +339,7 @@ export function ContactCardEditorModal({
                 <Lock size={18} color={Colors.primary} strokeWidth={2} />
               </View>
               <Text style={styles.privacyText}>
-                Contact cards are stored locally on your device only. They are not uploaded to the platform servers and cannot be screenshotted.
+                Contact cards are stored locally on your device only. They are not uploaded to Platform servers and cannot be screenshotted.
               </Text>
             </View>
 

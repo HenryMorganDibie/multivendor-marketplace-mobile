@@ -75,7 +75,7 @@ export default function PublicOrderSummaryScreen() {
 
   const handleVisitStorefront = () => {
     if (!order) return;
-    const storeUrl = `https://theplatform.com/@${order.vendorSlug}`;
+    const storeUrl = `https://example.com/@${order.vendorSlug}`;
     console.log('[OrderSummary] Opening storefront:', storeUrl);
     Linking.openURL(storeUrl).catch((err) => {
       console.error('[OrderSummary] Failed to open storefront:', err);
@@ -244,7 +244,7 @@ export default function PublicOrderSummaryScreen() {
           <View style={styles.inviteSection}>
             <Text style={styles.inviteHeader}>Order from {order.vendorName}</Text>
             <Text style={styles.inviteMessage}>
-              For future orders, you can order directly from {order.vendorName} on the platform app.
+              For future orders, you can order directly from {order.vendorName} on the Platform app.
             </Text>
             <TouchableOpacity
               style={styles.visitButton}
@@ -253,7 +253,7 @@ export default function PublicOrderSummaryScreen() {
             >
               <ExternalLink size={16} color={Colors.white} />
               <Text style={styles.visitButtonText}>
-                Visit {order.vendorName} on the platform
+                Visit {order.vendorName} on Platform
               </Text>
             </TouchableOpacity>
 
@@ -282,7 +282,7 @@ export default function PublicOrderSummaryScreen() {
           </View>
 
           <View style={styles.footerSection}>
-            <Text style={styles.footerText}>Powered by the platform</Text>
+            <Text style={styles.footerText}>Powered by Platform</Text>
           </View>
         </ScrollView>
       </SafeAreaView>

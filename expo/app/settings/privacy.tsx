@@ -22,12 +22,12 @@ export default function PrivacyScreen() {
 
   const handleOpenPrivacyPolicy = () => {
     console.log('Opening Privacy Policy');
-    Linking.openURL('https://theplatform.com/privacy');
+    Linking.openURL('https://example.com/privacy');
   };
 
   const handleOpenTerms = () => {
     console.log('Opening Terms of Use');
-    Linking.openURL('https://theplatform.com/terms');
+    Linking.openURL('https://example.com/terms');
   };
 
   const handleOpenBlockedUsers = () => {
@@ -69,12 +69,12 @@ export default function PrivacyScreen() {
           <Text style={styles.sectionHeading}>Your Data</Text>
           <View style={styles.infoBox}>
             <Text style={styles.infoText}>
-              the platform collects minimal personal data.
+              Platform collects minimal personal data.
             </Text>
           </View>
           <View style={styles.infoBox}>
             <Text style={styles.infoText}>
-              Payments are not processed by theplatform.
+              Payments are not processed by Platform.
             </Text>
           </View>
           <View style={styles.infoBox}>

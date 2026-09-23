@@ -18,7 +18,7 @@ export default function AllowExternalOrdersScreen() {
           <View style={styles.infoCard}>
             <Text style={styles.infoTitle}>Purpose</Text>
             <Text style={styles.infoText}>
-              Allow vendors to manually record orders received outside the platform for internal tracking purposes.
+              Allow vendors to manually record orders received outside Platform for internal tracking purposes.
             </Text>
           </View>
 

@@ -207,8 +207,8 @@ export const [CustomerNotificationProvider, useCustomerNotifications] = createCo
       type: 'new_support_message',
       domain: 'support',
       title: 'New message',
-      message: 'the platform Support has sent you a message.',
-      actorName: 'the platform Support',
+      message: 'Platform Support has sent you a message.',
+      actorName: 'Platform Support',
     });
   }, [addNotification]);
 

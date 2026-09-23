@@ -47,7 +47,7 @@ export default function VendorPendingScreen() {
 
             <Text style={styles.title}>You&apos;re on the waitlist</Text>
             <Text style={styles.description}>
-              the platform is currently in limited availability in your country. You can verify your account, but storefront features aren&apos;t available yet.
+              Platform is currently in limited availability in your country. You can verify your account, but storefront features aren&apos;t available yet.
             </Text>
 
             <View style={styles.waitlistBox}>

@@ -57,8 +57,8 @@ export default function OnboardingScreen() {
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.brandName}>THE PLATFORM</Text>
-            <Text style={styles.title}>Welcome to the platform</Text>
+            <Text style={styles.brandName}>PLATFORM</Text>
+            <Text style={styles.title}>Welcome to Platform</Text>
             <Text style={styles.subtitle}>Choose how you want to continue</Text>
           </View>
 

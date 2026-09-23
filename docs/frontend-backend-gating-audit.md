@@ -1,4 +1,4 @@
-# Frontend/Backend Plan-Gating Audit v3 (Independently Verified) — rork-the platform vs platform-backend
+# Frontend/Backend Plan-Gating Audit v3 (Independently Verified) — rork-platform vs multivendor-marketplace-platform
 
 **Verification note:** This is the third pass of this audit. v2 independently re-checked every item from the original v1 audit against the actual source files in both repos and corrected three inaccuracies. v3 extends coverage beyond the original 12-item list: after v2 was sent, a deeper sweep checked every single row of the MVP_Features.pdf tables against the frontend for items that were never in the original audit at all — not just re-verifying claimed bugs, but actively searching for gaps the original audit missed entirely. Two such gaps were found and are added here as items #13 and #14. All numbers were cross-checked against `functions/src/subscriptions/planLimitsSeedData.ts` (`DEFAULT_PLAN_LIMITS`, confirmed as the real backend source of truth) and the official "MVP Features.pdf" spec — no discrepancies found beyond what's documented below.
 
@@ -42,7 +42,7 @@ These screens/flows work identically regardless of vendor tier — no quota, no 
 | 8 | `app/vendor/settings/business-policies.tsx` | Should be Standard+ only (`canSetBusinessPolicies`) — zero plan-related code in the file, available to everyone including Basic |
 | 9 | `app/vendor/settings/create-invoice.tsx`, `invoices.tsx`, `send-invoice/[invoiceId].tsx` | No invoice-per-month quota (3/25/100/200), no invoice-history-window (30/180/548/1095 days), no PDF-download gate, no duplicate-invoice gate. Confirmed: `invoices.tsx` reads `plan` exactly once, only to drive `getBrandingUpgradePrompt()` — never for quota/history/PDF/duplicate logic. `create-invoice.tsx` has zero plan references at all. |
 | 10 | Catalog screens generally | Catalog item **count** limit (10/30/100/250 — distinct from the photo-per-item limit in #1) isn't enforced anywhere. Confirmed: no `catalogItemLimit`, `MAX_ITEMS`, or equivalent constant exists anywhere in the catalog screens or `CatalogContext.tsx`. |
-| 12 | `features/storefront/components/StorefrontCatalog.tsx`, `app/vendor/storefront-preview.tsx` ("Ask the platform AI" button) | `canShowAIButton` (false/true/true/true) and `aiRepliesPerMonth` (0/100/300/500) not enforced. Confirmed: the button text/CTA exists in both files with zero `plan` reference anywhere nearby. |
+| 12 | `features/storefront/components/StorefrontCatalog.tsx`, `app/vendor/storefront-preview.tsx` ("Ask Platform AI" button) | `canShowAIButton` (false/true/true/true) and `aiRepliesPerMonth` (0/100/300/500) not enforced. Confirmed: the button text/CTA exists in both files with zero `plan` reference anywhere nearby. |
 
 ---
 

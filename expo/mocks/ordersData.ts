@@ -23,16 +23,16 @@ export type PaymentStatus = 'payment_pending' | 'partially_received' | 'payment_
 
 /**
  * Where an order originated.
- * - `internal`: placed inside the platform app by a customer.
+ * - `internal`: placed inside the Platform app by a customer.
  * - `external`: logged manually by the vendor (WhatsApp, Instagram, walk-in, etc.).
  *
- * The legacy value `'the platform'` is normalized to `'internal'` via
+ * The legacy value `'platform'` is normalized to `'internal'` via
  * {@link normalizeOrderSource} at the data boundary.
  */
 export type OrderSource = 'internal' | 'external';
 
 /** Legacy order-source value still present in older persisted/mock data. */
-export type LegacyOrderSource = 'the platform';
+export type LegacyOrderSource = 'platform';
 
 /** Normalize any order-source string to its canonical form. */
 export function normalizeOrderSource(
@@ -144,6 +144,17 @@ export interface Order {
   orderNote?: string;
   vendorPolicy?: string;
   hasRating?: boolean;
+  /**
+   * Whether orders/{orderId}.deliveryContact is set server-side. Deliberately
+   * a boolean only - the actual fullName/phoneNumber/address never flow
+   * through mapOrderDoc, since that pipeline is shared by both the customer's
+   * and the vendor's live order listener. A vendor must only ever see the
+   * real values through getOrderDetails (which strips them once the order is
+   * terminal); mapping the raw field here would leak it to the vendor's
+   * listener-derived order object with no expiry. See
+   * OrdersContext.getOrderDeliveryContact.
+   */
+  hasDeliveryContact?: boolean;
   completedBy?: CompletionSource;
   completedAt?: string;
   systemCompletionReason?: string;

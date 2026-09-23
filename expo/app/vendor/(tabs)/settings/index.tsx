@@ -55,7 +55,7 @@ export default function VendorSettingsScreen() {
       'security': '/vendor/settings/security',
       'verification': '/vendor/settings/verification',
       'ratings': '/vendor/settings/ratings',
-      'store-status': '/vendor/settings/store-status',
+      'business-hours': '/vendor/settings/business-hours',
       'business-policies': '/vendor/settings/business-policies',
       'quick-replies': '/vendor/settings/quick-replies',
       'greeting-message': '/vendor/settings/greeting-message',
@@ -154,10 +154,16 @@ export default function VendorSettingsScreen() {
           </View>
         </View>
 
+        {/* Former Store Status & Availability entry (store-status.tsx,
+            a disconnected/duplicate hours system) is repurposed here to
+            point at the real Business Hours editor instead -- the
+            authoritative vendors/{vendorId}.weeklyHours this patch made
+            customer-visible needs a reachable entry point too.
+            store-status.tsx itself remains untouched and unreachable. */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>STORE STATUS & AVAILABILITY</Text>
+          <Text style={styles.sectionTitle}>BUSINESS HOURS</Text>
           <View style={styles.glassCard}>
-            {renderSettingsRow('Store Status & Availability', () => handleItemPress('store-status'), true)}
+            {renderSettingsRow('Business Hours', () => handleItemPress('business-hours'), true)}
           </View>
         </View>
 
@@ -239,7 +245,7 @@ export default function VendorSettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>GROWTH</Text>
           <View style={styles.glassCard}>
-            {renderSettingsRow('Invite to the platform', () => router.push('/vendor/settings/invite-to-the platform' as any), true)}
+            {renderSettingsRow('Invite to Platform', () => router.push('/vendor/settings/invite-to-platform' as any), true)}
           </View>
         </View>
 

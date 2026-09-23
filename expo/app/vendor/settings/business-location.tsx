@@ -109,7 +109,7 @@ export default function BusinessLocationScreen() {
       // completed at the transport layer; the bare code is not something to
       // put in front of a vendor.
       const message = !raw || raw === 'internal'
-        ? 'Could not reach the platform just now. Check your connection and try again.'
+        ? 'Could not reach Platform just now. Check your connection and try again.'
         : raw;
       Alert.alert('Could not save', message);
     } finally {

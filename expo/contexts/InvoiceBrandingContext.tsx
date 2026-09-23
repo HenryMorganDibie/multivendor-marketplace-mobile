@@ -140,7 +140,13 @@ export const [InvoiceBrandingProvider, useInvoiceBranding] = createContextHook((
   const updateBranding = useCallback(
     (updates: Partial<InvoiceBrandingSettings>) => {
       const next: InvoiceBrandingSettings = { ...settings, ...updates };
-      void saveMutation.mutateAsync(next);
+      // Returns the mutation's promise (was previously discarded with
+      // `void`) so a caller can await it and find out whether a
+      // plan-gated field was actually rejected server-side
+      // (updateInvoiceBranding returns permission-denied for a field the
+      // vendor's plan doesn't allow, with no partial save) instead of
+      // assuming success the moment this function returns.
+      return saveMutation.mutateAsync(next);
     },
     [settings, saveMutation]
   );

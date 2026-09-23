@@ -45,7 +45,7 @@ export default function SendInvoiceScreen() {
     );
   }
 
-  /** Deliver into a the platform chat thread and drop the invoice card into the timeline. */
+  /** Deliver into a Platform chat thread and drop the invoice card into the timeline. */
   const deliverToChat = async (chatId: string, customerId?: string, customerName?: string) => {
     try {
       // sendInvoiceInChat already writes the real chat message server-side
@@ -172,7 +172,7 @@ export default function SendInvoiceScreen() {
               <AlertCircle size={15} color={Colors.primary} />
               <Text style={styles.alreadySentText}>
                 {invoice.status === 'sent_in_chat'
-                  ? 'This invoice was already sent in a the platform chat.'
+                  ? 'This invoice was already sent in a Platform chat.'
                   : 'This invoice was already shared externally.'}
                 {' '}You can resend it below.
               </Text>
@@ -192,7 +192,7 @@ export default function SendInvoiceScreen() {
               <MessageCircle size={22} color={Colors.primary} />
             </View>
             <View style={styles.optionBody}>
-              <Text style={styles.optionTitle}>Send in the platform Chat</Text>
+              <Text style={styles.optionTitle}>Send in Platform Chat</Text>
               <Text style={styles.optionDescription}>
                 {invoice.chatId
                   ? 'Attach this invoice to the customer\'s existing chat thread.'
@@ -215,7 +215,7 @@ export default function SendInvoiceScreen() {
             <View style={styles.optionBody}>
               <Text style={styles.optionTitle}>Share Invoice Link</Text>
               <Text style={styles.optionDescription}>
-                Send the secure invoice link via WhatsApp, SMS, email, or any other app. No the platform account needed.
+                Send the secure invoice link via WhatsApp, SMS, email, or any other app. No Platform account needed.
               </Text>
             </View>
             <ChevronRight size={18} color={Colors.textMuted} />

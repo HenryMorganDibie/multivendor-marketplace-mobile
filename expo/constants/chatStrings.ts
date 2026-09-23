@@ -15,6 +15,7 @@ export const CHAT_BANNERS = {
   blockedOther: 'Messaging is unavailable.',
   vendorSuspended: 'This vendor has been suspended and cannot receive messages.',
   vendorUnavailable: 'This vendor is currently unavailable.',
+  vendorStatusUnknown: "Couldn't check this vendor's status. Check your connection and try again.",
   vendorUnderReview: 'This vendor is under review. Messaging is limited.',
   limitedClarifications: 'Messaging is limited to order clarifications only.',
   businessHoursHint: 'Vendor may respond during business hours.',

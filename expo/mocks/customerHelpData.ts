@@ -13,7 +13,7 @@ export interface CustomerHelpArticle {
 }
 
 export const customerHelpCategories: CustomerHelpCategory[] = [
-  { id: 'getting-started', title: 'Getting Started', icon: 'Rocket', description: 'Set up your account and explore the platform' },
+  { id: 'getting-started', title: 'Getting Started', icon: 'Rocket', description: 'Set up your account and explore Platform' },
   { id: 'finding-vendors', title: 'Finding Vendors', icon: 'Search', description: 'Discover and explore vendor stores' },
   { id: 'ordering', title: 'Ordering', icon: 'ShoppingBag', description: 'Place and manage your orders' },
   { id: 'custom-orders', title: 'Custom Orders', icon: 'Sparkles', description: 'Receive personalized order proposals' },
@@ -24,15 +24,15 @@ export const customerHelpCategories: CustomerHelpCategory[] = [
   { id: 'favorites', title: 'Favorites', icon: 'Heart', description: 'Save vendors and items you love' },
   { id: 'privacy-security', title: 'Privacy & Security', icon: 'Lock', description: 'Manage your data and account safety' },
   { id: 'reporting-problem', title: 'Reporting a Problem', icon: 'Flag', description: 'Report issues or suspicious activity' },
-  { id: 'account-support', title: 'Account Support', icon: 'LifeBuoy', description: 'Get help from the platform team' },
+  { id: 'account-support', title: 'Account Support', icon: 'LifeBuoy', description: 'Get help from the Platform team' },
 ];
 
 export const customerHelpArticles: CustomerHelpArticle[] = [
   {
-    id: 'welcome-to-the platform',
+    id: 'welcome-to-platform',
     categoryId: 'getting-started',
-    title: 'Welcome to the platform',
-    content: `the platform connects you with local vendors so you can browse their stores, chat before ordering, and place orders directly.
+    title: 'Welcome to Platform',
+    content: `Platform connects you with local vendors so you can browse their stores, chat before ordering, and place orders directly.
 
 ## Getting set up
 • Complete your profile so vendors can recognize you
@@ -49,14 +49,14 @@ export const customerHelpArticles: CustomerHelpArticle[] = [
     id: 'setting-your-location',
     categoryId: 'getting-started',
     title: 'Setting your location',
-    content: `Your location helps the platform show you vendors in your area.
+    content: `Your location helps Platform show you vendors in your area.
 
 ## How to set it
 • Open Settings and tap Location
 • Choose your country, region, and area
 • Your home screen updates to show nearby vendors
 
-If no area is selected, the platform shows vendors based on your region instead. You can update your location anytime.`,
+If no area is selected, Platform shows vendors based on your region instead. You can update your location anytime.`,
   },
   {
     id: 'finding-and-browsing-vendors',
@@ -139,10 +139,10 @@ When you accept, it becomes an active order and follows the standard order lifec
     id: 'how-payment-works',
     categoryId: 'payments-safety',
     title: 'How payment works',
-    content: `the platform does not receive, hold, or process customer payments.
+    content: `Platform does not receive, hold, or process customer payments.
 
 ## Direct payment
-All payments happen directly between you and the vendor, outside of the platform app. The vendor sends you payment instructions when it is time to pay.
+All payments happen directly between you and the vendor, outside of the Platform app. The vendor sends you payment instructions when it is time to pay.
 
 ## Payment safety tips
 • Only pay after the vendor accepts your order
@@ -164,14 +164,14 @@ All payments happen directly between you and the vendor, outside of the platform
 • Payment amounts that do not match your order
 
 ## If something goes wrong
-Contact the vendor first to resolve payment issues. If you cannot reach a resolution, report the issue to the platform Support.`,
+Contact the vendor first to resolve payment issues. If you cannot reach a resolution, report the issue to Platform Support.`,
   },
   {
     id: 'messaging-vendors-safely',
     categoryId: 'messaging-vendors',
     title: 'Messaging vendors safely',
     content: `## Keep communication in-app
-Always communicate with vendors through the platform's chat. This keeps a record of your conversations and protects both parties.
+Always communicate with vendors through Platform's chat. This keeps a record of your conversations and protects both parties.
 
 ## Safe to share
 • Order details and preferences
@@ -266,7 +266,7 @@ Only include the details needed for the order, and only share when necessary for
     id: 'managing-privacy',
     categoryId: 'privacy-security',
     title: 'Managing your privacy',
-    content: `You control what you share on theplatform.
+    content: `You control what you share on Platform.
 
 ## Your data
 • Review the Privacy & Data screen in Settings
@@ -286,7 +286,7 @@ Blocking a vendor stops them from contacting you. You can manage blocked vendors
     categoryId: 'reporting-problem',
     title: 'Reporting a problem',
     content: `## When to report
-• A vendor violates the platform policies
+• A vendor violates Platform policies
 • You experience harassment or abuse
 • Payment fraud or scam attempts occur
 • Inappropriate content is shared
@@ -301,11 +301,11 @@ Blocking a vendor stops them from contacting you. You can manage blocked vendors
 6. Submit your report
 
 ## Reporting vs blocking
-• Blocking prevents the vendor from contacting you but does not notify the platform
-• Reporting alerts the platform to policy violations and helps protect other customers
+• Blocking prevents the vendor from contacting you but does not notify Platform
+• Reporting alerts Platform to policy violations and helps protect other customers
 
 ## Urgent issues
-If you are in immediate danger, contact local authorities first, then report to the platform Support.`,
+If you are in immediate danger, contact local authorities first, then report to Platform Support.`,
   },
   {
     id: 'contact-support',
@@ -332,6 +332,6 @@ We aim to respond as quickly as possible. For account access issues, include the
 • Your display name is how vendors see you
 
 ## Sign out
-You can sign out from Settings at any time. For password or login help, contact the platform Support.`,
+You can sign out from Settings at any time. For password or login help, contact Platform Support.`,
   },
 ];

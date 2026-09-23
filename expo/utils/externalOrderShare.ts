@@ -13,7 +13,7 @@ export function generateShareToken(): string {
 }
 
 export function buildShareUrl(externalOrderId: string, shareToken: string): string {
-  return `https://theplatform.com/order/ext/${externalOrderId}?token=${shareToken}`;
+  return `https://example.com/order/ext/${externalOrderId}?token=${shareToken}`;
 }
 
 export function buildShareMessage(

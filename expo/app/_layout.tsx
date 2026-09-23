@@ -19,7 +19,7 @@ const queryClient = new QueryClient();
 /**
  * Real backend push payloads (sendPushNotification, notificationFunctions.ts)
  * carry `data: { deepLink, notificationId }`, with deepLink in the form
- * `the platform://chat/{chatId}` — chat message pushes, pickup-details-ready
+ * `platform://chat/{chatId}` — chat message pushes, pickup-details-ready
  * pushes, and new-inquiry pushes all use this. Nothing here ever inspected
  * it, so tapping any real chat push did nothing. The dominant real chatId
  * shape is `commerce_{customerId}_{vendorId}` (createCommerceConversation.ts),
@@ -30,7 +30,7 @@ const queryClient = new QueryClient();
  * opens the right customer thread even without a real order id.
  */
 function handleChatDeepLink(deepLink: string, role: string | undefined, router: ReturnType<typeof useRouter>): boolean {
-  const prefix = 'the platform://chat/';
+  const prefix = 'platform://chat/';
   if (!deepLink.startsWith(prefix)) return false;
   const chatId = deepLink.slice(prefix.length);
 
@@ -59,15 +59,15 @@ function handleChatDeepLink(deepLink: string, role: string | undefined, router: 
 /**
  * verification_approved/rejected and catalog_item_approved/rejected
  * (createNotificationInternal, domain: "system") carry a real app route as
- * their deepLink — `the platform://vendor/settings/verification`,
- * `the platform://vendor/catalog` — rather than a chat id. These fired the push
+ * their deepLink — `platform://vendor/settings/verification`,
+ * `platform://vendor/catalog` — rather than a chat id. These fired the push
  * and appeared in the in-app list correctly, but tapping the OS notification
  * did nothing, since only handleChatDeepLink ever inspected `data.deepLink`.
- * Routes generically off the path after `the platform://` so any future
+ * Routes generically off the path after `platform://` so any future
  * non-chat deepLink of this shape is handled without another code change.
  */
 function handleAppDeepLink(deepLink: string, router: ReturnType<typeof useRouter>): boolean {
-  const prefix = 'the platform://';
+  const prefix = 'platform://';
   if (!deepLink.startsWith(prefix)) return false;
   const path = deepLink.slice(prefix.length);
   if (!path || path.startsWith('chat/')) return false;

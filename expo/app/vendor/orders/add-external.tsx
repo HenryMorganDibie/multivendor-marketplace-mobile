@@ -13,12 +13,13 @@ import {
   PanResponder,
   Platform,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from 'react-native';
 import { Alert } from '@/utils/alert';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import {
   Plus,
   Package,
@@ -47,7 +48,13 @@ import { useUnsavedChanges } from '@/utils/useUnsavedChanges';
 import { formatPriceWithCommas, getCurrencySymbol, type Currency } from '@/utils/formatPrice';
 import { useVendor } from '@/contexts/VendorContext';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
-import { callable } from '@/lib/firebase';
+import { callable, auth } from '@/lib/firebase';
+import {
+  useExternalOrders,
+  copyScreenshotToDurableStorage,
+  deleteDurableScreenshot,
+  type ExternalOrderDraft,
+} from '@/contexts/ExternalOrdersContext';
 
 interface OrderItem {
   id: string;
@@ -258,8 +265,10 @@ function DropdownSelector({ label, value, options, onSelect, placeholder }: Drop
 
 export default function RecordExternalOrderScreen() {
   const router = useRouter();
-  const { plan } = useVendorPlan();
+  const params = useLocalSearchParams<{ draftId?: string }>();
+  const { plan, planLimits } = useVendorPlan();
   const { vendor } = useVendor();
+  const { draftsLoaded, saveDraft, deleteDraft, getDraft } = useExternalOrders();
   const canUseScreenshots = plan === 'pro' || plan === 'pro+';
   const vendorCurrency = (vendor.currency as Currency) || 'NGN';
 
@@ -268,6 +277,10 @@ export default function RecordExternalOrderScreen() {
 
   const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>('Pickup');
   const [fulfillmentDateTime, setFulfillmentDateTime] = useState<Date>(new Date());
+  /** Whether the vendor has ever actually picked a date/time — the field
+   * initializes to "now" internally either way, but the UI must not present
+   * that internal default as if the vendor chose it. */
+  const [fulfillmentDateTimeTouched, setFulfillmentDateTimeTouched] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [address, setAddress] = useState('');
@@ -304,7 +317,63 @@ export default function RecordExternalOrderScreen() {
   const [discountValueInput, setDiscountValueInput] = useState('');
   const [showDiscountTypeSheet, setShowDiscountTypeSheet] = useState(false);
 
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [failedScreenshotIndices, setFailedScreenshotIndices] = useState<Set<number>>(new Set());
+  const hasLoadedDraftRef = useRef(false);
+  /**
+   * The idempotency key sent to createExternalOrder. For a draft, this is
+   * reused from `draft.submissionId` on resume (or generated and persisted
+   * on first Submit) so a retry after a crash or a failed cleanup — even
+   * across an app restart — is recognized by the backend as the same
+   * logical submission rather than a new order. For a submission with no
+   * draft behind it, this ref still protects ordinary retries within this
+   * same mounted screen instance (e.g. tapping Submit again after a timeout
+   * without navigating away): it is never regenerated just because a
+   * previous attempt timed out or came back ambiguous.
+   */
+  const submissionIdRef = useRef<string | null>(null);
+
   const { items: catalogItems } = useCatalog();
+
+  /**
+   * Resumes an in-progress draft when this screen is opened with a
+   * draftId param (from the Drafts section on the orders list). Waits for
+   * draftsLoaded so it never misses a draft that simply hasn't finished its
+   * (auth-uid-scoped) AsyncStorage read yet, and hasLoadedDraftRef stops a
+   * later drafts-array change (e.g. from this same screen calling
+   * saveDraft) from re-applying the original snapshot over the vendor's
+   * in-progress edits.
+   */
+  useEffect(() => {
+    const requestedDraftId = typeof params.draftId === 'string' ? params.draftId : undefined;
+    if (!requestedDraftId || hasLoadedDraftRef.current || !draftsLoaded) return;
+    const draft = getDraft(requestedDraftId);
+    if (!draft) return;
+    hasLoadedDraftRef.current = true;
+    setDraftId(draft.id);
+    submissionIdRef.current = draft.submissionId ?? null;
+    setItems(draft.items);
+    setCustomerName(draft.customerName);
+    setFulfillmentType(draft.fulfillmentType);
+    setFulfillmentDateTime(draft.fulfillmentDateTime ? new Date(draft.fulfillmentDateTime) : new Date());
+    setFulfillmentDateTimeTouched(draft.fulfillmentDateTimeTouched);
+    setAddress(draft.address);
+    setDeliveryNote(draft.deliveryNote);
+    setPaymentStatus(draft.paymentStatus);
+    setAmountReceived(draft.amountReceived);
+    setNotes(draft.notes);
+    setScreenshots(draft.screenshots);
+    setShowDeliveryFee(draft.showDeliveryFee);
+    setDeliveryFeeInput(draft.deliveryFeeInput);
+    setShowServiceFee(draft.showServiceFee);
+    setServiceFeeInput(draft.serviceFeeInput);
+    setShowDiscount(draft.showDiscount);
+    setDiscountType(draft.discountType);
+    setDiscountValueInput(draft.discountValueInput);
+    setTaxEnabled(draft.taxEnabled);
+    setTaxPercentage(draft.taxPercentage);
+  }, [params.draftId, draftsLoaded, getDraft]);
 
   useEffect(() => {
     const loadTaxSettings = async () => {
@@ -330,6 +399,7 @@ export default function RecordExternalOrderScreen() {
       items,
       fulfillmentType,
       fulfillmentDateTime,
+      fulfillmentDateTimeTouched,
       address,
       deliveryNote,
       customerName,
@@ -390,18 +460,55 @@ export default function RecordExternalOrderScreen() {
     });
 
     if (!result.canceled && result.assets) {
-      const newUris = result.assets.map(asset => asset.uri);
-      const totalImages = screenshots.length + newUris.length;
+      const totalImages = screenshots.length + result.assets.length;
       if (totalImages > 5) {
         Alert.alert('Too Many Images', 'Maximum 5 screenshots per order.');
         return;
       }
-      setScreenshots([...screenshots, ...newUris]);
+
+      const uid = auth.currentUser?.uid;
+      if (!uid) {
+        Alert.alert('Could not attach screenshot', 'Please sign in again and try attaching it once more.');
+        return;
+      }
+
+      /**
+       * Picker/cache URIs are not durable — copied into our own owned
+       * directory immediately on attach so a saved draft's screenshots
+       * survive an app kill/relaunch. Never store the original picker URI.
+       * On any copy failure (e.g. disk full), roll back whatever this batch
+       * already copied rather than leaving orphan files, and surface the
+       * failure instead of pretending the attachment was saved.
+       */
+      const durableUris: string[] = [];
+      try {
+        for (const asset of result.assets) {
+          durableUris.push(copyScreenshotToDurableStorage(asset.uri, uid));
+        }
+      } catch (error) {
+        durableUris.forEach((uri) => deleteDurableScreenshot(uri, uid));
+        const message = (error as { message?: string })?.message
+          ?? 'Could not save the selected screenshot(s). Please try again.';
+        Alert.alert('Could not attach screenshot', message);
+        return;
+      }
+      setScreenshots([...screenshots, ...durableUris]);
     }
   };
 
   const handleRemoveScreenshot = (index: number) => {
+    const uri = screenshots[index];
+    const uid = auth.currentUser?.uid;
+    if (uid) deleteDurableScreenshot(uri, uid);
     setScreenshots(screenshots.filter((_, i) => i !== index));
+    setFailedScreenshotIndices((prev) => {
+      const next = new Set<number>();
+      prev.forEach((i) => {
+        if (i < index) next.add(i);
+        else if (i > index) next.add(i - 1);
+      });
+      return next;
+    });
   };
 
   const handleAddItem = () => {
@@ -527,6 +634,9 @@ export default function RecordExternalOrderScreen() {
     if (fulfillmentType !== 'Pickup' && fulfillmentType !== 'Delivery') {
       return `"${fulfillmentType}" fulfillment isn't supported yet. Use Pickup or Delivery for now.`;
     }
+    if (fulfillmentDateTimeTouched) {
+      return 'A fulfillment date & time isn\'t recorded on the real order yet. Clear it to save, or note it separately for now.';
+    }
     if (deliveryFee > 0 || serviceFee > 0) {
       return 'Delivery and service fees aren\'t recorded on the real order yet. Remove them to save, or note them separately for now.';
     }
@@ -546,6 +656,42 @@ export default function RecordExternalOrderScreen() {
   };
 
   const [isSaving, setIsSaving] = useState(false);
+
+  /**
+   * A full draft snapshot for the given id, carrying forward whatever
+   * submissionId is already known (submissionIdRef) — saveDraft replaces
+   * the whole stored record, so leaving this out on an ordinary re-save
+   * would silently erase a key a prior Submit attempt already persisted.
+   */
+  const buildDraftSnapshot = (id: string): ExternalOrderDraft => {
+    const now = new Date().toISOString();
+    return {
+      id,
+      createdAt: now,
+      updatedAt: now,
+      ...(submissionIdRef.current ? { submissionId: submissionIdRef.current } : {}),
+      customerName,
+      items,
+      fulfillmentType,
+      fulfillmentDateTime: fulfillmentDateTimeTouched ? fulfillmentDateTime.toISOString() : null,
+      fulfillmentDateTimeTouched,
+      address,
+      deliveryNote,
+      paymentStatus,
+      amountReceived,
+      notes,
+      screenshots,
+      showDeliveryFee,
+      deliveryFeeInput,
+      showServiceFee,
+      serviceFeeInput,
+      showDiscount,
+      discountType,
+      discountValueInput,
+      taxEnabled,
+      taxPercentage,
+    };
+  };
 
   const handleSave = async () => {
     if (items.length === 0) {
@@ -572,6 +718,37 @@ export default function RecordExternalOrderScreen() {
 
     setIsSaving(true);
     try {
+      /**
+       * Reused, never regenerated, across ordinary retries of this same
+       * logical submission — that is the entire point of an idempotency
+       * key. Persisted BEFORE the network call so a crash (or a lost
+       * response) between backend success and cleanup still leaves a
+       * recoverable record carrying the exact key that was actually sent —
+       * including for a brand-new form that was never explicitly saved as
+       * a draft. Reuses the existing draft mechanism rather than a new one:
+       * effectiveDraftId is generated here (not read from the `draftId`
+       * state, which will not update within this same function call) so
+       * every reference below uses the same, correct id.
+       *
+       * UX cost, disclosed rather than hidden: a Submit that fails for any
+       * reason — including an ordinary rejection like "item not approved",
+       * where there is no ambiguity about whether an order was created —
+       * now leaves this auto-created draft behind, since cleanup only runs
+       * on confirmed success (see below). Before this change, a brand-new
+       * form that failed to submit left no trace at all. The vendor must
+       * notice and delete it via the existing Drafts-list control if they
+       * don't want to resume it. The alternative — only auto-persisting
+       * for network-ambiguous failures, not definite rejections — would
+       * avoid that, but needs a rejection classifier this batch doesn't
+       * have; not built speculatively.
+       */
+      const submissionId = submissionIdRef.current
+        ?? `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      submissionIdRef.current = submissionId;
+      const effectiveDraftId = draftId ?? `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      await saveDraft(buildDraftSnapshot(effectiveDraftId));
+      if (!draftId) setDraftId(effectiveDraftId);
+
       const createExternalOrder = callable<
         {
           externalCustomerName: string;
@@ -579,6 +756,7 @@ export default function RecordExternalOrderScreen() {
           items: { itemId: string; quantity: number }[];
           fulfillmentType: 'pickup' | 'delivery';
           orderNote?: string;
+          submissionId: string;
         },
         { success: true; orderId: string; publicOrderId: string }
       >('createExternalOrder');
@@ -588,20 +766,74 @@ export default function RecordExternalOrderScreen() {
         items: items.map((i) => ({ itemId: i.catalogItemId!, quantity: i.quantity })),
         fulfillmentType: fulfillmentType === 'Delivery' ? 'delivery' : 'pickup',
         orderNote: notes.trim() || undefined,
+        submissionId,
       });
+
+      /**
+       * The order is already recorded on the backend at this point — nothing
+       * below can undo that. It gets its own try/catch so a local cleanup
+       * failure (disk I/O, storage quota) is never reported to the vendor as
+       * "Could not record order": that would be false, and could prompt an
+       * unnecessary retry. A cleanup failure just means the draft (and/or
+       * its screenshots) may still be around afterwards — harmless, since a
+       * retry now carries the same submissionId and the backend recognizes
+       * it as the same order rather than creating a second one.
+       */
+      try {
+        const uidForCleanup = auth.currentUser?.uid;
+        if (uidForCleanup) {
+          screenshots.forEach((uri) => deleteDurableScreenshot(uri, uidForCleanup));
+        }
+        await deleteDraft(effectiveDraftId);
+      } catch (cleanupError) {
+        console.error('[add-external] Order recorded, but draft/screenshot cleanup failed:', cleanupError);
+      }
 
       unsavedChanges.resetChanges();
       Alert.alert(
         'Order recorded',
-        'This order needs your acceptance within 48 hours, same as any other order, since it now lives on your real order list rather than just this device.',
+        'This order has been saved to your real order list.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    } catch (error) {
+      const httpsError = error as { code?: string; message?: string };
+      const message = httpsError?.message ?? 'Could not record this order. Please try again.';
+      /**
+       * Matched narrowly on this exact backend message rather than the
+       * failed-precondition code alone — that code is also used for the
+       * pre-existing "item not approved" rejection from this same callable,
+       * which is an ordinary failure, not a were-you-already-recorded case.
+       * Reuses the existing alert-with-single-action pattern rather than
+       * introducing separate error UI for this one case.
+       */
+      if (httpsError?.code?.endsWith('failed-precondition') && message.includes('already recorded')) {
+        Alert.alert('Already recorded', message, [{ text: 'Go to Orders', onPress: () => router.back() }]);
+        return;
+      }
+      Alert.alert('Could not record order', message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    setIsSavingDraft(true);
+    try {
+      const id = draftId ?? `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      await saveDraft(buildDraftSnapshot(id));
+      setDraftId(id);
+      unsavedChanges.resetChanges();
+      Alert.alert(
+        'Draft saved',
+        'You can resume this order later from your Orders list.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error) {
       const message = (error as { message?: string })?.message
-        ?? 'Could not record this order. Please try again.';
-      Alert.alert('Could not record order', message);
+        ?? 'Could not save this draft. Please try again.';
+      Alert.alert('Could not save draft', message);
     } finally {
-      setIsSaving(false);
+      setIsSavingDraft(false);
     }
   };
 
@@ -619,11 +851,13 @@ export default function RecordExternalOrderScreen() {
         const newDate = new Date(fulfillmentDateTime);
         newDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
         setFulfillmentDateTime(newDate);
+        setFulfillmentDateTimeTouched(true);
         setTimeout(() => setShowTimePicker(true), 300);
       }
     } else {
       if (selectedDate) {
         setFulfillmentDateTime(selectedDate);
+        setFulfillmentDateTimeTouched(true);
       }
     }
   };
@@ -633,6 +867,7 @@ export default function RecordExternalOrderScreen() {
       setShowTimePicker(false);
     }
     if (selectedDate) {
+      setFulfillmentDateTimeTouched(true);
       if (Platform.OS === 'android') {
         const newDate = new Date(fulfillmentDateTime);
         newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
@@ -646,16 +881,17 @@ export default function RecordExternalOrderScreen() {
   const currencySymbol = getCurrencySymbol(vendorCurrency);
 
   /**
-   * canAccessExternalOrders (PHASE_4_COLLECTION_MAPPING v10, Section 3) is
-   * false only for Basic. createExternalOrder already rejects a Basic
-   * vendor's submission server-side with permission-denied, but nothing on
-   * this screen checked the flag first — a Basic vendor could fill out the
-   * entire form (items, fulfilment, payment) and only discover the plan
-   * requirement as a raw error on Save. Every other Phase 4 gate in this
-   * codebase (dashboard widgets, reports, business insights) shows an
-   * upgrade card before the user invests effort; this one didn't.
+   * Reads the same canAccessExternalOrders flag createExternalOrder checks
+   * server-side (currently true for every plan) instead of hardcoding a
+   * tier name here, so this screen can't fall out of sync if that flag
+   * ever changes for a plan.
+   *
+   * planLimits starts out null until the plan-status fetch resolves, so
+   * the check only fires on an explicit false — a vendor is never blocked
+   * just because that fetch is still in flight or failed. Save still goes
+   * through the real backend check regardless of what this screen shows.
    */
-  if (plan === 'basic') {
+  if (planLimits?.canAccessExternalOrders === false) {
     return (
       <View style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
@@ -665,9 +901,9 @@ export default function RecordExternalOrderScreen() {
             <View style={externalOrderLockStyles.lockedIconWrap}>
               <Lock size={26} color={Colors.textMuted} />
             </View>
-            <Text style={externalOrderLockStyles.lockedTitle}>External orders require Standard or higher</Text>
+            <Text style={externalOrderLockStyles.lockedTitle}>External Orders unavailable</Text>
             <Text style={externalOrderLockStyles.lockedDescription}>
-              Upgrade your plan to record orders placed outside the platform (WhatsApp, phone, walk-in) and keep them alongside your platform orders.
+              External order recording is not available on your current plan.
             </Text>
             <TouchableOpacity
               style={externalOrderLockStyles.upgradeButton}
@@ -693,9 +929,24 @@ export default function RecordExternalOrderScreen() {
           onSave={handleSave}
           saveEnabled={canSave}
           isSaving={isSaving}
-          saveLabel="Save"
+          saveLabel="Submit"
           testID="record-external-order-header"
         />
+        <View style={styles.saveDraftRow}>
+          <TouchableOpacity
+            onPress={handleSaveDraft}
+            disabled={isSavingDraft}
+            style={styles.saveDraftButton}
+            activeOpacity={0.7}
+            testID="record-external-order-save-draft"
+          >
+            {isSavingDraft ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : (
+              <Text style={styles.saveDraftButtonText}>Save Draft</Text>
+            )}
+          </TouchableOpacity>
+        </View>
         <KeyboardAvoidingView
           style={styles.keyboardAvoid}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -927,10 +1178,23 @@ export default function RecordExternalOrderScreen() {
                     activeOpacity={0.7}
                   >
                     <Calendar size={16} color={Colors.primary} />
-                    <Text style={styles.dateTimeValue}>
-                      {formatDateTimeDisplay(fulfillmentDateTime)}
+                    <Text style={[styles.dateTimeValue, !fulfillmentDateTimeTouched && styles.dateTimeValuePlaceholder]}>
+                      {fulfillmentDateTimeTouched ? formatDateTimeDisplay(fulfillmentDateTime) : 'Not set'}
                     </Text>
-                    <Clock size={15} color={Colors.textSecondary} />
+                    {fulfillmentDateTimeTouched ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setFulfillmentDateTimeTouched(false);
+                          setFulfillmentDateTime(new Date());
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        testID="clear-fulfillment-date-time"
+                      >
+                        <X size={15} color={Colors.textSecondary} />
+                      </TouchableOpacity>
+                    ) : (
+                      <Clock size={15} color={Colors.textSecondary} />
+                    )}
                   </TouchableOpacity>
                 </View>
                 {fulfillmentType === 'Delivery' && (
@@ -1032,7 +1296,18 @@ export default function RecordExternalOrderScreen() {
                     <View style={styles.screenshotsRow}>
                       {screenshots.map((uri, index) => (
                         <View key={index} style={styles.screenshotThumb}>
-                          <Image source={{ uri }} style={styles.screenshotImage} contentFit="cover" />
+                          {failedScreenshotIndices.has(index) ? (
+                            <View style={[styles.screenshotImage, styles.screenshotMissing]}>
+                              <Text style={styles.screenshotMissingText}>Unavailable</Text>
+                            </View>
+                          ) : (
+                            <Image
+                              source={{ uri }}
+                              style={styles.screenshotImage}
+                              contentFit="cover"
+                              onError={() => setFailedScreenshotIndices((prev) => new Set(prev).add(index))}
+                            />
+                          )}
                           <TouchableOpacity
                             style={styles.removeScreenshotBtn}
                             onPress={() => handleRemoveScreenshot(index)}
@@ -1374,6 +1649,7 @@ export default function RecordExternalOrderScreen() {
                       const newDate = new Date(fulfillmentDateTime);
                       newDate.setFullYear(year, month - 1, day);
                       setFulfillmentDateTime(newDate);
+                      setFulfillmentDateTimeTouched(true);
                     }
                   }}
                   style={{
@@ -1398,6 +1674,7 @@ export default function RecordExternalOrderScreen() {
                       const newDate = new Date(fulfillmentDateTime);
                       newDate.setHours(hours, minutes);
                       setFulfillmentDateTime(newDate);
+                      setFulfillmentDateTimeTouched(true);
                     }
                   }}
                   style={{
@@ -1448,7 +1725,10 @@ export default function RecordExternalOrderScreen() {
                 mode="datetime"
                 display="spinner"
                 onChange={(_, date) => {
-                  if (date) setFulfillmentDateTime(date);
+                  if (date) {
+                    setFulfillmentDateTime(date);
+                    setFulfillmentDateTimeTouched(true);
+                  }
                 }}
                 style={styles.datePickerWheel}
               />
@@ -1869,6 +2149,42 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text,
     fontWeight: '500' as const,
+  },
+  dateTimeValuePlaceholder: {
+    color: Colors.inputPlaceholder,
+    fontWeight: '400' as const,
+  },
+  saveDraftRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'flex-end' as const,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  saveDraftButton: {
+    minWidth: 88,
+    height: 30,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  saveDraftButtonText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.primary,
+  },
+  screenshotMissing: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  screenshotMissingText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: Colors.textMuted,
+    textAlign: 'center' as const,
   },
   currencyInputContainer: {
     flexDirection: 'row' as const,

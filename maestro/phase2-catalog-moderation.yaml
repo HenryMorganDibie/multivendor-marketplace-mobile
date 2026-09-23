@@ -11,7 +11,7 @@
 # Run:  maestro test maestro/phase2-catalog-moderation.yaml
 appId: com.platform.app
 env:
-  VENDOR_EMAIL: demo.vendor@theplatform.com
+  VENDOR_EMAIL: demo.vendor@example.com
   VENDOR_PASSWORD: DemoPass123!
 ---
 - launchApp:
@@ -40,7 +40,7 @@ env:
     timeout: 20000
 - takeScreenshot: evidence/android/p2-02-catalog-list
 
-# "Unavailable" rather than "Out of stock", because the platform sells services,
+# "Unavailable" rather than "Out of stock", because Platform sells services,
 # bookings and made-to-order work as well as physical stock.
 - assertNotVisible: "Out of stock"
 

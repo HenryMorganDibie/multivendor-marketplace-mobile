@@ -15,7 +15,7 @@ export default function BlockedUsersScreen() {
   const confirmUnblock = useCallback((user: BlockedUser) => {
     Alert.alert(
       'Unblock this user?',
-      'They will be able to message you or place orders again if allowed.',
+      'They will be able to interact with you again.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -27,21 +27,6 @@ export default function BlockedUsersScreen() {
     );
   }, [unblockUser]);
 
-  const handleRowPress = useCallback((user: BlockedUser) => {
-    Alert.alert(
-      user.name,
-      'Blocked',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Unblock',
-          style: 'default',
-          onPress: () => confirmUnblock(user),
-        },
-      ],
-    );
-  }, [confirmUnblock]);
-
   const renderBlockedUser = ({ item }: { item: BlockedUser }) => {
     return (
       <OrderConversationListItem
@@ -49,7 +34,7 @@ export default function BlockedUsersScreen() {
         primaryText={item.name}
         secondaryText="Blocked"
         timestamp=""
-        onPress={() => handleRowPress(item)}
+        onPress={() => confirmUnblock(item)}
         onUnarchive={() => confirmUnblock(item)}
         isBlockedUsersScreen={true}
       />

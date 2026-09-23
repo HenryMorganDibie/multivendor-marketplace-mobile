@@ -3,7 +3,7 @@ import type { UserRole } from '@/types/domain';
 import type { SupportConversation } from '@/services/supportService';
 
 /**
- * supportRepository — data-access boundary for the platform Support conversation.
+ * supportRepository — data-access boundary for the Platform Support conversation.
  *
  * SCAFFOLD ONLY. Reads/writes the same AsyncStorage records the support contexts
  * own (`customer_support_chat`, `vendor_support_chat`). supportService delegates

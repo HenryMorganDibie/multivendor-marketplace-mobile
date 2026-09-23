@@ -19,9 +19,9 @@ export default function CustomerInviteScreen() {
   const [showConfirmation, setShowConfirmation] = useState(false);
 
   const inviteLink = Platform.select({
-    ios: 'https://apps.apple.com/app/the platform',
+    ios: 'https://apps.apple.com/app/platform',
     android: 'https://play.google.com/store/apps/details?id=com.platform.app',
-    default: 'https://theplatform.com/download',
+    default: 'https://example.com/download',
   });
 
   const handleCopyLink = async () => {
@@ -36,11 +36,11 @@ export default function CustomerInviteScreen() {
 
   const handleShare = async () => {
     try {
-      const message = `Know vendors who should be on the platform? Invite them to join so customers in your area can discover and order from them.\n\n${inviteLink}`;
+      const message = `Know vendors who should be on Platform? Invite them to join so customers in your area can discover and order from them.\n\n${inviteLink}`;
 
       await safeShare({
         message,
-        title: 'Invite vendors to the platform',
+        title: 'Invite vendors to Platform',
       });
       console.log('[INVITE] Share sheet opened');
     } catch (error) {
@@ -56,7 +56,7 @@ export default function CustomerInviteScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Invite to the platform',
+          title: 'Invite to Platform',
           headerBackTitle: '',
           headerStyle: {
             backgroundColor: Colors.background,
@@ -66,10 +66,10 @@ export default function CustomerInviteScreen() {
       />
       <SafeAreaView edges={['bottom']} style={styles.safeArea}>
         <View style={styles.content}>
-          <Text style={styles.header}>Invite vendors to the platform</Text>
+          <Text style={styles.header}>Invite vendors to Platform</Text>
           
           <Text style={styles.description}>
-            Know vendors who should be on the platform? Invite them to join so customers in your area can discover and order from them.
+            Know vendors who should be on Platform? Invite them to join so customers in your area can discover and order from them.
           </Text>
 
           <View style={styles.linkSection}>

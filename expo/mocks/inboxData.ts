@@ -1,4 +1,4 @@
-import type { ChatType } from '@/mocks/chatData';
+import type { ChatType, MessageType } from '@/mocks/chatData';
 
 export type ConversationType = 'inquiry' | 'order' | 'custom_order' | 'support' | 'ai' | 'creator';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
@@ -24,6 +24,8 @@ export interface InboxSnapshot {
   title: string;
   avatarUrl?: string;
   lastMessageText: string;
+  /** In-memory/client-derived only — never persisted to Firestore. */
+  lastMessageType?: MessageType;
   lastMessageAt: string;
   unreadCount: number;
   lastSenderId: string;

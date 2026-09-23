@@ -138,7 +138,7 @@ export default function CustomerSearchScreen() {
 
   const handleInviteVendor = useCallback(async () => {
     await safeShare({
-      message: `Join the platform as a vendor @${username}! Download the app and start selling: https://theplatform.app/vendor`,
+      message: `Join Platform as a vendor @${username}! Download the app and start selling: https://platform.app/vendor`,
     });
     console.log('[SEARCH] Invite vendor share sheet opened for username:', username);
   }, [username]);
@@ -295,7 +295,7 @@ export default function CustomerSearchScreen() {
             <SearchX size={44} color={Colors.textMuted} strokeWidth={1.4} />
             <Text style={styles.emptyTitle}>No vendor found for @{username}</Text>
             <Text style={styles.emptyBody}>
-              This username doesn&apos;t exist on the platform yet.
+              This username doesn&apos;t exist on Platform yet.
             </Text>
             <Pressable style={styles.inviteButton} onPress={handleInviteVendor}>
               <UserPlus size={18} color={Colors.primary} />

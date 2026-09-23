@@ -1,7 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import CustomerTabBar from '@/components/navigation/CustomerTabBar';
-import { Ionicons } from '@expo/vector-icons';
+import { Home, Search, MessageSquare, User } from 'lucide-react-native';
 import { useInbox } from '@/contexts/InboxContext';
 
 export default function CustomerTabsLayout() {
@@ -19,7 +19,7 @@ export default function CustomerTabsLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+            <Home size={size} color={color} strokeWidth={2} />
           ),
         }}
       />
@@ -29,7 +29,7 @@ export default function CustomerTabsLayout() {
         options={{
           title: 'Explore',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search-outline" size={size} color={color} />
+            <Search size={size} color={color} strokeWidth={2} />
           ),
         }}
       />
@@ -40,7 +40,7 @@ export default function CustomerTabsLayout() {
           title: 'Chats',
           tabBarBadge: customerUnreadCount > 0 ? customerUnreadCount : undefined,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubble-outline" size={size} color={color} />
+            <MessageSquare size={size} color={color} strokeWidth={2} />
           ),
         }}
       />
@@ -50,7 +50,7 @@ export default function CustomerTabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+            <User size={size} color={color} strokeWidth={2} />
           ),
         }}
       />

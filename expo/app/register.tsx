@@ -168,7 +168,7 @@ export default function RegisterScreen() {
               <Text style={styles.title}>Create your account</Text>
               <Text style={styles.subtitle}>
                 {mode === 'initial'
-                  ? 'Get started with the platform in seconds'
+                  ? 'Get started with Platform in seconds'
                   : 'Enter your email and password to continue'}
               </Text>
             </View>

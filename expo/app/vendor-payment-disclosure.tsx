@@ -67,7 +67,7 @@ export default function VendorPaymentDisclosureScreen() {
 
             <Text style={styles.title}>Payments are handled by you</Text>
             <Text style={styles.subtitle}>
-              the platform does not process customer payments.{'\n'}Customers pay you
+              Platform does not process customer payments.{'\n'}Customers pay you
               directly using your preferred payment methods.
             </Text>
 
@@ -81,7 +81,7 @@ export default function VendorPaymentDisclosureScreen() {
               <CheckItem
                 checked={check2}
                 onToggle={() => setCheck2((v) => !v)}
-                label="I understand the platform does not verify payments on my behalf"
+                label="I understand Platform does not verify payments on my behalf"
                 testID="payment-check-2"
               />
             </View>

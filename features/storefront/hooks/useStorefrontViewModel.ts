@@ -112,7 +112,7 @@ export function useStorefrontViewModel(vendor: Vendor) {
   };
 
   const handleMenuPress = async () => {
-    const shareUrl = `https://theplatform.com/@${vendor.username}`;
+    const shareUrl = `https://example.com/@${vendor.username}`;
     try {
       await Clipboard.setStringAsync(shareUrl);
       console.log('[Share Store] URL copied to clipboard:', shareUrl);
@@ -206,7 +206,7 @@ export function useStorefrontViewModel(vendor: Vendor) {
       Alert.alert('', 'You cannot initiate communication with this vendor.');
       return;
     }
-    console.log('Ask the platform AI pressed');
+    console.log('Ask Platform AI pressed');
     router.push(`/chat/platform-ai?vendorName=${encodeURIComponent(vendor.name)}` as any);
   };
 

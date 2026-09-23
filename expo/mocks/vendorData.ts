@@ -77,6 +77,7 @@ export interface Vendor {
   id: string;
   slug: string;
   username: string;
+  usernameChangeHistory?: { date: string; oldUsername: string; newUsername: string }[];
   name: string;
   category: string;
   categoryId?: string;
@@ -189,7 +190,7 @@ export interface Vendor {
   favoritesCount?: number;
   /**
    * Vendor's subscription plan tier, used to gate customer-facing features
-   * like the platform AI (Basic vendors cannot offer AI to customers). Mirrors
+   * like Platform AI (Basic vendors cannot offer AI to customers). Mirrors
    * the backend's `vendorSubscriptions/{vendorId}.tier` field. Defaults
    * to 'basic' when omitted so customer-side gating stays conservative.
    * Henry can replace mock values with the real Firestore read later.

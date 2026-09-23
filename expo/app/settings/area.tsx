@@ -8,11 +8,11 @@ import {
   TouchableOpacity,
   TextInput,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, MapPin, Check, Info, Search, Navigation, X } from 'lucide-react-native';
+import { MapPin, Check, Info, Search, Navigation, X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useUserLocation } from '@/contexts/UserLocationContext';
 import { getAreasByRegion, AreaInfo } from '@/constants/areas';
+import CustomerHeader from '@/components/CustomerHeader';
 
 export default function AreaSettingsScreen() {
   const router = useRouter();
@@ -53,15 +53,7 @@ export default function AreaSettingsScreen() {
   if (!regionId) {
     return (
       <View style={styles.container}>
-        <SafeAreaView edges={['top']} style={styles.safeArea}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleBackPress} style={styles.headerButton}>
-              <ChevronLeft size={24} color={Colors.text} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Area</Text>
-            <View style={styles.headerSpacer} />
-          </View>
-        </SafeAreaView>
+        <CustomerHeader title="Area" onBack={handleBackPress} />
         <View style={styles.emptyContainer}>
           <Navigation size={48} color={Colors.textMuted} />
           <Text style={styles.emptyTitle}>Select a region first</Text>
@@ -75,43 +67,41 @@ export default function AreaSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBackPress} style={styles.headerButton}>
-            <ChevronLeft size={24} color={Colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Area</Text>
-          <TouchableOpacity onPress={toggleSearch} style={styles.headerButton}>
+      <CustomerHeader
+        title="Area"
+        onBack={handleBackPress}
+        rightAction={
+          <TouchableOpacity onPress={toggleSearch}>
             {showSearch ? (
               <X size={22} color={Colors.text} />
             ) : (
               <Search size={22} color={Colors.text} />
             )}
           </TouchableOpacity>
-        </View>
-        {showSearch && (
-          <View style={styles.searchSection}>
-            <View style={styles.searchContainer}>
-              <Search size={18} color={Colors.textSecondary} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder={`Search areas in ${regionName}...`}
-                placeholderTextColor={Colors.textSecondary}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoFocus
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <X size={18} color={Colors.textSecondary} />
-                </TouchableOpacity>
-              )}
-            </View>
+        }
+      />
+      {showSearch && (
+        <View style={styles.searchSection}>
+          <View style={styles.searchContainer}>
+            <Search size={18} color={Colors.textSecondary} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder={`Search areas in ${regionName}...`}
+              placeholderTextColor={Colors.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <X size={18} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
-        )}
-      </SafeAreaView>
+        </View>
+      )}
 
       <ScrollView
         style={styles.content}
@@ -181,32 +171,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-  },
-  safeArea: {
-    backgroundColor: Colors.background,
-  },
-  header: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.background,
-  },
-  headerButton: {
-    padding: 8,
-    width: 40,
-    alignItems: 'center' as const,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    flex: 1,
-    textAlign: 'center' as const,
-  },
-  headerSpacer: {
-    width: 40,
   },
   searchSection: {
     paddingHorizontal: 20,

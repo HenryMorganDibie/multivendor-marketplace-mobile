@@ -29,10 +29,10 @@ export default function ComingSoonScreen() {
             <Globe size={48} color={Colors.textSecondary} strokeWidth={2} />
           </View>
 
-          <Text style={styles.title}>the platform is coming soon</Text>
+          <Text style={styles.title}>Platform is coming soon</Text>
           
           <Text style={styles.body}>
-            the platform is not yet available in {countryName}. We're working hard to bring our platform to more countries.
+            Platform is not yet available in {countryName}. We're working hard to bring our platform to more countries.
           </Text>
 
           {launchTimeline ? (

@@ -19,6 +19,7 @@ import {
 } from '@/features/cart/selectors/cartSelectors';
 import { buildReviewOrderNavigationParams } from '@/features/cart/actions/cartActions';
 import { evaluatePromotionsWithStatus, getActivePromotions, type AppliedPromotion, type VendorPromotion, type EvaluatedPromotion, type StackingMode } from '@/mocks/promotionsData';
+import { usePrimeVendorPromotions } from '@/contexts/PromoContext';
 import { getVendorStorefrontPath } from '@/utils/vendorLookup';
 
 type FulfillmentType = 'Pickup' | 'Delivery' | null;
@@ -150,6 +151,7 @@ export function useCartViewModel() {
 
   const currentVendorIdForPromo = vendorId || activeVendorId || mockVendor.id;
   const vendorStackingMode: StackingMode = effectiveVendor.promoStackingMode || 'single';
+  usePrimeVendorPromotions(currentVendorIdForPromo);
 
   const evaluatedPromotions: EvaluatedPromotion[] = evaluatePromotionsWithStatus(
     currentVendorIdForPromo,

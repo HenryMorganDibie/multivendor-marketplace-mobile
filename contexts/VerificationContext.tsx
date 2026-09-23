@@ -362,7 +362,7 @@ export const [VerificationProvider, useVerification] = createContextHook(() => {
   //
   // These functions bypass the KYC/KYB provider entirely and directly set the
   // vendor's internal verification/account status. They are intended for use by
-  // the platform admins and moderators, NOT by vendor-facing code.
+  // Platform admins and moderators, NOT by vendor-facing code.
   //
   // In a real backend, each function would:
   //   1. Accept a vendorId param and make an authenticated admin API call

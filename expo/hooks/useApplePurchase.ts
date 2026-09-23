@@ -16,8 +16,8 @@ import { Alert } from '@/utils/alert';
 import type { PlanId } from '@/constants/planCatalog';
 
 /**
- * Apple product ids, mirroring platform-backend's PRODUCT_ID_TO_PLAN exactly
- * (appleServerApi.ts) -- these are the real ids the client created in App Store
+ * Apple product ids, mirroring multivendor-marketplace-platform's PRODUCT_ID_TO_PLAN exactly
+ * (appleServerApi.ts) -- these are the real ids Founder created in App Store
  * Connect, not placeholders. Kept as the single reverse map here rather
  * than duplicated per call site.
  */

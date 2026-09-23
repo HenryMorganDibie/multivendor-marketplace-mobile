@@ -11,8 +11,8 @@ export type InvoiceTemplateBranding = InvoiceRendererBranding;
 export type { InvoiceLayoutSpec } from '@/contexts/InvoiceLayoutContext';
 export { useInvoiceLayout } from '@/contexts/InvoiceLayoutContext';
 
-// NOTE: The official the platform logo asset is not yet provided. Until it is,
-// the footer renders as plain text ("Powered by the platform") with no image
+// NOTE: The official Platform logo asset is not yet provided. Until it is,
+// the footer renders as plain text ("Powered by Platform") with no image
 // placeholder. Do NOT invent or render a fake logo glyph.
 
 export function formatInvoiceDate(iso?: string | null): string {
@@ -354,13 +354,13 @@ export function SectionDivider({
 }
 
 /** Branded footer shown at the bottom of every invoice.
- *  Until the official the platform logo is provided, this renders as plain
- *  centered text — "Powered by the platform" — with no image placeholder. */
-export function platformFooter({ subtle = false }: { subtle?: boolean }) {
+ *  Until the official Platform logo is provided, this renders as plain
+ *  centered text — "Powered by Platform" — with no image placeholder. */
+export function PlatformFooter({ subtle = false }: { subtle?: boolean }) {
   return (
     <View style={styles.platformFooter}>
       <Text style={[styles.platformFooterText, subtle && styles.platformFooterSubtle]}>
-        Powered by the platform
+        Powered by Platform
       </Text>
     </View>
   );
@@ -625,6 +625,6 @@ export default {
   TotalsBlock,
   LabelText,
   SectionDivider,
-  platformFooter,
+  PlatformFooter,
   MetadataGrid,
 };

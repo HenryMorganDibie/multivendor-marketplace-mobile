@@ -1267,7 +1267,7 @@ export default function VendorOrderChatScreen() {
             destructive: true,
             requireConfirm: {
               title: 'Report customer',
-              message: 'Send a report about this customer to the platform support?',
+              message: 'Send a report about this customer to Platform support?',
               confirmLabel: 'Report',
             },
             onPress: () => console.log('[VENDOR ORDER CHAT] Report customer'),

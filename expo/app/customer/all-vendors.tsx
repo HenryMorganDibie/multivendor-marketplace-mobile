@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
@@ -9,7 +9,7 @@ import VendorCard from '@/components/VendorCard';
 export default function AllVendorsScreen() {
   const router = useRouter();
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const { allVendors } = useVendorFilter();
+  const { allVendors, isLoading } = useVendorFilter();
 
   const toggleFavorite = (vendorId: string) => {
     setFavorites(prev => {
@@ -38,26 +38,37 @@ export default function AllVendorsScreen() {
           <View style={styles.headerSpacer} />
         </View>
 
-        <FlatList
-          data={allVendors}
-          keyExtractor={vendor => vendor.id}
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.vendorList}
-          initialNumToRender={6}
-          maxToRenderPerBatch={8}
-          windowSize={5}
-          removeClippedSubviews
-          ListFooterComponent={<View style={styles.bottomPadding} />}
-          renderItem={({ item }) => (
-            <VendorCard
-              vendor={item}
-              isFavorite={favorites.has(item.id)}
-              onToggleFavorite={toggleFavorite}
-              variant="compact"
-            />
-          )}
-        />
+        {isLoading ? (
+          <View style={styles.stateContainer}>
+            <ActivityIndicator size="large" color="#FFFFFF" />
+          </View>
+        ) : allVendors.length === 0 ? (
+          <View style={styles.stateContainer}>
+            <Text style={styles.emptyTitle}>No vendors found</Text>
+            <Text style={styles.emptySubtitle}>Check back later for vendors in your area</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={allVendors}
+            keyExtractor={vendor => vendor.id}
+            style={styles.scrollView}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.vendorList}
+            initialNumToRender={6}
+            maxToRenderPerBatch={8}
+            windowSize={5}
+            removeClippedSubviews
+            ListFooterComponent={<View style={styles.bottomPadding} />}
+            renderItem={({ item }) => (
+              <VendorCard
+                vendor={item}
+                isFavorite={favorites.has(item.id)}
+                onToggleFavorite={toggleFavorite}
+                variant="compact"
+              />
+            )}
+          />
+        )}
       </SafeAreaView>
     </View>
   );
@@ -103,5 +114,23 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 32,
+  },
+  stateContainer: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: 40,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
+    marginBottom: 8,
+    textAlign: 'center' as const,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#8E8E93',
+    textAlign: 'center' as const,
   },
 });

@@ -21,7 +21,7 @@ export default function InviteToLaektivaScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView edges={['top']} style={styles.headerSafe}>
-        <EditScreenHeader title="Invite to the platform" onBack={() => router.back()} showSave={false} />
+        <EditScreenHeader title="Invite to Platform" onBack={() => router.back()} showSave={false} />
       </SafeAreaView>
       <SafeAreaView edges={['bottom']} style={styles.safeArea}>
         <View style={styles.content}>

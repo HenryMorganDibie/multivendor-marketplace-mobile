@@ -62,7 +62,7 @@ import { useInvoiceBranding } from '@/contexts/InvoiceBrandingContext';
 import { useVendorPlan } from '@/contexts/VendorPlanContext';
 import { useVendor } from '@/contexts/VendorContext';
 import { formatInvoiceCustomerName } from '@/utils/internalCustomerName';
-import { formatPriceWithCommas as formatPrice, getMinorUnitMultiplier, type Currency } from '@/utils/formatPrice';
+import { formatPriceWithCommas as formatPrice, type Currency } from '@/utils/formatPrice';
 import InvoiceRenderer, { type InvoiceRendererData } from '@/components/InvoiceRenderer';
 import { Colors } from '@/constants/colors';
 
@@ -73,7 +73,7 @@ import { Colors } from '@/constants/colors';
  *   A. The branded invoice document — rendered through the shared
  *      InvoiceRenderer, exactly what the customer sees (vendor branding,
  *      invoice number, customer name, dates, items, totals, fulfilment,
- *      notes, thank-you message, footer, "Powered by the platform").
+ *      notes, thank-you message, footer, "Powered by Platform").
  *   B. Vendor management panel — payment status, amount paid, balance due,
  *      Record Payment, Share, Copy link (external), Open chat (internal),
  *      Download PDF, and a status-aware More menu.
@@ -159,9 +159,16 @@ export default function VendorInvoiceDetailScreen() {
   // recorded — ledgerFor still returns a view in that case with amountPaid
   // 0, so this fallback is effectively demo-only).
   const ledger = ledgerFor(invoice.id);
-  const minorUnitMultiplier = getMinorUnitMultiplier(currency);
-  const amountPaid = ledger ? ledger.amountPaidMinorUnits / minorUnitMultiplier : getAmountPaid(invoice.payments);
-  const balanceDue = ledger ? ledger.balanceMinorUnits / minorUnitMultiplier : getBalanceDue(invoice.total, invoice.payments);
+  // Despite the field names, paymentLedger.ts stores these as plain major
+  // units (recordPayment's amountMinorUnits is sent as
+  // Math.round(payment.amount) with no *100 - see InvoiceContext.tsx), the
+  // same convention invoice.total/subtotal already use. Dividing by a
+  // currency's minor-unit multiplier here displayed every real ledger figure
+  // 100x too small, and since balanceDue then also feeds the "amount exceeds
+  // balance" validation below, it silently blocked recording a real payment
+  // against its own invoice's real balance.
+  const amountPaid = ledger ? ledger.amountPaidMinorUnits : getAmountPaid(invoice.payments);
+  const balanceDue = ledger ? ledger.balanceMinorUnits : getBalanceDue(invoice.total, invoice.payments);
   const effectivePaymentStatus = ledger
     ? (ledger.paymentStatus === 'partial' ? 'partially_paid' : ledger.paymentStatus === 'overpaid' ? 'paid' : ledger.paymentStatus === 'cancelled' ? 'unpaid' : ledger.paymentStatus)
     : resolvePaymentStatus(invoice.total, invoice.payments, invoice.paymentStatus);
@@ -672,10 +679,10 @@ export default function VendorInvoiceDetailScreen() {
                 <>
                   <View style={styles.sharingHeaderRow}>
                     <MessageCircle size={16} color={Colors.primary} />
-                    <Text style={styles.sharingHeader}>Sent in the platform chat</Text>
+                    <Text style={styles.sharingHeader}>Sent in Platform chat</Text>
                   </View>
                   <Text style={styles.sharingBody}>
-                    Sent to {displayCustomerName} in the platform chat.
+                    Sent to {displayCustomerName} in Platform chat.
                   </Text>
                   {invoice.chatId ? (
                     <TouchableOpacity
@@ -695,7 +702,7 @@ export default function VendorInvoiceDetailScreen() {
                     <Text style={styles.sharingHeader}>Shared using a secure invoice link</Text>
                   </View>
                   <Text style={styles.sharingBody}>
-                    Share the secure link with your customer outside theplatform.
+                    Share the secure link with your customer outside Platform.
                   </Text>
                   <View style={styles.sharingActionsRow}>
                     <TouchableOpacity
@@ -1297,8 +1304,8 @@ function generateInvoiceHTML(params: {
     <div class="payment-status">${statusLabel}</div>
     ${notes ? `<div class="notes">${notes}</div>` : ''}
     <div class="footer">
-      <p>Powered by the platform</p>
-      <p>the platform does not process payments. Payments are handled directly between customer and vendor.</p>
+      <p>Powered by Platform</p>
+      <p>Platform does not process payments. Payments are handled directly between customer and vendor.</p>
     </div>
   </body></html>`;
 }

@@ -10,7 +10,7 @@ import {
   formatMoney,
   useInvoiceLayout,
   CompactItemList,
-  platformFooter,
+  PlatformFooter,
   LabelText,
   SectionDivider,
   MoneyText,
@@ -232,7 +232,7 @@ export default function BeautyTemplate({
       ) : null}
 
       <View style={{ marginTop: layout.sectionGap }}>
-        <platformFooter subtle={branding.poweredBySubtle} />
+        <PlatformFooter subtle={branding.poweredBySubtle} />
       </View>
     </View>
   );

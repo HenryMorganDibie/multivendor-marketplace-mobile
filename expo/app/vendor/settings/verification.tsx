@@ -159,7 +159,7 @@ export default function VerificationScreen() {
           color: '#6B7280',
           backgroundColor: 'rgba(107, 114, 128, 0.15)',
           borderColor: 'rgba(107, 114, 128, 0.3)',
-          explanation: 'Your account has been deactivated and is no longer accessible on theplatform.',
+          explanation: 'Your account has been deactivated and is no longer accessible on Platform.',
           submissionDate: null,
           cta: null,
           secondaryCta: 'Contact Support',

@@ -48,7 +48,7 @@ export default function ActiveSessionsScreen() {
       Alert.alert(
         'Could not sign out everywhere',
         !raw || raw === 'internal'
-          ? 'Could not reach the platform just now. Check your connection and try again.'
+          ? 'Could not reach Platform just now. Check your connection and try again.'
           : raw,
       );
       setIsRevoking(false);
@@ -74,7 +74,7 @@ export default function ActiveSessionsScreen() {
           <View style={styles.noticeCard}>
             <Info size={16} color={Colors.textSecondary} strokeWidth={2} />
             <Text style={styles.noticeText}>
-              the platform can&apos;t yet show a list of the individual devices you&apos;re signed in on.
+              Platform can&apos;t yet show a list of the individual devices you&apos;re signed in on.
               What you can do is end every session at once — useful if you&apos;ve used a shared or
               public computer, or think someone else has your password.
             </Text>

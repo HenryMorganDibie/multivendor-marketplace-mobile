@@ -132,7 +132,7 @@ export default function RatingDetailScreen() {
               <View style={styles.privacyNote}>
                 <Lock size={12} color={Colors.textMuted} strokeWidth={2} />
                 <Text style={styles.privacyNoteText}>
-                  Visible only to your business and the platform administrators. Not displayed publicly.
+                  Visible only to your business and Platform administrators. Not displayed publicly.
                 </Text>
               </View>
             </View>

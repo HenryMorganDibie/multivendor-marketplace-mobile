@@ -93,7 +93,7 @@ export default function CustomerChatsScreen() {
   const { archivedChats, archiveChat } = useBlockedUsers();
   const { orders } = useOrders();
   const { getDraft } = useCustomerDrafts();
-  const { getFilteredCustomerInbox, markConversationRead, loadMoreCustomer, hasMoreCustomer, customerInbox } = useInbox();
+  const { getFilteredCustomerInbox, markConversationRead, loadMoreCustomer, hasMoreCustomer, customerInbox, isInboxHydrated, hasInboxHydrationError } = useInbox();
   const { markChatAsRead } = useChatRead();
   const { supportChat, getUnreadCount: getSupportUnreadCount } = useCustomerSupportChat();
 
@@ -188,6 +188,7 @@ export default function CustomerChatsScreen() {
         chatTypeBadge={chatTypeBadge}
         statusChip={statusChip}
         previewText={displayText}
+        previewType={item.lastMessageType}
         isDraft={isDraft}
         timestamp={formatTimestamp(item.lastMessageAt)}
         showUnreadDot={false}
@@ -236,6 +237,8 @@ export default function CustomerChatsScreen() {
                 style={[styles.filterPill, selectedFilter === f.key && styles.filterPillActive]}
                 onPress={() => setSelectedFilter(f.key)}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedFilter === f.key }}
               >
                 <Text style={[styles.filterPillText, selectedFilter === f.key && styles.filterPillTextActive]}>
                   {f.label}
@@ -266,8 +269,8 @@ export default function CustomerChatsScreen() {
       )}
 
       <ListStateView
-        isLoading={false}
-        isError={false}
+        isLoading={!isInboxHydrated && !hasInboxHydrationError}
+        isError={hasInboxHydrationError}
         isEmpty={filteredInbox.length === 0 && !showSupportRow}
         loadingSkeleton={<ChatListSkeleton count={5} />}
         emptyIcon={<MessageSquare size={32} color={Colors.primary} strokeWidth={1.5} />}
@@ -322,6 +325,7 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: 8,
   },
   filterPill: {

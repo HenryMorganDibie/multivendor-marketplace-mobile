@@ -45,13 +45,13 @@ export default function VendorNotificationsScreen() {
     // notifications carry the real order id in metadata.orderId (set at
     // createOrder/updateOrderStatus), which the screen needs for getOrder() and
     // the paymentProofs query. Chat-domain notifications carry no order id —
-    // only deepLink `the platform://chat/{chatId}`, the commerce thread id — which
+    // only deepLink `platform://chat/{chatId}`, the commerce thread id — which
     // the same screen resolves via the chats.find(c => c.id === orderId)
     // fallback. Previously both just routed to the list tab, dropping the
     // vendor onto "orders" or "chats" instead of the specific thread that
     // triggered the notification.
-    const chatIdFromDeepLink = raw.deepLink?.startsWith('the platform://chat/')
-      ? raw.deepLink.slice('the platform://chat/'.length)
+    const chatIdFromDeepLink = raw.deepLink?.startsWith('platform://chat/')
+      ? raw.deepLink.slice('platform://chat/'.length)
       : null;
 
     if (raw.domain === 'order') {

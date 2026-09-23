@@ -509,7 +509,7 @@ export default function StorefrontCatalog({
               {canAccessAI && (
                 <TouchableOpacity onPress={onAskAI} style={styles.primaryCTA} activeOpacity={0.85}>
                   <Sparkles size={20} color='#FFFFFF' />
-                  <Text style={styles.primaryCTAText}>Ask the platform AI</Text>
+                  <Text style={styles.primaryCTAText}>Ask Platform AI</Text>
                 </TouchableOpacity>
               )}
               {canChat && chatMode === 'enabled' && (

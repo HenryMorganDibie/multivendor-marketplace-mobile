@@ -60,7 +60,7 @@ export default function CreateAccountScreen() {
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>Create an account</Text>
-            <Text style={styles.subtitle}>Choose how you want to use the platform</Text>
+            <Text style={styles.subtitle}>Choose how you want to use Platform</Text>
           </View>
 
           <View style={styles.optionsContainer}>

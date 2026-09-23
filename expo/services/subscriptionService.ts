@@ -16,6 +16,7 @@ import { toBackendPlanTier, fromBackendPlanTier } from '@/types/domain';
  */
 import { subscriptionRepository } from '@/services/repositories/subscriptionRepository';
 import { subscriptionMapper } from '@/services/mappers/subscriptionMapper';
+import { auth } from '@/lib/firebase';
 
 export interface Subscription {
   tier: SubscriptionTier;
@@ -28,14 +29,18 @@ export interface Subscription {
 export const subscriptionService = {
   /** The active subscription for the current vendor, or null if unset. */
   async getSubscription(): Promise<Subscription | null> {
-    const data = await subscriptionRepository.read();
+    const uid = auth.currentUser?.uid;
+    if (!uid) return null;
+    const data = await subscriptionRepository.read(uid);
     if (!data) return null;
     return subscriptionMapper.fromRaw(data);
   },
 
   /** The current tier, defaulting to 'basic'. */
   async getTier(): Promise<SubscriptionTier> {
-    const data = await subscriptionRepository.read();
+    const uid = auth.currentUser?.uid;
+    if (!uid) return 'basic';
+    const data = await subscriptionRepository.read(uid);
     return (data?.plan as SubscriptionTier) ?? 'basic';
   },
 

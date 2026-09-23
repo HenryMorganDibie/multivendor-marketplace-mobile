@@ -20,7 +20,7 @@ import { useInvoices, getAmountPaid, getBalanceDue } from '@/contexts/InvoiceCon
  * customer taps "View Invoice" → sees the full branded invoice via
  * InvoiceRenderer on the /invoice-view/{shareCode}?viewer=customer route.
  *
- * the platform does NOT process payments in the MVP, so this card contains no
+ * Platform does NOT process payments in the MVP, so this card contains no
  * "Pay Now", "Pay", or any in-app payment action. The card is read-only:
  * it surfaces invoice metadata and a single "View Invoice" action that
  * opens the branded, read-only invoice screen.
@@ -104,7 +104,7 @@ export const CustomerInvoiceChatCard = React.memo(function CustomerInvoiceChatCa
   const statusConfig = STATUS_CONFIG[status];
 
   // Partially-paid + paid invoices show the confirmed amount paid and the
-  // remaining balance. Read-only — never a Pay Now / platform-payment action.
+  // remaining balance. Read-only — never a Pay Now / Platform-payment action.
   const amountPaid = invoice ? getAmountPaid(invoice.payments) : 0;
   const balanceDue = invoice ? getBalanceDue(invoice.total, invoice.payments) : 0;
 

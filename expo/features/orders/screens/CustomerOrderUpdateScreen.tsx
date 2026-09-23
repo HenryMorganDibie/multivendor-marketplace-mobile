@@ -21,6 +21,7 @@ import {
   Info,
 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
+import { Alert } from '@/utils/alert';
 import { formatPriceWithCommas } from '@/utils/formatPrice';
 import {
   useChangeRequests,
@@ -41,10 +42,24 @@ interface CustomerEditableItem {
 
 export default function CustomerOrderUpdateScreen({ orderId }: CustomerOrderUpdateScreenProps) {
   const router = useRouter();
-  const { getRequestForOrder, acceptChangeRequest, declineChangeRequest } = useChangeRequests();
-  const { updateOrderStatus } = useOrders();
+  const { getRequestForOrder, subscribeToOrder, acceptChangeRequest, declineChangeRequest } = useChangeRequests();
+  const { getOrder } = useOrders();
+  const [isResponding, setIsResponding] = useState<boolean>(false);
 
   const bannerAnim = useRef(new Animated.Value(0)).current;
+
+  const order = getOrder(orderId);
+  const orderItemsTotal = useMemo(() => {
+    if (!order) return 0;
+    return order.items.reduce((sum, item) => {
+      const addOnTotal = item.addOns?.reduce((s, a) => s + a.price, 0) ?? 0;
+      return sum + (item.price + addOnTotal) * item.quantity;
+    }, 0);
+  }, [order]);
+
+  useEffect(() => {
+    if (order) subscribeToOrder(orderId, order.vendorName, orderItemsTotal);
+  }, [order, orderId, orderItemsTotal, subscribeToOrder]);
 
   const request: ChangeRequest | undefined = getRequestForOrder(orderId);
 
@@ -169,22 +184,32 @@ export default function CustomerOrderUpdateScreen({ orderId }: CustomerOrderUpda
     });
   }, [customerItems]);
 
-  const handleAcceptChanges = useCallback(() => {
-    if (!request) return;
-    console.log('[CustomerUpdate] Accepting change request with modifications:', request.id);
-    const finalChanges = buildCustomerChanges();
-    acceptChangeRequest(request.id, finalChanges);
-    updateOrderStatus(orderId, 'requested');
-    router.back();
-  }, [request, acceptChangeRequest, buildCustomerChanges, updateOrderStatus, orderId, router]);
+  const handleAcceptChanges = useCallback(async () => {
+    if (!request || isResponding) return;
+    setIsResponding(true);
+    try {
+      const finalChanges = buildCustomerChanges();
+      await acceptChangeRequest(request.id, orderId, finalChanges);
+      router.back();
+    } catch (error) {
+      console.error('[CustomerUpdate] Failed to accept changes:', error);
+      Alert.alert('Could not accept changes', error instanceof Error ? error.message : 'Please try again.');
+      setIsResponding(false);
+    }
+  }, [request, isResponding, acceptChangeRequest, buildCustomerChanges, orderId, router]);
 
-  const handleDeclineChanges = useCallback(() => {
-    if (!request) return;
-    console.log('[CustomerUpdate] Declining change request:', request.id);
-    declineChangeRequest(request.id);
-    updateOrderStatus(orderId, 'requested');
-    router.back();
-  }, [request, declineChangeRequest, updateOrderStatus, orderId, router]);
+  const handleDeclineChanges = useCallback(async () => {
+    if (!request || isResponding) return;
+    setIsResponding(true);
+    try {
+      await declineChangeRequest(request.id, orderId);
+      router.back();
+    } catch (error) {
+      console.error('[CustomerUpdate] Failed to decline changes:', error);
+      Alert.alert('Could not decline changes', error instanceof Error ? error.message : 'Please try again.');
+      setIsResponding(false);
+    }
+  }, [request, isResponding, declineChangeRequest, orderId, router]);
 
   if (!request) {
     return (
@@ -411,18 +436,20 @@ export default function CustomerOrderUpdateScreen({ orderId }: CustomerOrderUpda
 
       <SafeAreaView edges={['bottom']} style={styles.actionsContainer}>
         <TouchableOpacity
-          style={styles.acceptButton}
+          style={[styles.acceptButton, isResponding && styles.actionButtonDisabled]}
           onPress={handleAcceptChanges}
           activeOpacity={0.8}
+          disabled={isResponding}
           testID="accept-changes-button"
         >
-          <Text style={styles.acceptButtonText}>Accept</Text>
+          <Text style={styles.acceptButtonText}>{isResponding ? 'Please wait…' : 'Accept'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.declineButton}
+          style={[styles.declineButton, isResponding && styles.actionButtonDisabled]}
           onPress={handleDeclineChanges}
           activeOpacity={0.7}
+          disabled={isResponding}
           testID="decline-changes-button"
         >
           <Text style={styles.declineButtonText}>Decline</Text>
@@ -738,6 +765,9 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 4,
     gap: 8,
+  },
+  actionButtonDisabled: {
+    opacity: 0.5,
   },
   acceptButton: {
     backgroundColor: Colors.primary,

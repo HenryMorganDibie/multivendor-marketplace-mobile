@@ -72,7 +72,7 @@ export function mapRegistrationError(error: unknown): MappedAuthError {
   if (/network-request-failed/.test(reason)) {
     return {
       field: 'form',
-      message: 'We could not reach theplatform. Check your connection and try again.',
+      message: 'We could not reach Platform. Check your connection and try again.',
     };
   }
   if (/operation-not-allowed/.test(reason)) {
@@ -80,7 +80,7 @@ export function mapRegistrationError(error: unknown): MappedAuthError {
     // again" would send them in circles on something only we can fix.
     return {
       field: 'form',
-      message: 'Sign-up is temporarily unavailable. Please contact the platform Support.',
+      message: 'Sign-up is temporarily unavailable. Please contact Platform Support.',
     };
   }
 
@@ -127,7 +127,7 @@ export function mapLoginError(error: unknown): MappedAuthError {
   if (/user-disabled/.test(reason)) {
     return {
       field: 'form',
-      message: 'Your account has been disabled. Contact the platform Support.',
+      message: 'Your account has been disabled. Contact Platform Support.',
     };
   }
   if (/email-not-verified/.test(reason)) {
@@ -142,8 +142,49 @@ export function mapLoginError(error: unknown): MappedAuthError {
   if (/network-request-failed/.test(reason)) {
     return {
       field: 'form',
-      message: 'We could not reach theplatform. Check your connection and try again.',
+      message: 'We could not reach Platform. Check your connection and try again.',
     };
+  }
+
+  return { field: 'form', message: 'Something went wrong on our side. Please try again.' };
+}
+
+/**
+ * Covers both calls a password change makes: `reauthenticateWithCredential`
+ * (which is really just re-checking the current password) and `updatePassword`
+ * itself. The caller decides which input field an error belongs to based on
+ * which of those two calls threw — this only turns the Firebase code into
+ * wording a person can act on.
+ */
+export function mapPasswordChangeError(error: unknown): MappedAuthError {
+  const reason = reasonOf(error);
+
+  if (/wrong-password|invalid-credential|user-mismatch/.test(reason)) {
+    return { field: 'password', message: 'That password is incorrect.' };
+  }
+  if (/weak-password/.test(reason)) {
+    return { field: 'password', message: 'Choose a stronger password.' };
+  }
+  if (/requires-recent-login/.test(reason)) {
+    return {
+      field: 'form',
+      message: 'For your security, please log out and back in, then try again.',
+    };
+  }
+  if (/too-many-requests/.test(reason)) {
+    return {
+      field: 'form',
+      message: 'Too many attempts. Please wait a few minutes and try again.',
+    };
+  }
+  if (/network-request-failed/.test(reason)) {
+    return {
+      field: 'form',
+      message: 'We could not reach Platform. Check your connection and try again.',
+    };
+  }
+  if (/user-disabled/.test(reason)) {
+    return { field: 'form', message: 'Your account has been disabled. Contact Platform Support.' };
   }
 
   return { field: 'form', message: 'Something went wrong on our side. Please try again.' };

@@ -21,7 +21,7 @@ the two halves where anything could have been substituted.
 The account created during the recording:
 
 ```
-demo.proof.1785349652289@theplatform.test
+demo.proof.1785349652289@platform.test
 UID  5JPc3yOpsQoGsOfMnUey0HfAZmiu
 ```
 
@@ -60,10 +60,10 @@ integration itself is done and is what this folder demonstrates.
 ## Verify it independently
 
 ```bash
-# terminal 1, from platform-backend/
+# terminal 1, from multivendor-marketplace-platform/
 npx firebase-tools emulators:start --project demo-platform
 
-# terminal 2, from platform-backend/scripts/
+# terminal 2, from multivendor-marketplace-platform/scripts/
 node phase1-acceptance-tests.js     # 11 checks
 node phase2-acceptance-tests.js     # 20 checks
 node sales-counting-tests.js        #  6 checks

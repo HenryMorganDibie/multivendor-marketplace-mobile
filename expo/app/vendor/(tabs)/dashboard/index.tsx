@@ -23,7 +23,6 @@ import {
   ArrowUpRight,
   StickyNote,
   Lock,
-  Zap,
   ChevronRight,
   Clock,
   RefreshCw,
@@ -201,7 +200,6 @@ function InsightsSection({ plan, bestSellerName, bestSellerCount, pendingPayment
   liveInsights: DashboardInsights | null;
 }) {
   const router = useRouter();
-  const isPro = plan === 'pro' || plan === 'pro+';
   const [currentIndex, setCurrentIndex] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -218,7 +216,7 @@ function InsightsSection({ plan, bestSellerName, bestSellerCount, pendingPayment
    * generator guards every card behind a presence check, so a null figure means
    * that card does not render, which is correct for a vendor with no data yet.
    */
-  const insights: InsightData[] = useMemo(() => {
+  const allInsights: InsightData[] = useMemo(() => {
     return buildInsightCards({
       pendingPaymentCount: liveInsights?.pendingPaymentCount ?? pendingPaymentCount,
       bestSellerName: liveInsights?.bestSellerName ?? bestSellerName,
@@ -228,6 +226,24 @@ function InsightsSection({ plan, bestSellerName, bestSellerCount, pendingPayment
       avgResponseMinutes: liveInsights?.avgResponseMinutes ?? undefined,
     });
   }, [liveInsights, pendingPaymentCount, bestSellerName, bestSellerCount]);
+
+  /**
+   * Per-plan entitlement (Founder's dashboard-insights spec): Basic never
+   * sees this carousel at all (handled by the early return below, before
+   * this even runs). Standard may only see operational/action cards
+   * (pending payments, low stock) - never the analytical ones that would
+   * leak paywalled Business Insights metrics (best seller performance,
+   * customer growth, reply-time analytics) - capped to 1 at a time. Pro
+   * gets up to 3, Pro+ up to 5, either tier, unfiltered.
+   */
+  const insights: InsightData[] = useMemo(() => {
+    if (plan === 'standard') {
+      return allInsights.filter((i) => i.tier === 'operational').slice(0, 1);
+    }
+    if (plan === 'pro') return allInsights.slice(0, 3);
+    if (plan === 'pro+') return allInsights.slice(0, 5);
+    return allInsights;
+  }, [allInsights, plan]);
 
   const cycleInsight = useCallback(() => {
     Animated.timing(fadeAnim, {
@@ -247,11 +263,19 @@ function InsightsSection({ plan, bestSellerName, bestSellerCount, pendingPayment
   const insight = insights[currentIndex] ?? insights[0];
   const IconComp = insight ? ICON_MAP[insight.iconName] : null;
 
+  // Basic never gets this carousel at all - not even a locked upsell card,
+  // per Founder's explicit "do not show an empty INSIGHTS heading" rule
+  // generalised to "no heading at all" for a plan with zero entitlement to
+  // it. The separate Business Insights page (growth-insights.tsx) already
+  // owns the Pro upsell messaging for the fuller analytics - this small
+  // carousel doesn't need to duplicate it.
+  if (plan === 'basic' || insights.length === 0) return null;
+
   return (
     <View style={insightStyles.section}>
       <View style={insightStyles.headerRow}>
         <Text style={insightStyles.sectionTitle}>INSIGHTS</Text>
-        {isPro && insights.length > 1 && (
+        {insights.length > 1 && (
           <TouchableOpacity onPress={cycleInsight} activeOpacity={0.7} style={insightStyles.nextBtn}>
             <Text style={insightStyles.nextBtnText}>Next</Text>
             <ChevronRight size={13} color={Colors.primary} strokeWidth={2.5} />
@@ -259,32 +283,7 @@ function InsightsSection({ plan, bestSellerName, bestSellerCount, pendingPayment
         )}
       </View>
 
-      {!isPro ? (
-        <TouchableOpacity
-          style={insightStyles.lockedCard}
-          onPress={() => router.push('/vendor/growth-insights')}
-          activeOpacity={0.8}
-        >
-          <View style={insightStyles.lockedIconWrap}>
-            <Lock size={22} color="#9CA3AF" strokeWidth={2} />
-          </View>
-          <View style={insightStyles.lockedTextWrap}>
-            <Text style={insightStyles.lockedTitle}>Business Insights</Text>
-            <Text style={insightStyles.lockedMessage}>
-              Upgrade to Pro to unlock sales, customer & order source insights.
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={insightStyles.upgradeBtn}
-            onPress={() => router.push('/vendor/settings/subscription' as any)}
-            activeOpacity={0.8}
-          >
-            <Zap size={13} color="#FFFFFF" strokeWidth={2.5} />
-            <Text style={insightStyles.upgradeBtnText}>Upgrade</Text>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      ) : (
-        <>
+      <>
           <Animated.View style={[insightStyles.insightCard, { opacity: fadeAnim }]}>
             {IconComp && (
               <View style={[insightStyles.insightIconWrap, { backgroundColor: insight.iconBg }]}>
@@ -335,8 +334,7 @@ function InsightsSection({ plan, bestSellerName, bestSellerCount, pendingPayment
             </View>
             <ChevronRight size={16} color={Colors.primary} strokeWidth={2} />
           </TouchableOpacity>
-        </>
-      )}
+      </>
     </View>
   );
 }
@@ -1113,7 +1111,7 @@ export default function VendorDashboardScreen() {
                         <Text style={styles.listRowType}>
                           {order.fulfillmentType} • {order.scheduledTime || '12:00 PM'}
                         </Text>
-                        <Text style={styles.listRowCustomer}>{formatInvoiceCustomerName(order.customerName, 'the platform')}</Text>
+                        <Text style={styles.listRowCustomer}>{formatInvoiceCustomerName(order.customerName, 'platform')}</Text>
                       </View>
                       <View style={styles.listRowRight}>
                         <Text style={styles.listRowMeta}>
@@ -1160,7 +1158,7 @@ export default function VendorDashboardScreen() {
                         <Text style={styles.listRowType}>
                           {dateLabel} • {order.scheduledTime || '12:00 PM'}
                         </Text>
-                        <Text style={styles.listRowCustomer}>{formatInvoiceCustomerName(order.customerName, 'the platform')}</Text>
+                        <Text style={styles.listRowCustomer}>{formatInvoiceCustomerName(order.customerName, 'platform')}</Text>
                       </View>
                       <View style={styles.listRowRight}>
                         <Text style={styles.listRowMeta}>

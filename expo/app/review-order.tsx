@@ -50,7 +50,7 @@ export default function ReviewOrderScreen() {
   const { getOrCreateOrderChat } = useChats();
   const { logEvent } = useAuditLog();
   const { addRelationship } = useVendorRelationships();
-  const { addOrder, priceCart } = useOrders();
+  const { addOrder, priceCart, submitDeliveryContact } = useOrders();
   const { user } = useAuth();
 
   /**
@@ -98,7 +98,16 @@ export default function ReviewOrderScreen() {
     setPricingError(null);
     priceCart({
       vendorId: params.vendorId as string,
-      items: items.map((i: any) => ({ itemId: i.id, quantity: i.quantity })),
+      // Matches addOrder's own reprice call (OrdersContext.tsx) - without
+      // this, a selected add-on priced correctly here but at 0 once addOrder
+      // repriced the same cart server-side a second time on submit, so the
+      // total the customer approved on this screen could understate what
+      // they were actually charged.
+      items: items.map((i: any) => ({
+        itemId: i.id,
+        quantity: i.quantity,
+        selectedAddOns: i.addOns?.map((a: any) => ({ groupId: a.groupId, optionId: a.id })) ?? [],
+      })),
       fulfillmentType: fulfillmentType?.toLowerCase() === 'delivery' ? 'delivery' : 'pickup',
       orderNote,
     })
@@ -293,6 +302,41 @@ export default function ReviewOrderScreen() {
       return;
     }
 
+    // The real, server-assigned id - addOrder used to discard this and only
+    // resolve {success: true}, so nothing downstream (order-success, the
+    // order detail screen, or this delivery-contact call) had any way to
+    // reference the order the backend actually created. Falls back to the
+    // client placeholder only if the backend somehow didn't return one,
+    // which should not happen on a successful create.
+    const realOrderId = result.orderId ?? orderRequestId;
+
+    // Order-scoped delivery contact (Phase 3, per Founder 2026-09-15): for a
+    // delivery order, attach a deliveryContact snapshot to this specific
+    // order via the existing submitDeliveryContact backend capability -
+    // never reused from an old chat contact card or another order. The
+    // order itself is never rolled back if this fails: it is already real,
+    // priced, and has reserved inventory, so the order detail screen carries
+    // a retryable "add delivery details" prompt instead (see app/order/[id]
+    // and the deliveryContactPending param below).
+    let deliveryContactPending = false;
+    if (fulfillmentType === 'Delivery') {
+      if (contactCard) {
+        const contactResult = await submitDeliveryContact(realOrderId, {
+          fullName: contactCard.name,
+          phoneNumber: contactCard.phone,
+          address: contactCard.address || undefined,
+        });
+        deliveryContactPending = !contactResult.success;
+        if (!contactResult.success) {
+          console.error('[ReviewOrder] submitDeliveryContact failed:', contactResult.error);
+        }
+      } else {
+        // No contact card was selected at all - the order still needs one,
+        // same retryable state as a failed submission.
+        deliveryContactPending = true;
+      }
+    }
+
     try {
       clearCart();
       router.replace({
@@ -300,9 +344,10 @@ export default function ReviewOrderScreen() {
         params: {
           vendorName: (orderVendor?.name ?? ''),
           vendorId: orderVendorId,
-          orderId: orderRequestId,
+          orderId: realOrderId,
           vendorWasClosed: (!vendorIsOpen).toString(),
           vendorNextOpenTime: vendorNextOpen || '',
+          deliveryContactPending: deliveryContactPending.toString(),
         },
       });
     } catch (error) {
@@ -484,7 +529,7 @@ export default function ReviewOrderScreen() {
             <View style={styles.paymentNoticeContent}>
               <Text style={styles.paymentNoticeTitle}>Payment handled by vendor</Text>
               <Text style={styles.paymentNoticeBody}>
-                Payment is arranged directly with the vendor. the platform does not process payments. The vendor will provide payment instructions after reviewing your order.
+                Payment is arranged directly with the vendor. Platform does not process payments. The vendor will provide payment instructions after reviewing your order.
               </Text>
             </View>
           </View>
@@ -582,7 +627,7 @@ export default function ReviewOrderScreen() {
         {/* ── DISCLAIMER ── */}
         <View style={styles.disclaimerContainer}>
           <Text style={styles.disclaimerText}>
-            By sending this order request, you agree that the platform only shares your order details with {(orderVendor?.name ?? '')}. Payments, delivery, taxes, and fulfillment are handled directly by {(orderVendor?.name ?? '')}.
+            By sending this order request, you agree that Platform only shares your order details with {(orderVendor?.name ?? '')}. Payments, delivery, taxes, and fulfillment are handled directly by {(orderVendor?.name ?? '')}.
           </Text>
         </View>
 
