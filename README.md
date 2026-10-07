@@ -133,7 +133,7 @@ A representative sample of real defects found and fixed across the project — g
 
 **Settings & storefront.** Password & security settings were fully fake for customers — no validation, no real call, a false success message. Profile photo change was a dead tap behind a fully built UI, now wired to real storage.
 
-**Infrastructure.** The web build now auto-deploys on every push to `main` that touches the app (hosting only, deliberately — backend deploys remain a manual, reviewed step, never automatic).
+**Infrastructure.** The web build now auto-deploys on every push to `main` that touches the app (hosting only, deliberately — backend deploys remain a manual, reviewed step, never automatic). The web build runs on Firebase Hosting at laetiva-dev.web.app and is used to test the app against the backend before native iOS and Android builds.
 
 ## Branding
 
